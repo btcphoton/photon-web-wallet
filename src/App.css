@@ -1,0 +1,5 @@
+/* App-specific overrides */
+#root {
+  max-width: 360px;
+  margin: 0 auto;
+}

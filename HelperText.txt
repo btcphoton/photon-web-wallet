@@ -1,0 +1,58 @@
+https://htlc.me/
+cab1c9c6-319e-4e0f-ae58-e0b10006397e
+
+gasp attitude little organ palm crime layer answer dial twelve feed meadow
+
+
+ckTESTBTC
+ml52i-qqaaa-aaaar-qaaba-cai
+
+ckBTC
+mqygn-kiaaa-aaaar-qaadq-cai
+
+tb1qc7zv9655p5cnjrjtvcumr9ve2czg3ylx0ev4fk.
+bc1q3mpgqpu3hc8k43ge2fxyludf0pmu6slkp7pyc4
+tb1qc7zv9655p5cnjrjtvcumr9ve2czg3ylx0ev4fk
+bcrt1qc7zv9655p5cnjrjtvcumr9ve2czg3ylxds4c7l
+
+https://blockstream.info/testnet/api/address/tb1qc7zv9655p5cnjrjtvcumr9ve2czg3ylx0ev4fk/utxo
+
+jwx3b-nupc2-sk7s7-zfpkx-cftnh-mdkhn-apurb-iu3rr-3xbxr-tef4y-mqe
+
+https://blockstream.info/testnet/api/address/tb1q00h5delzqxl7xae8ufmsegghcl4jwfvdnd8530/utxo
+https://mempool.space/testnet4/api/address/tb1q00h5delzqxl7xae8ufmsegghcl4jwfvdnd8530/utxo
+
+
+tb1qn0dkhjz7uqwmht7g4r23ylqg2w9kw26ly92sje
+
+jwx3b-nupc2-sk7s7-zfpkx-cftnh-mdkhn-apurb-iu3rr-3xbxr-tef4y-mqe
+jwx3b-nupc2-sk7s7-zfpkx-cftnh-mdkhn-apurb-iu3rr-3xbxr-tef4y-mqe
+.
+jq7ei-o3jmi-czlyb-rm5j4-uaib4-puutz-fk53z-xtehu-ayxd3-kkmwa-lae
+
+    try {
+      const response = await fetch(
+        `https://blockstream.info/testnet/api/address/${address.trim()}`
+      );
+
+      if (!response.ok) {
+        if (response.status === 400) {
+          throw new Error('Invalid Bitcoin address format');
+        } else if (response.status === 404) {
+          throw new Error('Address not found');
+        } else {
+          throw new Error('Failed to fetch balance');
+        }
+      }
+
+      const data: BalanceData = await response.json();
+      
+
+
+
+
+
+strike depth hybrid float annual history metal float south possible fit author
+
+
+ncsiv-ff6eq-a3kcd-hfd4e-3bsme-rjevq-p5ai5-luqst-fk2y6-hgg5b-jae
