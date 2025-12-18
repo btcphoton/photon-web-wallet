@@ -10,7 +10,28 @@ ml52i-qqaaa-aaaar-qaaba-cai
 ckBTC
 mqygn-kiaaa-aaaar-qaadq-cai
 
-tb1qc7zv9655p5cnjrjtvcumr9ve2czg3ylx0ev4fk.
+Call the below canister (based on the network ) function get_btc_address which shall return an address 
+to which we should send TestNet Bitcoin if we send then we will get ckTESTBTC
+by calling update_balance and show that balance as lightening Bitcoin Balance
+create a logo with Lightening striking the bitcoin logo
+For Testnet ml52i-qqaaa-aaaar-qaaba-cai for MainNet mqygn-kiaaa-aaaar-qaadq-cai
+For RegNet ml52i-qqaaa-aaaar-qaaba-cai
+
+
+
+Call the below canister (based on the network ) function get_btc_address which shall return an address  store that address in the chrome storage 
+User shall send Test Bitcoin / Real bitcoin to that address
+After the confirmation it will converted to Lightning Bitcoin and get the  balance by calling update_balance and show that balance as lightening Bitcoin Balance
+create a logo with Lightening striking the bitcoin logo
+For Testnet ml52i-qqaaa-aaaar-qaaba-cai for MainNet mqygn-kiaaa-aaaar-qaadq-cai
+For RegNet ml52i-qqaaa-aaaar-qaaba-cai
+
+
+tb1qcw6wvegn5u4s8fuafzvva9qmntva6ghcz3vk7e
+
+tb1qc7zv9655p5cnjrjtvcumr9ve2czg3ylx0ev4fk
+tb1qcw6wvegn5u4s8fuafzvva9qmntva6ghcz3vk7e
+
 bc1q3mpgqpu3hc8k43ge2fxyludf0pmu6slkp7pyc4
 tb1qc7zv9655p5cnjrjtvcumr9ve2czg3ylx0ev4fk
 bcrt1qc7zv9655p5cnjrjtvcumr9ve2czg3ylxds4c7l

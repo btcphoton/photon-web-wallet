@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import './App.css'
 import { generateMnemonic, deriveIdentity, validateMnemonic } from './utils/crypto'
-import { getBtcAddress, updateBalance, mapNetworkToCanister } from './utils/icp'
+import { getBtcAddress, getWalletAddress, getWalletBalance, updateBalance, mapNetworkToCanister } from './utils/icp'
 import { getStorageData, setStorageData, removeStorageData, getNetworkAddressKey, getNetworkAssetsKey, testnet3DefaultAssets } from './utils/storage'
 import type { Asset } from './utils/storage'
 import { QRCodeSVG } from 'qrcode.react'
@@ -49,7 +49,12 @@ function App() {
   const [restoreInput, setRestoreInput] = useState<string>('')
   const [error, setError] = useState<string>('')
   const [activeTab, setActiveTab] = useState<Tab>('assets')
-  const [btcAddress, setBtcAddress] = useState<string>('')
+
+  // Two-address system states
+  const [walletAddress, setWalletAddress] = useState<string>('') // Main BTC wallet address
+  const [lightningAddress, setLightningAddress] = useState<string>('') // ckBTC/Lightning address
+  const [btcAddress, setBtcAddress] = useState<string>('') // Deprecated, keeping for backward compatibility
+
   const [loadingAddress, setLoadingAddress] = useState<boolean>(false)
   const [copied, setCopied] = useState<boolean>(false)
   const [copiedPrincipal, setCopiedPrincipal] = useState<boolean>(false)
@@ -92,9 +97,11 @@ function App() {
   // Add asset state
   const [tokenInput, setTokenInput] = useState<string>('')
 
-  // BTC balance state
-  const [btcBalance, setBtcBalance] = useState<string>('0.00000000')
+  // Balance states for two-address system
+  const [btcBalance, setBtcBalance] = useState<string>('0.00000000') // Wallet balance (main)
+  // const [lightningBalance, setLightningBalance] = useState<string>('0.00000000') // Lightning balance - for future asset display
   const [loadingBalance, setLoadingBalance] = useState<boolean>(false)
+  // const [loadingLightningBalance, setLoadingLightningBalance] = useState<boolean>(false) // For future Lightning asset
   const [balanceError, setBalanceError] = useState<string>('')
 
   // Truncate address for display
@@ -103,14 +110,7 @@ function App() {
     return `${addr.slice(0, 8)}...${addr.slice(-4)}`
   }
 
-  // Copy address to clipboard
-  const copyAddress = async () => {
-    if (btcAddress) {
-      await navigator.clipboard.writeText(btcAddress)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    }
-  }
+  // Copy address function removed - now using inline copy handlers
 
   // Copy Principal ID to clipboard
   const copyPrincipal = async () => {
@@ -135,15 +135,37 @@ function App() {
     setLoadingAddress(true)
     try {
       const canisterNetwork = mapNetworkToCanister(network)
-      const address = await getBtcAddress(mnemonicPhrase, canisterNetwork)
-      setBtcAddress(address)
-      // Save to network-specific storage key
+
+      // Fetch BOTH addresses in parallel
+      const [walletAddr, lightningAddr] = await Promise.all([
+        getWalletAddress(mnemonicPhrase, canisterNetwork),
+        getBtcAddress(mnemonicPhrase, canisterNetwork)
+      ])
+
+      // Update both addresses in state
+      setWalletAddress(walletAddr)
+      setLightningAddress(lightningAddr)
+      setBtcAddress(walletAddr) // For backward compatibility, use wallet address
+
+      // Save both to network-specific storage
       const addressKey = getNetworkAddressKey(network)
-      await setStorageData({ [addressKey]: address, btcAddress: address })
-      console.log(`BTC address for ${network} saved:`, address)
-      return address
+      await setStorageData({
+        [addressKey]: walletAddr, // Network-specific wallet address
+        btcAddress: walletAddr, // Backward compatibility
+        walletAddress: walletAddr, // Main wallet address
+        lightningAddress: lightningAddr, // Lightning/ckBTC address
+        [`walletAddress_${network}`]: walletAddr,
+        [`lightningAddress_${network}`]: lightningAddr
+      })
+
+      console.log(`Wallet address for ${network}:`, walletAddr)
+      console.log(`Lightning address for ${network}:`, lightningAddr)
+
+      return walletAddr
     } catch (e) {
-      console.error('Failed to fetch BTC address:', e)
+      console.error('Failed to fetch addresses:', e)
+      setWalletAddress('')
+      setLightningAddress('')
       setBtcAddress('')
       return null
     } finally {
@@ -157,7 +179,10 @@ function App() {
       try {
         const result = await getStorageData([
           'mnemonic', 'walletPassword', 'principalId', 'btcAddress', 'selectedNetwork',
-          'btcAddress_mainnet', 'btcAddress_testnet3', 'btcAddress_testnet4', 'btcAddress_regtest'
+          'walletAddress', 'lightningAddress', // Load both addresses
+          'btcAddress_mainnet', 'btcAddress_testnet3', 'btcAddress_testnet4', 'btcAddress_regtest',
+          'walletAddress_mainnet', 'walletAddress_testnet3', 'walletAddress_testnet4', 'walletAddress_regtest',
+          'lightningAddress_mainnet', 'lightningAddress_testnet3', 'lightningAddress_testnet4', 'lightningAddress_regtest'
         ])
         console.log('Storage check result:', result)
 
@@ -166,6 +191,18 @@ function App() {
           if (result.selectedNetwork) {
             setSelectedNetwork(result.selectedNetwork as Network)
           }
+
+          // Load addresses from storage
+          if (result.walletAddress) {
+            setWalletAddress(result.walletAddress)
+          }
+          if (result.lightningAddress) {
+            setLightningAddress(result.lightningAddress)
+          }
+          if (result.btcAddress) {
+            setBtcAddress(result.btcAddress)
+          }
+
           console.log('Wallet found, showing unlock screen')
           setView('unlock')
         } else {
@@ -434,7 +471,20 @@ function App() {
     setLoadingBalance(true)
     setBalanceError('') // Clear previous error
     try {
-      // Use Blockstream API for balance (canister doesn't have a balance query method)
+      // Try to get balance from wallet canister first
+      try {
+        const canisterNetwork = mapNetworkToCanister(networkId)
+        const balanceNat64 = await getWalletBalance(currentMnemonic, canisterNetwork)
+        const balanceBtc = (Number(balanceNat64) / 100000000).toFixed(8)
+        setBtcBalance(balanceBtc)
+        setBalanceError('')
+        console.log('Balance from wallet canister:', balanceBtc)
+        return
+      } catch (canisterError) {
+        console.log('Wallet canister balance fetch failed, falling back to Blockstream API:', canisterError)
+      }
+
+      // Fallback to Blockstream API
       const apiUrl = networkId === 'mainnet'
         ? `https://blockstream.info/api/address/${currentAddress.trim()}`
         : `https://blockstream.info/testnet/api/address/${currentAddress.trim()}`
@@ -927,7 +977,7 @@ function App() {
             <div className="network-label">{networks.find(n => n.id === selectedNetwork)?.name.replace('Bitcoin ', '') || 'Mainnet'}</div>
             <div className="balance-row">
               {loadingBalance ? (
-                <span className="balance-amount loading">Loading...</span>
+                <div className="skeleton-loader"></div>
               ) : (
                 <span className="balance-amount">{btcBalance}</span>
               )}
@@ -977,13 +1027,17 @@ function App() {
               {loadingAddress ? (
                 <span className="address-text">Loading...</span>
               ) : (
-                <span className="address-text" title={btcAddress}>
-                  {truncateAddress(btcAddress) || 'No address'}
+                <span className="address-text" title={walletAddress || btcAddress}>
+                  {truncateAddress(walletAddress || btcAddress) || 'No address'}
                 </span>
               )}
               <button
                 className="icon-btn-sm"
-                onClick={copyAddress}
+                onClick={() => {
+                  navigator.clipboard.writeText(walletAddress || btcAddress)
+                  setCopied(true)
+                  setTimeout(() => setCopied(false), 2000)
+                }}
                 title={copied ? 'Copied!' : 'Copy address'}
               >
                 {copied ? '✓' : '⧉'}
@@ -1122,7 +1176,7 @@ function App() {
           <div className="receive-btc-content">
             <div className="qr-container">
               <QRCodeSVG
-                value={btcAddress || 'no-address'}
+                value={walletAddress || btcAddress || 'no-address'}
                 size={180}
                 bgColor="#ffffff"
                 fgColor="#000000"
@@ -1137,11 +1191,15 @@ function App() {
             </div>
 
             <div className="btc-address-box">
-              <span className="btc-address-text">{btcAddress || 'No address available'}</span>
+              <span className="btc-address-text">{walletAddress || btcAddress || 'No address available'}</span>
             </div>
           </div>
 
-          <button className="btn-primary copy-btc-btn" onClick={copyAddress}>
+          <button className="btn-primary copy-btc-btn" onClick={() => {
+            navigator.clipboard.writeText(walletAddress || btcAddress)
+            setCopied(true)
+            setTimeout(() => setCopied(false), 2000)
+          }}>
             {copied ? '✓ Copied!' : '⧉ Copy bitcoin address'}
           </button>
         </div>
@@ -1162,7 +1220,7 @@ function App() {
 
             <div className="qr-container">
               <QRCodeSVG
-                value={btcAddress || 'no-address'}
+                value={lightningAddress || 'no-address'}
                 size={180}
                 bgColor="#ffffff"
                 fgColor="#000000"
@@ -1177,11 +1235,15 @@ function App() {
             </div>
 
             <div className="btc-address-box">
-              <span className="btc-address-text">{btcAddress || 'No address available'}</span>
+              <span className="btc-address-text">{lightningAddress || 'No address available'}</span>
             </div>
           </div>
 
-          <button className="btn-primary copy-btc-btn" onClick={copyAddress}>
+          <button className="btn-primary copy-btc-btn" onClick={() => {
+            navigator.clipboard.writeText(lightningAddress)
+            setCopied(true)
+            setTimeout(() => setCopied(false), 2000)
+          }}>
             {copied ? '✓ Copied!' : '⧉ Copy bitcoin address'}
           </button>
         </div>

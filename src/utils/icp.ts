@@ -2,8 +2,15 @@ import { Actor, HttpAgent } from '@dfinity/agent';
 import { Ed25519KeyIdentity } from '@dfinity/identity';
 import * as bip39 from 'bip39';
 
-// Network-specific canister IDs
-const CANISTER_IDS = {
+// Wallet canister IDs (for main BTC wallet)
+const WALLET_CANISTER_IDS = {
+    Mainnet: '7z2qz-sqaaa-aaaab-aaeha-cai',
+    Testnet: 'efotk-eqaaa-aaaaa-qajpa-cai',
+    Regtest: 'efotk-eqaaa-aaaaa-qajpa-cai', // Same as Testnet
+};
+
+// Lightning canister IDs (for ckBTC/Lightning)
+const LIGHTNING_CANISTER_IDS = {
     Mainnet: 'mqygn-kiaaa-aaaar-qaadq-cai',
     Testnet: 'ml52i-qqaaa-aaaar-qaaba-cai',
     Regtest: 'ml52i-qqaaa-aaaar-qaaba-cai', // Same as Testnet
@@ -27,13 +34,26 @@ export const mapNetworkToCanister = (network: string): NetworkEnum => {
     }
 };
 
-// Get canister ID for specific network
-const getCanisterId = (network: NetworkEnum): string => {
-    return CANISTER_IDS[network];
+// Get wallet canister ID for specific network
+const getWalletCanisterId = (network: NetworkEnum): string => {
+    return WALLET_CANISTER_IDS[network];
 };
 
-// IDL for the canister methods
-const idlFactory = ({ IDL }: any) => {
+// Get lightning canister ID for specific network
+const getLightningCanisterId = (network: NetworkEnum): string => {
+    return LIGHTNING_CANISTER_IDS[network];
+};
+
+// IDL for wallet canister methods
+const walletIdlFactory = ({ IDL }: any) => {
+    return IDL.Service({
+        'get_wallet_address': IDL.Func([], [IDL.Text], []), // Update method
+        'get_btc_balance': IDL.Func([], [IDL.Nat64], []), // Update method
+    });
+};
+
+// IDL for lightning canister methods (ckBTC minter)
+const lightningIdlFactory = ({ IDL }: any) => {
     const UtxoStatus = IDL.Variant({
         'ValueTooSmall': IDL.Record({ 'value': IDL.Nat64 }),
         'Tainted': IDL.Record({ 'value': IDL.Nat64 }),
@@ -64,6 +84,59 @@ const idlFactory = ({ IDL }: any) => {
     });
 };
 
+// Get wallet address from wallet canister
+export const getWalletAddress = async (mnemonic: string, network: NetworkEnum = 'Mainnet'): Promise<string> => {
+    const seed = await bip39.mnemonicToSeed(mnemonic);
+    const seed32 = new Uint8Array(seed.slice(0, 32));
+    const identity = Ed25519KeyIdentity.fromSecretKey(seed32);
+
+    const agent = new HttpAgent({
+        identity,
+        host: 'https://ic0.app',
+    });
+
+    const actor = Actor.createActor(walletIdlFactory, {
+        agent,
+        canisterId: getWalletCanisterId(network),
+    });
+
+    try {
+        // @ts-ignore
+        const address = await actor.get_wallet_address();
+        return address as string;
+    } catch (error) {
+        console.error("Error fetching wallet address:", error);
+        throw error;
+    }
+};
+
+// Get wallet balance from wallet canister
+export const getWalletBalance = async (mnemonic: string, network: NetworkEnum = 'Mainnet'): Promise<bigint> => {
+    const seed = await bip39.mnemonicToSeed(mnemonic);
+    const seed32 = new Uint8Array(seed.slice(0, 32));
+    const identity = Ed25519KeyIdentity.fromSecretKey(seed32);
+
+    const agent = new HttpAgent({
+        identity,
+        host: 'https://ic0.app',
+    });
+
+    const actor = Actor.createActor(walletIdlFactory, {
+        agent,
+        canisterId: getWalletCanisterId(network),
+    });
+
+    try {
+        // @ts-ignore
+        const balance = await actor.get_btc_balance();
+        return balance as bigint;
+    } catch (error) {
+        console.error("Error fetching wallet balance:", error);
+        throw error;
+    }
+};
+
+// Get Lightning BTC address from ckBTC minter canister
 export const getBtcAddress = async (mnemonic: string, network: NetworkEnum = 'Mainnet'): Promise<string> => {
     const seed = await bip39.mnemonicToSeed(mnemonic);
     const seed32 = new Uint8Array(seed.slice(0, 32));
@@ -71,13 +144,13 @@ export const getBtcAddress = async (mnemonic: string, network: NetworkEnum = 'Ma
 
     const agent = new HttpAgent({
         identity,
-        host: 'https://ic0.app', // Mainnet host
+        host: 'https://ic0.app',
     });
 
-    // Create actor with network-specific canister ID
-    const actor = Actor.createActor(idlFactory, {
+    // Create actor with lightning canister ID
+    const actor = Actor.createActor(lightningIdlFactory, {
         agent,
-        canisterId: getCanisterId(network),
+        canisterId: getLightningCanisterId(network),
     });
 
     try {
@@ -94,11 +167,12 @@ export const getBtcAddress = async (mnemonic: string, network: NetworkEnum = 'Ma
         const result = await actor.get_btc_address(args);
         return result as string;
     } catch (error) {
-        console.error("Error fetching BTC address:", error);
+        console.error("Error fetching Lightning BTC address:", error);
         throw error;
     }
 };
 
+// Update Lightning Bitcoin balance
 export const updateBalance = async (mnemonic: string, network: NetworkEnum = 'Mainnet'): Promise<number> => {
     const seed = await bip39.mnemonicToSeed(mnemonic);
     const seed32 = new Uint8Array(seed.slice(0, 32));
@@ -106,13 +180,13 @@ export const updateBalance = async (mnemonic: string, network: NetworkEnum = 'Ma
 
     const agent = new HttpAgent({
         identity,
-        host: 'https://ic0.app', // Mainnet host
+        host: 'https://ic0.app',
     });
 
-    // Create actor with network-specific canister ID
-    const actor = Actor.createActor(idlFactory, {
+    // Create actor with lightning canister ID
+    const actor = Actor.createActor(lightningIdlFactory, {
         agent,
-        canisterId: getCanisterId(network),
+        canisterId: getLightningCanisterId(network),
     });
 
     try {
@@ -148,7 +222,7 @@ export const updateBalance = async (mnemonic: string, network: NetworkEnum = 'Ma
         }
         throw new Error('Unexpected response from update_balance');
     } catch (error) {
-        console.error("Error updating balance:", error);
+        console.error("Error updating Lightning balance:", error);
         throw error;
     }
 };

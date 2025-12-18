@@ -15,11 +15,23 @@ interface StorageData {
     principalId?: string
     btcAddress?: string
     selectedNetwork?: string
-    // Per-network BTC addresses
+    // Two-address system
+    walletAddress?: string  // Main BTC wallet address
+    lightningAddress?: string // Lightning/ckBTC address
+    // Per-network wallet addresses
     btcAddress_mainnet?: string
     btcAddress_testnet3?: string
     btcAddress_testnet4?: string
     btcAddress_regtest?: string
+    walletAddress_mainnet?: string
+    walletAddress_testnet3?: string
+    walletAddress_testnet4?: string
+    walletAddress_regtest?: string
+    // Per-network lightning addresses
+    lightningAddress_mainnet?: string
+    lightningAddress_testnet3?: string
+    lightningAddress_testnet4?: string
+    lightningAddress_regtest?: string
     // Per-network assets (stored as JSON string)
     assets_mainnet?: string
     assets_testnet3?: string
