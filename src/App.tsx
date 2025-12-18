@@ -926,13 +926,12 @@ function App() {
           <div className="balance-section">
             <div className="network-label">{networks.find(n => n.id === selectedNetwork)?.name.replace('Bitcoin ', '') || 'Mainnet'}</div>
             <div className="balance-row">
-              <img src="/lightning-bitcoin.png" alt="Lightning Bitcoin" className="balance-logo" style={{ width: '28px', height: '28px', marginRight: '8px' }} />
               {loadingBalance ? (
                 <span className="balance-amount loading">Loading...</span>
               ) : (
                 <span className="balance-amount">{btcBalance}</span>
               )}
-              <span className="balance-currency">⚡ BTC</span>
+              <span className="balance-currency">BTC</span>
               <button className="info-btn" onClick={() => setShowBalanceInfo(!showBalanceInfo)}>ⓘ</button>
             </div>
 
