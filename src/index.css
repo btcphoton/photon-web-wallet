@@ -1759,6 +1759,17 @@ textarea:focus {
   font-weight: 500;
 }
 
+.swap-token-icon-image {
+  padding: 0;
+  overflow: hidden;
+}
+
+.swap-token-logo {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
 .swap-token-select {
   background: transparent;
   border: none;
@@ -1849,15 +1860,21 @@ textarea:focus {
 .swap-direction-btn {
   background: rgba(255, 255, 255, 0.05);
   border: 2px solid rgba(255, 255, 255, 0.1);
-  width: 40px;
-  height: 40px;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 0 auto;
+  margin: 0.5rem auto;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.3s ease;
+  transform: rotate(0deg);
+  color: #fff;
+}
+
+.swap-direction-btn.rotated {
+  transform: rotate(180deg);
 }
 
 .swap-direction-btn:hover {

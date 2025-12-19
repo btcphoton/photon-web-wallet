@@ -20,6 +20,8 @@ interface StorageData {
     testnetCanisterId?: string
     // Bitcoin balance from Blockstream API
     user_bitcoin_balance?: string
+    // Lightning BTC (ckBTC) balance from ICRC-1
+    user_lbtc_balance?: string
     // Two-address system
     walletAddress?: string  // Main BTC wallet address
     lightningAddress?: string // Lightning/ckBTC address

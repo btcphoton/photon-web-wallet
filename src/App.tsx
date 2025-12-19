@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import './App.css'
 import { generateMnemonic, deriveIdentity, validateMnemonic } from './utils/crypto'
 import { getBtcAddress, getWalletAddress, getWalletBalance, updateBalance, mapNetworkToCanister } from './utils/icp'
-import { getStorageData, setStorageData, removeStorageData, getNetworkAddressKey, getNetworkAssetsKey, testnet3DefaultAssets, DEFAULT_MAINNET_CANISTER, DEFAULT_TESTNET_CANISTER } from './utils/storage'
+import { getCkBTCBalance } from './utils/icrc1'
+import { getStorageData, setStorageData, removeStorageData, getNetworkAddressKey, getNetworkAssetsKey, testnet3DefaultAssets, mainnetDefaultAssets, DEFAULT_MAINNET_CANISTER, DEFAULT_TESTNET_CANISTER } from './utils/storage'
 import type { Asset } from './utils/storage'
 import { QRCodeSVG } from 'qrcode.react'
 
@@ -115,6 +116,7 @@ function App() {
   const [swapToAmount, setSwapToAmount] = useState<string>('')
   const [swapUserBalance, setSwapUserBalance] = useState<string>('0.00000000')
   const [btcPrice, setBtcPrice] = useState<number>(0)
+  const [swapIconRotated, setSwapIconRotated] = useState<boolean>(false)
 
   // Truncate address for display
   const truncateAddress = (addr: string) => {
@@ -449,15 +451,77 @@ function App() {
         const parsedAssets = JSON.parse(cachedAssets as string)
         setAssets(parsedAssets)
         console.log('Loaded cached assets for', network)
+
+        // Update ckBTC balance for Lightning BTC asset
+        if (mnemonic) {
+          try {
+            const canisterNetwork = mapNetworkToCanister(network)
+            const ckBTCBalance = await getCkBTCBalance(mnemonic, canisterNetwork)
+            // Store as user_lbtc_balance
+            await setStorageData({ user_lbtc_balance: ckBTCBalance })
+            const updatedAssets = parsedAssets.map((asset: Asset) =>
+              asset.id === 'lightning-btc'
+                ? { ...asset, amount: ckBTCBalance }
+                : asset
+            )
+            setAssets(updatedAssets)
+            await setStorageData({ [assetsKey]: JSON.stringify(updatedAssets) })
+          } catch (error) {
+            console.error('Error fetching ckBTC balance:', error)
+          }
+        }
       } catch (e) {
         console.error('Error parsing cached assets:', e)
         setAssets([])
       }
-    } else if (network === 'testnet3') {
-      // Initialize testnet3 with default assets
+    } else if (network === 'mainnet') {
+      // Initialize mainnet with default assets
+      setAssets(mainnetDefaultAssets)
+      await setStorageData({ [assetsKey]: JSON.stringify(mainnetDefaultAssets) })
+      console.log('Initialized mainnet with default assets')
+
+      // Fetch ckBTC balance for Lightning BTC
+      if (mnemonic) {
+        try {
+          const canisterNetwork = mapNetworkToCanister(network)
+          const ckBTCBalance = await getCkBTCBalance(mnemonic, canisterNetwork)
+          // Store as user_lbtc_balance
+          await setStorageData({ user_lbtc_balance: ckBTCBalance })
+          const updatedAssets = mainnetDefaultAssets.map(asset =>
+            asset.id === 'lightning-btc'
+              ? { ...asset, amount: ckBTCBalance }
+              : asset
+          )
+          setAssets(updatedAssets)
+          await setStorageData({ [assetsKey]: JSON.stringify(updatedAssets) })
+        } catch (error) {
+          console.error('Error fetching ckBTC balance:', error)
+        }
+      }
+    } else if (network === 'testnet3' || network === 'testnet4' || network === 'regtest') {
+      // Initialize testnet with default assets
       setAssets(testnet3DefaultAssets)
       await setStorageData({ [assetsKey]: JSON.stringify(testnet3DefaultAssets) })
-      console.log('Initialized testnet3 with default assets')
+      console.log('Initialized', network, 'with default assets')
+
+      // Fetch ckBTC balance for Lightning BTC
+      if (mnemonic) {
+        try {
+          const canisterNetwork = mapNetworkToCanister(network)
+          const ckBTCBalance = await getCkBTCBalance(mnemonic, canisterNetwork)
+          // Store as user_lbtc_balance
+          await setStorageData({ user_lbtc_balance: ckBTCBalance })
+          const updatedAssets = testnet3DefaultAssets.map(asset =>
+            asset.id === 'lightning-btc'
+              ? { ...asset, amount: ckBTCBalance }
+              : asset
+          )
+          setAssets(updatedAssets)
+          await setStorageData({ [assetsKey]: JSON.stringify(updatedAssets) })
+        } catch (error) {
+          console.error('Error fetching ckBTC balance:', error)
+        }
+      }
     } else {
       // Clear assets for other networks
       setAssets([])
@@ -731,9 +795,15 @@ function App() {
   useEffect(() => {
     const loadSwapBalance = async () => {
       if (view === 'swap') {
-        const result = await getStorageData(['user_bitcoin_balance'])
-        const balance = result.user_bitcoin_balance || '0.00000000'
-        setSwapUserBalance(balance)
+        const result = await getStorageData(['user_bitcoin_balance', 'user_lbtc_balance'])
+        const btcBalance = result.user_bitcoin_balance || '0.00000000'
+        const lbtcBalance = result.user_lbtc_balance || '0.00000000'
+
+        // Set the balance based on swap direction
+        // Default: BTC → LBTC (use BTC balance)
+        // Rotated: LBTC → BTC (use LBTC balance)
+        setSwapUserBalance(swapIconRotated ? lbtcBalance : btcBalance)
+        console.log('Swap balances loaded - BTC:', btcBalance, 'LBTC:', lbtcBalance)
 
         // Fetch BTC price from CoinGecko API
         try {
@@ -748,7 +818,7 @@ function App() {
       }
     }
     loadSwapBalance()
-  }, [view])
+  }, [view, swapIconRotated])
 
   // Auto-calculate destination amount (source - 500 satoshi) and update when source changes
   useEffect(() => {
@@ -764,8 +834,10 @@ function App() {
 
   // Calculate USD value
   const calculateUsdValue = (btcAmount: string): string => {
-    if (!btcAmount || !btcPrice) return '$0.00'
+    if (!btcAmount || btcAmount === '' || parseFloat(btcAmount) === 0) return '$0.00'
+    if (!btcPrice || btcPrice === 0) return '$0.00'
     const usdValue = parseFloat(btcAmount) * btcPrice
+    if (isNaN(usdValue)) return '$0.00'
     return `$${usdValue.toFixed(2)}`
   }
 
@@ -1639,7 +1711,6 @@ function App() {
                   <div className="swap-token-icon">₿</div>
                   <span className="swap-token-name">Bitcoin</span>
                 </div>
-                <button className="swap-token-select">›</button>
               </div>
               <input
                 type="text"
@@ -1665,14 +1736,25 @@ function App() {
               </div>
             </div>
 
+            {/* Swap Icon */}
+            <button
+              className={`swap-direction-btn ${swapIconRotated ? 'rotated' : ''}`}
+              onClick={() => setSwapIconRotated(!swapIconRotated)}
+            >
+              <svg stroke="currentColor" fill="none" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true" height="1.5em" width="1.5em" xmlns="http://www.w3.org/2000/svg">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"></path>
+              </svg>
+            </button>
+
             {/* To Token */}
             <div className="swap-token-section">
               <div className="swap-token-header">
                 <div className="swap-token-info">
-                  <div className="swap-token-icon">₿</div>
+                  <div className="swap-token-icon swap-token-icon-image">
+                    <img src="/lbtc-logo.png" alt="LBTC" className="swap-token-logo" />
+                  </div>
                   <span className="swap-token-name">Lightning Bitcoin</span>
                 </div>
-                <button className="swap-token-select">›</button>
               </div>
               <input
                 type="text"
