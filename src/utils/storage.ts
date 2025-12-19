@@ -18,6 +18,8 @@ interface StorageData {
     // Canister IDs
     mainnetCanisterId?: string
     testnetCanisterId?: string
+    // Bitcoin balance from Blockstream API
+    user_bitcoin_balance?: string
     // Two-address system
     walletAddress?: string  // Main BTC wallet address
     lightningAddress?: string // Lightning/ckBTC address
@@ -123,11 +125,17 @@ export const getNetworkAssetsKey = (network: string): keyof StorageData => {
     return `assets_${network}` as keyof StorageData
 }
 
-// Testnet3 default assets
+// Testnet default assets (testnet3, testnet4, regtest)
 export const testnet3DefaultAssets: Asset[] = [
+    { id: 'lightning-btc', name: 'Lightning BTC', amount: '0', unit: 'ckBTC', color: '#fbbf24' },
     { id: 'puliyal', name: 'PULIYAL20', amount: '21,000,000', unit: 'Puliyal', color: '#a855f7' },
     { id: 'bitcoin', name: 'BITCOIN', amount: '210,000,000', unit: 'BTC', color: '#f7931a' },
     { id: 'xiao', name: 'XIAOTANG68', amount: '0', unit: 'Xiaotan', color: '#22c55e' },
+]
+
+// Mainnet default assets
+export const mainnetDefaultAssets: Asset[] = [
+    { id: 'lightning-btc', name: 'Lightning BTC', amount: '0', unit: 'ckBTC', color: '#fbbf24' },
 ]
 
 // Default canister IDs (fallback values)

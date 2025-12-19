@@ -6,7 +6,7 @@ import { getStorageData, setStorageData, removeStorageData, getNetworkAddressKey
 import type { Asset } from './utils/storage'
 import { QRCodeSVG } from 'qrcode.react'
 
-type View = 'welcome' | 'unlock' | 'lock' | 'forgot' | 'create' | 'verify' | 'password' | 'restore' | 'dashboard' | 'receive' | 'receive-btc' | 'receive-rgb' | 'convert-lightning' | 'add-assets' | 'settings'
+type View = 'welcome' | 'unlock' | 'lock' | 'forgot' | 'create' | 'verify' | 'password' | 'restore' | 'dashboard' | 'receive' | 'receive-btc' | 'receive-rgb' | 'convert-lightning' | 'add-assets' | 'settings' | 'swap'
 type Tab = 'assets' | 'activities'
 type Network = 'mainnet' | 'testnet3' | 'testnet4' | 'regtest'
 
@@ -109,6 +109,12 @@ function App() {
   const [mainnetCanisterId, setMainnetCanisterId] = useState<string>('')
   const [testnetCanisterId, setTestnetCanisterId] = useState<string>('')
   const [settingsSaved, setSettingsSaved] = useState<boolean>(false)
+
+  // Swap states
+  const [swapFromAmount, setSwapFromAmount] = useState<string>('')
+  const [swapToAmount, setSwapToAmount] = useState<string>('')
+  const [swapUserBalance, setSwapUserBalance] = useState<string>('0.00000000')
+  const [btcPrice, setBtcPrice] = useState<number>(0)
 
   // Truncate address for display
   const truncateAddress = (addr: string) => {
@@ -390,14 +396,19 @@ function App() {
 
     // Check if we have a cached address for this network
     const networkAddressKey = getNetworkAddressKey(network)
-    const result = await getStorageData([networkAddressKey, `walletAddress_${network}`])
+    const result = await getStorageData([
+      networkAddressKey,
+      `walletAddress_${network}`,
+      `lightningAddress_${network}`
+    ])
     const cachedAddress = result[networkAddressKey]
     const cachedWalletAddress = result[`walletAddress_${network}`]
+    const cachedLightningAddress = result[`lightningAddress_${network}`]
 
     let currentAddress = ''
 
     if (cachedAddress || cachedWalletAddress) {
-      // Use cached address
+      // Use cached wallet address
       currentAddress = (cachedWalletAddress || cachedAddress) as string
       setBtcAddress(currentAddress)
       setWalletAddress(currentAddress)
@@ -405,12 +416,21 @@ function App() {
         btcAddress: currentAddress,
         walletAddress: currentAddress
       })
-      console.log('Using cached address for', network, ':', currentAddress)
+      console.log('Using cached wallet address for', network, ':', currentAddress)
     } else if (mnemonic) {
       // Fetch new address from canister
       console.log('Fetching new address for network:', network)
       const newAddress = await fetchAndSaveBtcAddress(mnemonic, network)
       if (newAddress) currentAddress = newAddress
+    }
+
+    // Update Lightning address
+    if (cachedLightningAddress) {
+      setLightningAddress(cachedLightningAddress as string)
+      console.log('Using cached Lightning address for', network, ':', cachedLightningAddress)
+    } else if (mnemonic) {
+      // Lightning address is fetched as part of fetchAndSaveBtcAddress
+      console.log('Lightning address will be fetched with wallet address')
     }
 
     // Fetch balance for the new network
@@ -515,6 +535,29 @@ function App() {
         const canisterNetwork = mapNetworkToCanister(networkId)
         const balanceNat64 = await getWalletBalance(currentMnemonic, canisterNetwork)
         const balanceBtc = (Number(balanceNat64) / 100000000).toFixed(8)
+
+        // If canister returns zero, immediately fetch from Blockstream API
+        if (balanceBtc === '0.00000000') {
+          console.log('Canister returned zero balance, checking Blockstream API...')
+          const apiUrl = networkId === 'mainnet'
+            ? `https://blockstream.info/api/address/${currentAddress.trim()}`
+            : `https://blockstream.info/testnet/api/address/${currentAddress.trim()}`
+
+          const response = await fetch(apiUrl)
+          if (response.ok) {
+            const data = await response.json()
+            const balanceFromAPI = (data.chain_stats?.funded_txo_sum || 0) - (data.chain_stats?.spent_txo_sum || 0)
+            const apiBalanceBtc = (balanceFromAPI / 100000000).toFixed(8)
+
+            // Store in Chrome storage
+            await setStorageData({ user_bitcoin_balance: apiBalanceBtc })
+            setBtcBalance(apiBalanceBtc)
+            setBalanceError('')
+            console.log('Balance from Blockstream API (canister was zero):', apiBalanceBtc)
+            return
+          }
+        }
+
         setBtcBalance(balanceBtc)
         setBalanceError('')
         console.log('Balance from wallet canister:', balanceBtc)
@@ -544,6 +587,9 @@ function App() {
       // Blockstream API returns chain_stats.funded_txo_sum - chain_stats.spent_txo_sum
       const balanceFromAPI = (data.chain_stats?.funded_txo_sum || 0) - (data.chain_stats?.spent_txo_sum || 0)
       const balanceBtc = (balanceFromAPI / 100000000).toFixed(8)
+
+      // Store in Chrome storage
+      await setStorageData({ user_bitcoin_balance: balanceBtc })
       setBtcBalance(balanceBtc)
       setBalanceError('')
       console.log('Balance from Blockstream API:', balanceBtc)
@@ -583,6 +629,9 @@ function App() {
       // Blockstream API returns chain_stats.funded_txo_sum - chain_stats.spent_txo_sum
       const balanceFromAPI = (data.chain_stats?.funded_txo_sum || 0) - (data.chain_stats?.spent_txo_sum || 0)
       const balanceBtc = (balanceFromAPI / 100000000).toFixed(8)
+
+      // Store in Chrome storage
+      await setStorageData({ user_bitcoin_balance: balanceBtc })
       setBtcBalance(balanceBtc)
       console.log('Balance refreshed from Blockstream API:', balanceBtc)
     } catch (e) {
@@ -678,6 +727,55 @@ function App() {
     loadCanisterSettings()
   }, [view])
 
+  // Load user balance when swap view opens
+  useEffect(() => {
+    const loadSwapBalance = async () => {
+      if (view === 'swap') {
+        const result = await getStorageData(['user_bitcoin_balance'])
+        const balance = result.user_bitcoin_balance || '0.00000000'
+        setSwapUserBalance(balance)
+
+        // Fetch BTC price from CoinGecko API
+        try {
+          const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd')
+          const data = await response.json()
+          if (data.bitcoin && data.bitcoin.usd) {
+            setBtcPrice(data.bitcoin.usd)
+          }
+        } catch (error) {
+          console.error('Error fetching BTC price:', error)
+        }
+      }
+    }
+    loadSwapBalance()
+  }, [view])
+
+  // Auto-calculate destination amount (source - 500 satoshi) and update when source changes
+  useEffect(() => {
+    if (swapFromAmount && parseFloat(swapFromAmount) > 0) {
+      const fromBtc = parseFloat(swapFromAmount)
+      const feeInBtc = 500 / 100000000 // 500 satoshi to BTC
+      const toBtc = Math.max(0, fromBtc - feeInBtc)
+      setSwapToAmount(toBtc.toFixed(8))
+    } else {
+      setSwapToAmount('')
+    }
+  }, [swapFromAmount])
+
+  // Calculate USD value
+  const calculateUsdValue = (btcAmount: string): string => {
+    if (!btcAmount || !btcPrice) return '$0.00'
+    const usdValue = parseFloat(btcAmount) * btcPrice
+    return `$${usdValue.toFixed(2)}`
+  }
+
+  // Handle percentage button clicks for swap
+  const handleSwapPercentage = (percentage: number) => {
+    const balance = parseFloat(swapUserBalance)
+    const amount = (balance * percentage / 100).toFixed(8)
+    setSwapFromAmount(amount)
+  }
+
   // Save canister settings
   const handleSaveCanisterIds = async () => {
     if (!mainnetCanisterId || !testnetCanisterId) {
@@ -711,6 +809,13 @@ function App() {
   const handleResetCanisterIds = () => {
     setMainnetCanisterId(DEFAULT_MAINNET_CANISTER)
     setTestnetCanisterId(DEFAULT_TESTNET_CANISTER)
+  }
+
+  // Swap mainnet and testnet canister IDs
+  const handleSwapCanisterIds = () => {
+    const temp = mainnetCanisterId
+    setMainnetCanisterId(testnetCanisterId)
+    setTestnetCanisterId(temp)
   }
 
   // Show loading while checking storage
@@ -1262,6 +1367,10 @@ function App() {
               <span className="receive-option-text">Convert Bitcoin to ⚡ Lightning</span>
               <span className="receive-option-arrow">›</span>
             </button>
+            <button className="receive-option" onClick={() => setView('swap')}>
+              <span className="receive-option-text">Swap BTC</span>
+              <span className="receive-option-arrow">›</span>
+            </button>
           </div>
         </div>
       )}
@@ -1496,11 +1605,96 @@ function App() {
               Save Changes
             </button>
 
+            <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem', justifyContent: 'center' }}>
+              <button
+                className="reset-link"
+                onClick={handleSwapCanisterIds}
+              >
+                Swap
+              </button>
+              <button
+                className="reset-link"
+                onClick={handleResetCanisterIds}
+              >
+                Reset to Defaults
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Swap Screen */}
+      {view === 'swap' && (
+        <div className="swap-container">
+          <div className="swap-header">
+            <button className="swap-close" onClick={() => setView('receive')}>✕</button>
+            <h2 className="swap-title">Swap</h2>
+          </div>
+
+          <div className="swap-content">
+            {/* From Token */}
+            <div className="swap-token-section">
+              <div className="swap-token-header">
+                <div className="swap-token-info">
+                  <div className="swap-token-icon">₿</div>
+                  <span className="swap-token-name">Bitcoin</span>
+                </div>
+                <button className="swap-token-select">›</button>
+              </div>
+              <input
+                type="text"
+                className="swap-amount-input"
+                placeholder="0"
+                value={swapFromAmount}
+                onChange={(e) => setSwapFromAmount(e.target.value)}
+              />
+              <div className="swap-token-footer">
+                <span className="swap-token-usd">{calculateUsdValue(swapFromAmount)}</span>
+                <div className="swap-balance-row">
+                  <div className="swap-balance-info">
+                    <span className="swap-balance-label">Balance:</span>
+                    <span className="swap-balance-value">{swapUserBalance} ₿</span>
+                  </div>
+                  <div className="swap-percent-buttons">
+                    <button className="swap-percent-btn" onClick={() => handleSwapPercentage(25)}>25%</button>
+                    <button className="swap-percent-btn" onClick={() => handleSwapPercentage(50)}>50%</button>
+                    <button className="swap-percent-btn" onClick={() => handleSwapPercentage(75)}>75%</button>
+                    <button className="swap-percent-btn" onClick={() => handleSwapPercentage(100)}>100%</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* To Token */}
+            <div className="swap-token-section">
+              <div className="swap-token-header">
+                <div className="swap-token-info">
+                  <div className="swap-token-icon">₿</div>
+                  <span className="swap-token-name">Lightning Bitcoin</span>
+                </div>
+                <button className="swap-token-select">›</button>
+              </div>
+              <input
+                type="text"
+                className="swap-amount-input"
+                placeholder="0"
+                value={swapToAmount}
+                onChange={(e) => setSwapToAmount(e.target.value)}
+                readOnly
+              />
+              <div className="swap-token-footer">
+                <span className="swap-token-usd">{calculateUsdValue(swapToAmount)}</span>
+              </div>
+            </div>
+
+            {/* Swap Button */}
             <button
-              className="reset-link"
-              onClick={handleResetCanisterIds}
+              className="swap-execute-btn"
+              disabled={parseFloat(swapUserBalance) === 0}
             >
-              Reset to Defaults
+              {parseFloat(swapUserBalance) === 0
+                ? 'NOT ENOUGH BTC'
+                : 'Convert to Lightning ₿'}
             </button>
           </div>
         </div>

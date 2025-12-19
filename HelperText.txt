@@ -3,6 +3,17 @@ cab1c9c6-319e-4e0f-ae58-e0b10006397e
 
 gasp attitude little organ palm crime layer answer dial twelve feed meadow
 
+Mainnet bn3qe-dyaaa-aaaaf-qapoa-cai
+TestNet emnyw-syaaa-aaaaa-qajoq-cai
+
+
+bc1qk9mxtgqa2sv6j6xpnvp2w36s8fucs8n99sn9rc
+bc1q3mpgqpu3hc8k43ge2fxyludf0pmu6slkp7pyc4
+tb1qcw6wvegn5u4s8fuafzvva9qmntva6ghcz3vk7e
+tb1qcw6wvegn5u4s8fuafzvva9qmntva6ghcz3vk7e
+
+https://testnet-faucet.ckboost.com/
+
 
 ckTESTBTC
 ml52i-qqaaa-aaaar-qaaba-cai
@@ -28,9 +39,15 @@ For RegNet ml52i-qqaaa-aaaar-qaaba-cai
 
 
 tb1qcw6wvegn5u4s8fuafzvva9qmntva6ghcz3vk7e
+tb1qqcy7ktz6cghc3tvnmxwr7uu5nw3ep4fpg28vey
+tb1qcw6wvegn5u4s8fuafzvva9qmntva6ghcz3vk7e
+tb1qqcy7ktz6cghc3tvnmxwr7uu5nw3ep4fpg28vey
 
 tb1qc7zv9655p5cnjrjtvcumr9ve2czg3ylx0ev4fk
+tb1qc7zv9655p5cnjrjtvcumr9ve2czg3ylx0ev4fk
+
 tb1qcw6wvegn5u4s8fuafzvva9qmntva6ghcz3vk7e
+
 
 bc1q3mpgqpu3hc8k43ge2fxyludf0pmu6slkp7pyc4
 tb1qc7zv9655p5cnjrjtvcumr9ve2czg3ylx0ev4fk
