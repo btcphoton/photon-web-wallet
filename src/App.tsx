@@ -3,11 +3,13 @@ import './App.css'
 import { generateMnemonic, deriveIdentity, validateMnemonic } from './utils/crypto'
 import { getBtcAddress, getWalletAddress, getWalletBalance, updateBalance, mapNetworkToCanister } from './utils/icp'
 import { getCkBTCBalance } from './utils/icrc1'
+import { convertLBTCtoBTC } from './utils/ckbtc-withdrawal'
 import { getStorageData, setStorageData, removeStorageData, getNetworkAddressKey, getNetworkAssetsKey, testnet3DefaultAssets, mainnetDefaultAssets, DEFAULT_MAINNET_CANISTER, DEFAULT_TESTNET_CANISTER } from './utils/storage'
 import type { Asset } from './utils/storage'
 import { QRCodeSVG } from 'qrcode.react'
 
-type View = 'welcome' | 'unlock' | 'lock' | 'forgot' | 'create' | 'verify' | 'password' | 'restore' | 'dashboard' | 'receive' | 'receive-btc' | 'receive-rgb' | 'convert-lightning' | 'add-assets' | 'settings' | 'swap'
+
+type View = 'welcome' | 'unlock' | 'lock' | 'forgot' | 'create' | 'verify' | 'password' | 'restore' | 'dashboard' | 'receive' | 'receive-btc' | 'receive-rgb' | 'convert-lightning' | 'add-assets' | 'settings' | 'swap' | 'send' | 'send-amount'
 type Tab = 'assets' | 'activities'
 type Network = 'mainnet' | 'testnet3' | 'testnet4' | 'regtest'
 
@@ -117,6 +119,15 @@ function App() {
   const [swapUserBalance, setSwapUserBalance] = useState<string>('0.00000000')
   const [btcPrice, setBtcPrice] = useState<number>(0)
   const [swapIconRotated, setSwapIconRotated] = useState<boolean>(false)
+  const [swapProcessing, setSwapProcessing] = useState<boolean>(false)
+  const [swapError, setSwapError] = useState<string>('')
+  const [swapSuccess, setSwapSuccess] = useState<string>('')
+  const [sendReceiverAddress, setSendReceiverAddress] = useState<string>('')
+  const [sendAmount, setSendAmount] = useState<string>('')
+  const [sendFeeOption, setSendFeeOption] = useState<'slow' | 'avg' | 'fast' | 'custom'>('fast')
+  const [sendUserBalance, setSendUserBalance] = useState<string>('0.00000000')
+
+
 
   // Truncate address for display
   const truncateAddress = (addr: string) => {
@@ -618,6 +629,15 @@ function App() {
             setBtcBalance(apiBalanceBtc)
             setBalanceError('')
             console.log('Balance from Blockstream API (canister was zero):', apiBalanceBtc)
+
+            // Also fetch LBTC balance
+            try {
+              const ckBTCBalance = await getCkBTCBalance(currentMnemonic, canisterNetwork)
+              await setStorageData({ user_lbtc_balance: ckBTCBalance })
+              console.log('LBTC balance fetched:', ckBTCBalance)
+            } catch (lbtcError) {
+              console.error('Error fetching LBTC balance:', lbtcError)
+            }
             return
           }
         }
@@ -625,6 +645,15 @@ function App() {
         setBtcBalance(balanceBtc)
         setBalanceError('')
         console.log('Balance from wallet canister:', balanceBtc)
+
+        // Also fetch LBTC balance
+        try {
+          const ckBTCBalance = await getCkBTCBalance(currentMnemonic, canisterNetwork)
+          await setStorageData({ user_lbtc_balance: ckBTCBalance })
+          console.log('LBTC balance fetched:', ckBTCBalance)
+        } catch (lbtcError) {
+          console.error('Error fetching LBTC balance:', lbtcError)
+        }
         return
       } catch (canisterError) {
         console.log('Wallet canister balance fetch failed, falling back to Blockstream API:', canisterError)
@@ -657,6 +686,16 @@ function App() {
       setBtcBalance(balanceBtc)
       setBalanceError('')
       console.log('Balance from Blockstream API:', balanceBtc)
+
+      // Also fetch LBTC balance
+      try {
+        const canisterNetwork = mapNetworkToCanister(networkId)
+        const ckBTCBalance = await getCkBTCBalance(currentMnemonic, canisterNetwork)
+        await setStorageData({ user_lbtc_balance: ckBTCBalance })
+        console.log('LBTC balance fetched:', ckBTCBalance)
+      } catch (lbtcError) {
+        console.error('Error fetching LBTC balance:', lbtcError)
+      }
     } catch (e) {
       console.error('Error fetching balance:', e)
       // Show simple user-friendly error and prompt to refresh
@@ -697,9 +736,19 @@ function App() {
       // Store in Chrome storage
       await setStorageData({ user_bitcoin_balance: balanceBtc })
       setBtcBalance(balanceBtc)
-      console.log('Balance refreshed from Blockstream API:', balanceBtc)
-    } catch (e) {
-      console.error('Error refreshing balance:', e)
+      console.log('Refreshed balance from Blockstream API:', balanceBtc)
+
+      // Also fetch LBTC balance
+      try {
+        const canisterNetwork = mapNetworkToCanister(selectedNetwork)
+        const ckBTCBalance = await getCkBTCBalance(mnemonic, canisterNetwork)
+        await setStorageData({ user_lbtc_balance: ckBTCBalance })
+        console.log('LBTC balance refreshed:', ckBTCBalance)
+      } catch (lbtcError) {
+        console.error('Error fetching LBTC balance:', lbtcError)
+      }
+    } catch (error) {
+      console.error('Error refreshing balance:', error)
     } finally {
       setLoadingBalance(false)
     }
@@ -847,6 +896,66 @@ function App() {
     const amount = (balance * percentage / 100).toFixed(8)
     setSwapFromAmount(amount)
   }
+
+  // Handle swap execution
+  const handleExecuteSwap = async () => {
+    if (!mnemonic || !swapFromAmount || parseFloat(swapFromAmount) === 0) {
+      setSwapError('Please enter a valid amount')
+      return
+    }
+
+    // Clear previous messages
+    setSwapError('')
+    setSwapSuccess('')
+    setSwapProcessing(true)
+
+    try {
+      const amount = parseFloat(swapFromAmount)
+      const canisterNetwork = mapNetworkToCanister(selectedNetwork)
+
+      if (swapIconRotated) {
+        // LBTC → BTC conversion
+        console.log('Converting LBTC to BTC, amount:', amount)
+        const result = await convertLBTCtoBTC(mnemonic, amount, canisterNetwork)
+
+        setSwapSuccess(result.message)
+        setSwapFromAmount('')
+        setSwapToAmount('')
+
+        // Refresh balances after successful conversion
+        setTimeout(async () => {
+          if (btcAddress) {
+            await fetchBalance(mnemonic, btcAddress, selectedNetwork)
+          }
+          // Also reload swap balances
+          const balanceResult = await getStorageData(['user_bitcoin_balance', 'user_lbtc_balance'])
+          const btcBal = balanceResult.user_bitcoin_balance || '0.00000000'
+          const lbtcBal = balanceResult.user_lbtc_balance || '0.00000000'
+          setSwapUserBalance(swapIconRotated ? lbtcBal : btcBal)
+        }, 2000)
+      } else {
+        // BTC → LBTC conversion (not yet implemented)
+        setSwapError('BTC to LBTC conversion is not yet available')
+      }
+    } catch (error: any) {
+      console.error('Swap error:', error)
+      setSwapError(error.message || 'Failed to execute swap')
+    } finally {
+      setSwapProcessing(false)
+    }
+  }
+
+  // Load user balance when send-amount view opens
+  useEffect(() => {
+    const loadSendBalance = async () => {
+      if (view === 'send-amount') {
+        const result = await getStorageData(['user_bitcoin_balance'])
+        const balance = result.user_bitcoin_balance || '0.00000000'
+        setSendUserBalance(balance)
+      }
+    }
+    loadSendBalance()
+  }, [view])
 
   // Save canister settings
   const handleSaveCanisterIds = async () => {
@@ -1344,7 +1453,7 @@ function App() {
               <div className="action-icon receive">↓</div>
               <span className="action-label">Receive</span>
             </button>
-            <button className="action-btn">
+            <button className="action-btn" onClick={() => setView('send')}>
               <div className="action-icon send">↗</div>
               <span className="action-label">Send</span>
             </button>
@@ -1789,14 +1898,172 @@ function App() {
               </div>
             </div>
 
+            {/* Error/Success Messages */}
+            {swapError && (
+              <div style={{
+                padding: '0.75rem',
+                margin: '1rem 0',
+                background: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                borderRadius: '8px',
+                color: '#ef4444',
+                fontSize: '0.875rem'
+              }}>
+                {swapError}
+              </div>
+            )}
+
+            {swapSuccess && (
+              <div style={{
+                padding: '0.75rem',
+                margin: '1rem 0',
+                background: 'rgba(34, 197, 94, 0.1)',
+                border: '1px solid rgba(34, 197, 94, 0.3)',
+                borderRadius: '8px',
+                color: '#22c55e',
+                fontSize: '0.875rem'
+              }}>
+                {swapSuccess}
+              </div>
+            )}
+
             {/* Swap Button */}
             <button
               className="swap-execute-btn"
-              disabled={parseFloat(swapUserBalance) === 0}
+              disabled={parseFloat(swapUserBalance) === 0 || swapProcessing}
+              onClick={handleExecuteSwap}
             >
-              {parseFloat(swapUserBalance) === 0
-                ? 'NOT ENOUGH BTC'
-                : 'Convert to Lightning ₿'}
+              {swapProcessing
+                ? 'Processing...'
+                : parseFloat(swapUserBalance) === 0
+                  ? 'NOT ENOUGH BTC'
+                  : 'Convert to Lightning ₿'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Send Screen */}
+      {view === 'send' && (
+        <div className="send-container">
+          <div className="send-header">
+            <button className="send-back" onClick={() => setView('dashboard')}>←</button>
+            <h2 className="send-title">Send</h2>
+          </div>
+
+          <div className="send-content">
+            <div className="send-input-group">
+              <label className="send-label">Receiver</label>
+              <input
+                type="text"
+                className="send-input"
+                placeholder="Invoice or Bitcoin address"
+                value={sendReceiverAddress}
+                onChange={(e) => setSendReceiverAddress(e.target.value)}
+              />
+            </div>
+
+            <button
+              className="send-next-btn"
+              disabled={!sendReceiverAddress}
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Send Amount Screen */}
+      {view === 'send-amount' && (
+        <div className="send-container">
+          <div className="send-header">
+            <button className="send-back" onClick={() => setView('send')}>←</button>
+            <h2 className="send-title">Send BTC</h2>
+          </div>
+
+          <div className="send-content">
+            <div className="send-input-group">
+              <label className="send-label">Recipient</label>
+              <div className="send-recipient-display">
+                <span className="send-recipient-text">{sendReceiverAddress}</span>
+                <button
+                  className="send-copy-btn"
+                  onClick={() => navigator.clipboard.writeText(sendReceiverAddress)}
+                >
+                  ⎘
+                </button>
+              </div>
+            </div>
+
+            <div className="send-input-group" style={{ marginTop: '1.5rem' }}>
+              <div className="send-amount-header">
+                <label className="send-label">Amount</label>
+                <span className="send-balance-label">Balance: {sendUserBalance} BTC</span>
+              </div>
+              <div className="send-amount-input-container">
+                <input
+                  type="text"
+                  className="send-amount-input"
+                  placeholder="Please enter send amount"
+                  value={sendAmount}
+                  onChange={(e) => setSendAmount(e.target.value)}
+                />
+                <div className="send-amount-suffix">
+                  <span className="send-amount-unit">BTC</span>
+                  <button
+                    className="send-max-btn"
+                    onClick={() => setSendAmount(btcBalance)}
+                  >
+                    Max
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="send-input-group" style={{ marginTop: '1.5rem' }}>
+              <div className="send-fee-header">
+                <label className="send-label">Fee</label>
+                <button className="send-refresh-btn">⟳</button>
+              </div>
+              <div className="send-fee-options">
+                <button
+                  className={`send-fee-btn ${sendFeeOption === 'slow' ? 'active' : ''}`}
+                  onClick={() => setSendFeeOption('slow')}
+                >
+                  <div className="send-fee-title">Slow</div>
+                  <div className="send-fee-rate">2 sat/VB</div>
+                  <div className="send-fee-time">~ 1 hours</div>
+                </button>
+                <button
+                  className={`send-fee-btn ${sendFeeOption === 'avg' ? 'active' : ''}`}
+                  onClick={() => setSendFeeOption('avg')}
+                >
+                  <div className="send-fee-title">Avg</div>
+                  <div className="send-fee-rate">2 sat/VB</div>
+                  <div className="send-fee-time">~ 30 mins</div>
+                </button>
+                <button
+                  className={`send-fee-btn ${sendFeeOption === 'fast' ? 'active' : ''}`}
+                  onClick={() => setSendFeeOption('fast')}
+                >
+                  <div className="send-fee-title">Fast</div>
+                  <div className="send-fee-rate">2 sat/VB</div>
+                  <div className="send-fee-time">~ 10 mins</div>
+                </button>
+                <button
+                  className={`send-fee-btn ${sendFeeOption === 'custom' ? 'active' : ''}`}
+                  onClick={() => setSendFeeOption('custom')}
+                >
+                  <div className="send-fee-title">Custom</div>
+                </button>
+              </div>
+            </div>
+
+            <button
+              className="send-next-btn"
+              disabled={!sendAmount || parseFloat(sendAmount) === 0}
+            >
+              Next
             </button>
           </div>
         </div>

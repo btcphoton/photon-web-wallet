@@ -6,13 +6,15 @@ gasp attitude little organ palm crime layer answer dial twelve feed meadow
 Mainnet bn3qe-dyaaa-aaaaf-qapoa-cai
 TestNet emnyw-syaaa-aaaaa-qajoq-cai
 
-
+emnyw-syaaa-aaaaa-qajoq-cai
 bc1qk9mxtgqa2sv6j6xpnvp2w36s8fucs8n99sn9rc
 bc1q3mpgqpu3hc8k43ge2fxyludf0pmu6slkp7pyc4
 tb1qcw6wvegn5u4s8fuafzvva9qmntva6ghcz3vk7e
 tb1qcw6wvegn5u4s8fuafzvva9qmntva6ghcz3vk7e
 
 https://testnet-faucet.ckboost.com/
+
+Bitcoin transaction broadcast! Block index: 10431
 
 
 ckTESTBTC
@@ -86,11 +88,66 @@ jq7ei-o3jmi-czlyb-rm5j4-uaib4-puutz-fk53z-xtehu-ayxd3-kkmwa-lae
       const data: BalanceData = await response.json();
       
 
-
-
-
-
 strike depth hybrid float annual history metal float south possible fit author
 
 
 ncsiv-ff6eq-a3kcd-hfd4e-3bsme-rjevq-p5ai5-luqst-fk2y6-hgg5b-jae
+
+
+------------------------------------------------------------------------------------
+const CKTESTBTC_LEDGER_ID = "mc6ru-gyaaa-aaaar-qaaaq-cai";
+const CKTESTBTC_MINTER_ID = "ml52i-qqaaa-aaaar-qaaba-cai";
+
+When use try to swap from LBTC to BTC this is the flow
+
+1 The Conversion Process (Transaction Flow)
+
+Step 1 (Approval): The system must execute an icrc2_approve transaction on the CKTESTBTC Ledger, authorizing the Minter Canister to spend Amount + 10 sats.
+
+Step 2 (Withdrawal): Immediately upon successful approval, the system must call retrieve_btc_with_approval on the CKTESTBTC Minter Canister with the destination address and amount.
+
+2 Feedback & Status
+
+Success State: Upon success, display the Block Index returned by the Minter and inform the user that the Bitcoin transaction has been broadcast.
+
+Error Handling: The system must gracefully handle and display specific errors from the Minter, including:
+
+AmountTooLow
+
+InsufficientFunds
+
+TemporarilyUnavailable
+
+------------------------------------------------------------------------------------
+
+
+
+
+In the Setting Add two text box to get the MainNet Canister and TestNet canister
+
+One entered store that as google chrome storage and use 
+to get the wallet address and its balance
+
+const WALLET_CANISTER_IDS = {
+    Mainnet: '7z2qz-sqaaa-aaaab-aaeha-cai',
+    Testnet: 'efotk-eqaaa-aaaaa-qajpa-cai',
+    Regtest: 'efotk-eqaaa-aaaaa-qajpa-cai', 
+};
+RegTest as TestNet canister are same
+Once entered run the get_wallet_address function to get 
+the new address from the canister
+
+
+
+ckTESTBTC canister
+mc6ru-gyaaa-aaaar-qaaaq-cai
+
+ckBTC canister
+mxzaz-hqaaa-aaaar-qaada-cai
+
+use the icrc1_balance_of: (record {owner:principal; subaccount:opt vec nat8}) → (nat) query
+
+to get the balance of ckTESTBTC or ckBTC from the canister for the ICP address 
+and so that value in the Assets sections as Lightening BTC balance. If there is no Lightning BTC logo create one and create the asset as default in all three networks
+mainnet , testnet and regtest 
+
