@@ -227,7 +227,7 @@ body {
 .address-row {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 0.5rem;
 }
 
@@ -1534,4 +1534,48 @@ textarea:focus {
 
 .import-btn:not(:disabled):hover {
   background: #333;
+}
+
+/* Wave Loader Animation */
+.wave-loader {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 0.5rem 0;
+}
+
+.wave-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(247, 147, 26, 0.8);
+  animation: wave 1.2s ease-in-out infinite;
+}
+
+.wave-dot:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.wave-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.wave-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes wave {
+
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+
+  30% {
+    transform: translateY(-8px);
+    opacity: 1;
+  }
 }

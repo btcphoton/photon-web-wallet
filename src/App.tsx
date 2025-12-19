@@ -56,6 +56,7 @@ function App() {
   const [btcAddress, setBtcAddress] = useState<string>('') // Deprecated, keeping for backward compatibility
 
   const [loadingAddress, setLoadingAddress] = useState<boolean>(false)
+  const [loadingExpand, setLoadingExpand] = useState<boolean>(false)
   const [copied, setCopied] = useState<boolean>(false)
   const [copiedPrincipal, setCopiedPrincipal] = useState<boolean>(false)
   const [mnemonicCopied, setMnemonicCopied] = useState<boolean>(false)
@@ -127,6 +128,34 @@ function App() {
       await navigator.clipboard.writeText(mnemonic)
       setMnemonicCopied(true)
       setTimeout(() => setMnemonicCopied(false), 2000)
+    }
+  }
+
+  // Handle expand address - fetch from canister
+  const handleExpandAddress = async () => {
+    if (!mnemonic) return
+
+    setLoadingExpand(true)
+    try {
+      const canisterNetwork = mapNetworkToCanister(selectedNetwork)
+      const address = await getWalletAddress(mnemonic, canisterNetwork)
+      setWalletAddress(address)
+      setBtcAddress(address)
+
+      // Save to storage
+      const addressKey = getNetworkAddressKey(selectedNetwork)
+      await setStorageData({
+        [addressKey]: address,
+        btcAddress: address,
+        walletAddress: address,
+        [`walletAddress_${selectedNetwork}`]: address
+      })
+
+      console.log('Expanded wallet address:', address)
+    } catch (e) {
+      console.error('Failed to expand wallet address:', e)
+    } finally {
+      setLoadingExpand(false)
     }
   }
 
@@ -1026,6 +1055,12 @@ function App() {
               <span className="address-badge">BTC</span>
               {loadingAddress ? (
                 <span className="address-text">Loading...</span>
+              ) : loadingExpand ? (
+                <div className="wave-loader">
+                  <div className="wave-dot"></div>
+                  <div className="wave-dot"></div>
+                  <div className="wave-dot"></div>
+                </div>
               ) : (
                 <span className="address-text" title={walletAddress || btcAddress}>
                   {truncateAddress(walletAddress || btcAddress) || 'No address'}
@@ -1042,7 +1077,13 @@ function App() {
               >
                 {copied ? '✓' : '⧉'}
               </button>
-              <button className="icon-btn-sm" title="Expand">⊡</button>
+              <button
+                className="icon-btn-sm"
+                onClick={handleExpandAddress}
+                title="Expand - Fetch from canister"
+              >
+                ⊡
+              </button>
             </div>
             {/* Principal ID Row */}
             <div className="address-row principal-row">
