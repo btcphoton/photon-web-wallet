@@ -1704,12 +1704,23 @@ function App() {
           </div>
 
           <div className="swap-content">
-            {/* From Token */}
+            {/* From Token - conditionally swap based on direction */}
             <div className="swap-token-section">
               <div className="swap-token-header">
                 <div className="swap-token-info">
-                  <div className="swap-token-icon">₿</div>
-                  <span className="swap-token-name">Bitcoin</span>
+                  {swapIconRotated ? (
+                    <>
+                      <div className="swap-token-icon swap-token-icon-image">
+                        <img src="/lbtc-logo.png" alt="LBTC" className="swap-token-logo" />
+                      </div>
+                      <span className="swap-token-name">Lightning Bitcoin</span>
+                    </>
+                  ) : (
+                    <>
+                      <div className="swap-token-icon">₿</div>
+                      <span className="swap-token-name">Bitcoin</span>
+                    </>
+                  )}
                 </div>
               </div>
               <input
@@ -1746,14 +1757,23 @@ function App() {
               </svg>
             </button>
 
-            {/* To Token */}
+            {/* To Token - conditionally swap based on direction */}
             <div className="swap-token-section">
               <div className="swap-token-header">
                 <div className="swap-token-info">
-                  <div className="swap-token-icon swap-token-icon-image">
-                    <img src="/lbtc-logo.png" alt="LBTC" className="swap-token-logo" />
-                  </div>
-                  <span className="swap-token-name">Lightning Bitcoin</span>
+                  {swapIconRotated ? (
+                    <>
+                      <div className="swap-token-icon">₿</div>
+                      <span className="swap-token-name">Bitcoin</span>
+                    </>
+                  ) : (
+                    <>
+                      <div className="swap-token-icon swap-token-icon-image">
+                        <img src="/lbtc-logo.png" alt="LBTC" className="swap-token-logo" />
+                      </div>
+                      <span className="swap-token-name">Lightning Bitcoin</span>
+                    </>
+                  )}
                 </div>
               </div>
               <input
