@@ -15,6 +15,9 @@ interface StorageData {
     principalId?: string
     btcAddress?: string
     selectedNetwork?: string
+    // Canister IDs
+    mainnetCanisterId?: string
+    testnetCanisterId?: string
     // Two-address system
     walletAddress?: string  // Main BTC wallet address
     lightningAddress?: string // Lightning/ckBTC address
@@ -126,3 +129,19 @@ export const testnet3DefaultAssets: Asset[] = [
     { id: 'bitcoin', name: 'BITCOIN', amount: '210,000,000', unit: 'BTC', color: '#f7931a' },
     { id: 'xiao', name: 'XIAOTANG68', amount: '0', unit: 'Xiaotan', color: '#22c55e' },
 ]
+
+// Default canister IDs (fallback values)
+export const DEFAULT_MAINNET_CANISTER = 'bn3qe-dyaaa-aaaaf-qapoa-cai'
+export const DEFAULT_TESTNET_CANISTER = 'emnyw-syaaa-aaaaa-qajoq-cai'
+
+// Get MainNet canister ID from storage (with fallback to default)
+export const getMainnetCanisterId = async (): Promise<string> => {
+    const result = await getStorageData(['mainnetCanisterId'])
+    return result.mainnetCanisterId || DEFAULT_MAINNET_CANISTER
+}
+
+// Get TestNet canister ID from storage (with fallback to default)
+export const getTestnetCanisterId = async (): Promise<string> => {
+    const result = await getStorageData(['testnetCanisterId'])
+    return result.testnetCanisterId || DEFAULT_TESTNET_CANISTER
+}

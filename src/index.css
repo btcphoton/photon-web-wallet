@@ -621,7 +621,7 @@ textarea:focus {
 .back-arrow {
   background: transparent;
   border: none;
-  color: rgba(255, 255, 255, 0.8);
+  color: #fff;
   font-size: 1.25rem;
   cursor: pointer;
   padding: 0.25rem;
@@ -629,7 +629,7 @@ textarea:focus {
 }
 
 .back-arrow:hover {
-  color: #fff;
+  color: #f7931a;
 }
 
 .progress-bar {
@@ -1185,6 +1185,8 @@ textarea:focus {
   display: flex;
   flex-direction: column;
   padding: 1rem;
+  overflow-x: hidden;
+  max-width: 100%;
 }
 
 .receive-header {
@@ -1578,4 +1580,97 @@ textarea:focus {
     transform: translateY(-8px);
     opacity: 1;
   }
+}
+
+/* Settings Screen */
+.settings-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1rem 0;
+}
+
+.settings-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.settings-section {
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.settings-section-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #fff;
+  margin-bottom: 0.5rem;
+}
+
+.settings-info {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.6);
+  line-height: 1.4;
+}
+
+.settings-input {
+  width: 100%;
+  padding: 0.9rem 1rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+  color: #fff;
+  font-size: 0.9rem;
+  font-family: 'Monaco', 'Menlo', monospace;
+  transition: all 0.2s ease;
+}
+
+.settings-input:focus {
+  outline: none;
+  border-color: #f7931a;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.settings-input::placeholder {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.settings-hint {
+  display: block;
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.success-text {
+  color: #00d4aa;
+  font-size: 0.9rem;
+  text-align: center;
+  padding: 0.75rem;
+  background: rgba(0, 212, 170, 0.1);
+  border: 1px solid rgba(0, 212, 170, 0.3);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.reset-link {
+  display: block;
+  text-align: center;
+  margin-top: 1rem;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.85rem;
+  cursor: pointer;
+  text-decoration: underline;
+  transition: color 0.2s ease;
+}
+
+.reset-link:hover {
+  color: rgba(255, 255, 255, 0.8);
 }

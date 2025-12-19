@@ -1,13 +1,7 @@
 import { Actor, HttpAgent } from '@dfinity/agent';
 import { Ed25519KeyIdentity } from '@dfinity/identity';
 import * as bip39 from 'bip39';
-
-// Wallet canister IDs (for main BTC wallet)
-const WALLET_CANISTER_IDS = {
-    Mainnet: '7z2qz-sqaaa-aaaab-aaeha-cai',
-    Testnet: 'efotk-eqaaa-aaaaa-qajpa-cai',
-    Regtest: 'efotk-eqaaa-aaaaa-qajpa-cai', // Same as Testnet
-};
+import { getMainnetCanisterId, getTestnetCanisterId } from './storage';
 
 // Lightning canister IDs (for ckBTC/Lightning)
 const LIGHTNING_CANISTER_IDS = {
@@ -34,9 +28,14 @@ export const mapNetworkToCanister = (network: string): NetworkEnum => {
     }
 };
 
-// Get wallet canister ID for specific network
-const getWalletCanisterId = (network: NetworkEnum): string => {
-    return WALLET_CANISTER_IDS[network];
+// Get wallet canister ID for specific network (now async, loads from storage)
+const getWalletCanisterId = async (network: NetworkEnum): Promise<string> => {
+    if (network === 'Mainnet') {
+        return await getMainnetCanisterId();
+    } else {
+        // Both Testnet and Regtest use the same canister
+        return await getTestnetCanisterId();
+    }
 };
 
 // Get lightning canister ID for specific network
@@ -95,9 +94,12 @@ export const getWalletAddress = async (mnemonic: string, network: NetworkEnum = 
         host: 'https://ic0.app',
     });
 
+    // Get canister ID from storage (with fallback)
+    const canisterId = await getWalletCanisterId(network);
+
     const actor = Actor.createActor(walletIdlFactory, {
         agent,
-        canisterId: getWalletCanisterId(network),
+        canisterId,
     });
 
     try {
@@ -121,9 +123,12 @@ export const getWalletBalance = async (mnemonic: string, network: NetworkEnum = 
         host: 'https://ic0.app',
     });
 
+    // Get canister ID from storage (with fallback)
+    const canisterId = await getWalletCanisterId(network);
+
     const actor = Actor.createActor(walletIdlFactory, {
         agent,
-        canisterId: getWalletCanisterId(network),
+        canisterId,
     });
 
     try {

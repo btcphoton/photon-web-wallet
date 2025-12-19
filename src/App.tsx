@@ -2,11 +2,11 @@ import { useState, useEffect } from 'react'
 import './App.css'
 import { generateMnemonic, deriveIdentity, validateMnemonic } from './utils/crypto'
 import { getBtcAddress, getWalletAddress, getWalletBalance, updateBalance, mapNetworkToCanister } from './utils/icp'
-import { getStorageData, setStorageData, removeStorageData, getNetworkAddressKey, getNetworkAssetsKey, testnet3DefaultAssets } from './utils/storage'
+import { getStorageData, setStorageData, removeStorageData, getNetworkAddressKey, getNetworkAssetsKey, testnet3DefaultAssets, DEFAULT_MAINNET_CANISTER, DEFAULT_TESTNET_CANISTER } from './utils/storage'
 import type { Asset } from './utils/storage'
 import { QRCodeSVG } from 'qrcode.react'
 
-type View = 'welcome' | 'unlock' | 'lock' | 'forgot' | 'create' | 'verify' | 'password' | 'restore' | 'dashboard' | 'receive' | 'receive-btc' | 'receive-rgb' | 'convert-lightning' | 'add-assets'
+type View = 'welcome' | 'unlock' | 'lock' | 'forgot' | 'create' | 'verify' | 'password' | 'restore' | 'dashboard' | 'receive' | 'receive-btc' | 'receive-rgb' | 'convert-lightning' | 'add-assets' | 'settings'
 type Tab = 'assets' | 'activities'
 type Network = 'mainnet' | 'testnet3' | 'testnet4' | 'regtest'
 
@@ -104,6 +104,11 @@ function App() {
   const [loadingBalance, setLoadingBalance] = useState<boolean>(false)
   // const [loadingLightningBalance, setLoadingLightningBalance] = useState<boolean>(false) // For future Lightning asset
   const [balanceError, setBalanceError] = useState<string>('')
+
+  // Settings states
+  const [mainnetCanisterId, setMainnetCanisterId] = useState<string>('')
+  const [testnetCanisterId, setTestnetCanisterId] = useState<string>('')
+  const [settingsSaved, setSettingsSaved] = useState<boolean>(false)
 
   // Truncate address for display
   const truncateAddress = (addr: string) => {
@@ -385,16 +390,21 @@ function App() {
 
     // Check if we have a cached address for this network
     const networkAddressKey = getNetworkAddressKey(network)
-    const result = await getStorageData([networkAddressKey])
+    const result = await getStorageData([networkAddressKey, `walletAddress_${network}`])
     const cachedAddress = result[networkAddressKey]
+    const cachedWalletAddress = result[`walletAddress_${network}`]
 
     let currentAddress = ''
 
-    if (cachedAddress) {
+    if (cachedAddress || cachedWalletAddress) {
       // Use cached address
-      currentAddress = cachedAddress as string
+      currentAddress = (cachedWalletAddress || cachedAddress) as string
       setBtcAddress(currentAddress)
-      await setStorageData({ btcAddress: currentAddress })
+      setWalletAddress(currentAddress)
+      await setStorageData({
+        btcAddress: currentAddress,
+        walletAddress: currentAddress
+      })
       console.log('Using cached address for', network, ':', currentAddress)
     } else if (mnemonic) {
       // Fetch new address from canister
@@ -654,6 +664,53 @@ function App() {
     setVerifyWords([])
     setSelectedNetwork('mainnet')
     setView('welcome')
+  }
+
+  // Load canister settings when Settings view is opened
+  useEffect(() => {
+    const loadCanisterSettings = async () => {
+      if (view === 'settings') {
+        const result = await getStorageData(['mainnetCanisterId', 'testnetCanisterId'])
+        setMainnetCanisterId(result.mainnetCanisterId || DEFAULT_MAINNET_CANISTER)
+        setTestnetCanisterId(result.testnetCanisterId || DEFAULT_TESTNET_CANISTER)
+      }
+    }
+    loadCanisterSettings()
+  }, [view])
+
+  // Save canister settings
+  const handleSaveCanisterIds = async () => {
+    if (!mainnetCanisterId || !testnetCanisterId) {
+      setError('Both canister IDs are required')
+      return
+    }
+
+    try {
+      // Save to storage
+      await setStorageData({
+        mainnetCanisterId,
+        testnetCanisterId
+      })
+
+      setSettingsSaved(true)
+      setTimeout(() => setSettingsSaved(false), 2000)
+
+      // Refresh wallet address with new canister
+      if (mnemonic) {
+        await fetchAndSaveBtcAddress(mnemonic, selectedNetwork)
+      }
+
+      console.log('Canister IDs saved successfully')
+    } catch (e) {
+      console.error('Error saving canister IDs:', e)
+      setError('Failed to save canister IDs')
+    }
+  }
+
+  // Reset canister IDs to defaults
+  const handleResetCanisterIds = () => {
+    setMainnetCanisterId(DEFAULT_MAINNET_CANISTER)
+    setTestnetCanisterId(DEFAULT_TESTNET_CANISTER)
   }
 
   // Show loading while checking storage
@@ -979,7 +1036,10 @@ function App() {
                 <span className="menu-badge">!</span>
                 <span className="menu-arrow">›</span>
               </div>
-              <div className="menu-item">
+              <div className="menu-item" onClick={() => {
+                setShowMenu(false)
+                setView('settings')
+              }}>
                 <span className="menu-icon">⚙</span>
                 <span>Setting</span>
                 <span className="menu-arrow">›</span>
@@ -1275,18 +1335,18 @@ function App() {
               />
             </div>
 
+            <button className="btn-primary copy-btc-btn" onClick={() => {
+              navigator.clipboard.writeText(lightningAddress)
+              setCopied(true)
+              setTimeout(() => setCopied(false), 2000)
+            }} style={{ marginBottom: '1rem' }}>
+              {copied ? '✓ Copied!' : '⧉ Copy bitcoin address'}
+            </button>
+
             <div className="btc-address-box">
               <span className="btc-address-text">{lightningAddress || 'No address available'}</span>
             </div>
           </div>
-
-          <button className="btn-primary copy-btc-btn" onClick={() => {
-            navigator.clipboard.writeText(lightningAddress)
-            setCopied(true)
-            setTimeout(() => setCopied(false), 2000)
-          }}>
-            {copied ? '✓ Copied!' : '⧉ Copy bitcoin address'}
-          </button>
         </div>
       )}
 
@@ -1384,6 +1444,65 @@ function App() {
           >
             Import
           </button>
+        </div>
+      )}
+
+      {/* Settings Screen */}
+      {view === 'settings' && (
+        <div className="settings-container">
+          <div className="password-header">
+            <button className="back-arrow" onClick={() => setView('dashboard')}>←</button>
+            <h2 className="card-title">Settings</h2>
+          </div>
+
+          <div className="settings-content">
+            <div className="settings-section">
+              <h3 className="settings-section-title">Canister Configuration</h3>
+              <p className="settings-info">Configure custom canister IDs for wallet address and balance retrieval.</p>
+            </div>
+
+            <div className="input-group">
+              <label className="input-label">MainNet Canister ID</label>
+              <input
+                type="text"
+                className="settings-input"
+                placeholder={DEFAULT_MAINNET_CANISTER}
+                value={mainnetCanisterId}
+                onChange={(e) => setMainnetCanisterId(e.target.value)}
+              />
+              <span className="settings-hint">Default: {DEFAULT_MAINNET_CANISTER}</span>
+            </div>
+
+            <div className="input-group">
+              <label className="input-label">TestNet Canister ID</label>
+              <input
+                type="text"
+                className="settings-input"
+                placeholder={DEFAULT_TESTNET_CANISTER}
+                value={testnetCanisterId}
+                onChange={(e) => setTestnetCanisterId(e.target.value)}
+              />
+              <span className="settings-hint">Default: {DEFAULT_TESTNET_CANISTER} (Also used for Regtest)</span>
+            </div>
+
+            {error && <p className="error-text">{error}</p>}
+            {settingsSaved && <p className="success-text">✓ Settings saved successfully!</p>}
+
+            <button
+              className="btn-primary"
+              onClick={handleSaveCanisterIds}
+              style={{ width: '100%', marginTop: '1.5rem' }}
+            >
+              Save Changes
+            </button>
+
+            <button
+              className="reset-link"
+              onClick={handleResetCanisterIds}
+            >
+              Reset to Defaults
+            </button>
+          </div>
         </div>
       )}
 
