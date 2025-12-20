@@ -1,7 +1,7 @@
 https://htlc.me/
 cab1c9c6-319e-4e0f-ae58-e0b10006397e
 
-gasp attitude little organ palm crime layer answer dial twelve feed meadow
+gasp attitude little organ palm crime layer answer dial twelve feed meadow rehan123
 
 Mainnet bn3qe-dyaaa-aaaaf-qapoa-cai
 TestNet emnyw-syaaa-aaaaa-qajoq-cai
@@ -150,4 +150,36 @@ use the icrc1_balance_of: (record {owner:principal; subaccount:opt vec nat8}) â†
 to get the balance of ckTESTBTC or ckBTC from the canister for the ICP address 
 and so that value in the Assets sections as Lightening BTC balance. If there is no Lightning BTC logo create one and create the asset as default in all three networks
 mainnet , testnet and regtest 
+----------------------------------------------------------
 
+
+1. Fundamental Physics (High Traffic)
+These are the most common searches. To rank well here, you must include the formulas and a "Common Conversions" table.
+
+Length: Meters, Kilometers, Miles, Feet, Inches, Nautical Miles.
+
+Mass/Weight: Kilograms, Grams, Pounds, Ounces, Metric Tons.
+
+Temperature: Celsius, Fahrenheit, Kelvin.
+
+Volume: Liters, Gallons (US vs. UK), Cups, Cubic Meters.
+
+Area: Square Meters, Acres, Hectares, Square Feet.
+
+2. Digital & Programming Units (High "Dev" Value)
+These are perfect for your target audience. Developers frequently need to calculate storage or data transfer speeds.
+
+Data Storage: Bits, Bytes, KB, MB, GB, TB, PB.
+
+Data Transfer: Mbps vs. MB/s (Megabits per second vs. Megabytes per second).
+
+Time: Nanoseconds (common in ICP), Milliseconds (JS standard), Microseconds, Unix Timestamps to Date.
+
+3. Web & Design Units
+Frontend developers constantly convert design mockups (usually in pixels) into scalable code.
+
+CSS Units: px to rem, px to em, px to vw/vh.
+
+Screen Resolution: Aspect ratio calculators (e.g., 1920x1080 is 16:9).
+
+Color Codes: Hex to RGB, RGB to HSL, Hex to CMYK.

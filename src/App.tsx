@@ -94,6 +94,13 @@ function App() {
   // RGB receive state
   const [rgbAsset, setRgbAsset] = useState<string>('')
   const [rgbAmount, setRgbAmount] = useState<string>('')
+  const [rgbInvoiceStep, setRgbInvoiceStep] = useState<'form' | 'invoice'>('form')
+  const [rgbInvoice, setRgbInvoice] = useState<string>('')
+  const [rgbGenerating, setRgbGenerating] = useState<boolean>(false)
+  const [rgbError, setRgbError] = useState<string>('')
+  const [rgbWalletOnline, setRgbWalletOnline] = useState<boolean>(false)
+  const [openAmount, setOpenAmount] = useState<boolean>(false)
+  const [rgbCopied, setRgbCopied] = useState<boolean>(false)
 
   // Network-specific assets
   const [assets, setAssets] = useState<Asset[]>([])
@@ -1644,49 +1651,218 @@ function App() {
       {view === 'receive-rgb' && (
         <div className="receive-container receive-rgb-container">
           <div className="receive-header">
-            <button className="back-arrow" onClick={() => setView('receive')}>←</button>
+            <button className="back-arrow" onClick={() => {
+              setView('receive')
+              setRgbInvoiceStep('form')
+              setRgbInvoice('')
+              setRgbError('')
+            }}>←</button>
             <h2 className="receive-title">Receive RGB assets</h2>
           </div>
 
-          <div className="receive-rgb-content">
-            <div className="rgb-field">
-              <div className="rgb-label-row">
-                <label className="rgb-label">Assets</label>
-                <span className="rgb-info">ⓘ</span>
+          {rgbInvoiceStep === 'form' ? (
+            <>
+              {/* Form View */}
+              <div className="receive-rgb-content">
+                {/* Wallet Connectivity Status */}
+                <div className="rgb-status-row">
+                  <span className="rgb-status-label">Wallet Status</span>
+                  <div className="rgb-status-indicator">
+                    <span className={`rgb-status-dot ${rgbWalletOnline ? 'online' : 'offline'}`}></span>
+                    <span className="rgb-status-text">{rgbWalletOnline ? 'Online' : 'Connecting...'}</span>
+                  </div>
+                </div>
+
+                {/* Asset Selection */}
+                <div className="rgb-field">
+                  <div className="rgb-label-row">
+                    <label className="rgb-label">Assets</label>
+                    <button
+                      className="rgb-info-btn"
+                      onClick={() => setRgbError('')}
+                      title="Leave empty to accept any RGB asset"
+                    >ⓘ</button>
+                  </div>
+                  <div className="rgb-select-wrapper">
+                    <select
+                      className="rgb-select"
+                      value={rgbAsset}
+                      onChange={(e) => setRgbAsset(e.target.value)}
+                    >
+                      <option value="">Accept any RGB asset</option>
+                      {assets.filter(a => a.id !== 'bitcoin' && a.id !== 'lightning-btc').map((asset) => (
+                        <option key={asset.id} value={asset.id}>{asset.name}</option>
+                      ))}
+                    </select>
+                    <span className="rgb-select-arrow">▾</span>
+                  </div>
+                  {!rgbAsset && (
+                    <p className="rgb-helper-text">Selecting "Accept any RGB asset" allows the sender to choose the asset type</p>
+                  )}
+                </div>
+
+                {/* Amount Input with Toggle */}
+                <div className="rgb-field">
+                  <div className="rgb-label-row">
+                    <label className="rgb-label">Amount</label>
+                    <label className="rgb-toggle-label">
+                      <input
+                        type="checkbox"
+                        checked={openAmount}
+                        onChange={(e) => {
+                          setOpenAmount(e.target.checked)
+                          if (e.target.checked) setRgbAmount('')
+                        }}
+                        className="rgb-toggle-input"
+                      />
+                      <span className="rgb-toggle-switch"></span>
+                      <span className="rgb-toggle-text">Open Amount</span>
+                    </label>
+                  </div>
+                  <input
+                    type="text"
+                    className="rgb-input"
+                    placeholder={openAmount ? "Sender will choose amount" : "Enter amount"}
+                    value={openAmount ? '' : rgbAmount}
+                    onChange={(e) => setRgbAmount(e.target.value)}
+                    disabled={openAmount}
+                  />
+                  {openAmount && (
+                    <p className="rgb-helper-text">Enabling "Open Amount" lets the sender specify how much to send</p>
+                  )}
+                </div>
+
+                {/* BTC Balance Check */}
+                <div className="rgb-info-box">
+                  <div className="rgb-info-icon">⚠️</div>
+                  <div className="rgb-info-content">
+                    <p className="rgb-info-title">Gas Requirement</p>
+                    <p className="rgb-info-desc">You need a small amount of {selectedNetwork === 'mainnet' ? 'Bitcoin' : 'Testnet BTC'} for RGB transfers. Current balance: {btcBalance} BTC</p>
+                  </div>
+                </div>
+
+                {/* Error Display */}
+                {rgbError && (
+                  <div className="rgb-error-box">
+                    <span className="error-icon">⚠</span>
+                    <span className="error-text">{rgbError}</span>
+                  </div>
+                )}
               </div>
-              <div className="rgb-select-wrapper">
-                <select
-                  className="rgb-select"
-                  value={rgbAsset}
-                  onChange={(e) => setRgbAsset(e.target.value)}
+
+              {/* Generate Invoice Button */}
+              <button
+                className="btn-primary create-invoice-btn"
+                disabled={rgbGenerating || parseFloat(btcBalance) === 0}
+                onClick={async () => {
+                  setRgbGenerating(true)
+                  setRgbError('')
+
+                  try {
+                    // Simulate wallet connectivity check
+                    await new Promise(resolve => setTimeout(resolve, 500))
+                    setRgbWalletOnline(true)
+
+                    // Mock invoice generation
+                    await new Promise(resolve => setTimeout(resolve, 1000))
+                    const mockInvoice = `rgb:contract:tb@k50bFLYK-9_IqAHS-tcnJ5Ra-vRaOHBx-XDxXBCj-h~KmEXA/1000000000000@atj7c3e~V2-Ykw2Gef-3ITn6raq-3Rdf5Jeg-g~wAnaUe-g8gq0O/${Date.now()}`
+                    setRgbInvoice(mockInvoice)
+                    setRgbInvoiceStep('invoice')
+                  } catch (error) {
+                    setRgbError('Failed to generate invoice. Please try again.')
+                    setRgbWalletOnline(false)
+                  } finally {
+                    setRgbGenerating(false)
+                  }
+                }}
+              >
+                {rgbGenerating ? (
+                  <>
+                    <span className="spinner-small"></span>
+                    Generating Invoice...
+                  </>
+                ) : (
+                  'Create Invoice'
+                )}
+              </button>
+            </>
+          ) : (
+            <>
+              {/* Invoice Display View */}
+              <div className="receive-rgb-invoice">
+                {/* Asset Icon */}
+                <div className="rgb-invoice-header">
+                  <div className="rgb-invoice-icon">B</div>
+                  <h3 className="rgb-invoice-asset-name">BITCOIN</h3>
+                  <p className="rgb-invoice-subtitle">Please send only RGB assets to this invoice.</p>
+                </div>
+
+                {/* Invoice Label */}
+                <div className="rgb-invoice-section">
+                  <label className="rgb-invoice-label">RGB Invoice</label>
+                  <div className="rgb-invoice-box">
+                    <p className="rgb-invoice-text">{rgbInvoice}</p>
+                  </div>
+                </div>
+
+                {/* QR Code */}
+                <div className="rgb-qr-container">
+                  <QRCodeSVG
+                    value={rgbInvoice}
+                    size={200}
+                    bgColor="#ffffff"
+                    fgColor="#000000"
+                    level="M"
+                  />
+                </div>
+
+                {/* Copy Button */}
+                <button
+                  className="btn-primary rgb-copy-btn"
+                  onClick={async () => {
+                    await navigator.clipboard.writeText(rgbInvoice)
+                    setRgbCopied(true)
+                    setTimeout(() => setRgbCopied(false), 2000)
+                  }}
                 >
-                  <option value="">Select assets</option>
-                  {assets.map((asset) => (
-                    <option key={asset.id} value={asset.id}>{asset.name}</option>
-                  ))}
-                </select>
-                <span className="rgb-select-arrow">▾</span>
+                  <span className="btn-icon">{rgbCopied ? '✓' : '📋'}</span>
+                  {rgbCopied ? 'Copied!' : 'Copy Invoice'}
+                </button>
+
+                {/* Waiting Status */}
+                <div className="rgb-waiting-status">
+                  <div className="rgb-waiting-icon">⏳</div>
+                  <p className="rgb-waiting-text">Waiting for payment...</p>
+                </div>
+
+                {/* Invoice Info */}
+                <div className="rgb-invoice-info">
+                  <div className="rgb-invoice-info-item">
+                    <span className="rgb-invoice-info-label">Valid for:</span>
+                    <span className="rgb-invoice-info-value">24 hours</span>
+                  </div>
+                  <div className="rgb-invoice-info-item">
+                    <span className="rgb-invoice-info-label">Network:</span>
+                    <span className="rgb-invoice-info-value">{networks.find(n => n.id === selectedNetwork)?.name}</span>
+                  </div>
+                </div>
               </div>
-            </div>
 
-            <div className="rgb-field">
-              <label className="rgb-label">Amount</label>
-              <input
-                type="text"
-                className="rgb-input"
-                placeholder="Amount"
-                value={rgbAmount}
-                onChange={(e) => setRgbAmount(e.target.value)}
-              />
-            </div>
-          </div>
-
-          <button
-            className="btn-secondary create-invoice-btn"
-            disabled={!rgbAsset || !rgbAmount}
-          >
-            Create Invoice
-          </button>
+              {/* Back to Form Button */}
+              <button
+                className="btn-secondary"
+                onClick={() => {
+                  setRgbInvoiceStep('form')
+                  setRgbInvoice('')
+                  setRgbAsset('')
+                  setRgbAmount('')
+                  setOpenAmount(false)
+                }}
+              >
+                Create New Invoice
+              </button>
+            </>
+          )}
         </div>
       )}
 
