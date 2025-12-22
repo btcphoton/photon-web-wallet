@@ -45,9 +45,17 @@ const getLightningCanisterId = (network: NetworkEnum): string => {
 
 // IDL for wallet canister methods
 const walletIdlFactory = ({ IDL }: any) => {
+    // UTXO record type
+    const Utxo = IDL.Record({
+        'txid': IDL.Text,
+        'vout': IDL.Nat32,
+        'value': IDL.Nat64,
+    });
+
     return IDL.Service({
         'get_wallet_address': IDL.Func([], [IDL.Text], []), // Update method
         'get_btc_balance': IDL.Func([], [IDL.Nat64], []), // Update method
+        'get_utxos': IDL.Func([], [IDL.Vec(Utxo)], []), // Update method for UTXOs
     });
 };
 
@@ -228,6 +236,55 @@ export const updateBalance = async (mnemonic: string, network: NetworkEnum = 'Ma
         throw new Error('Unexpected response from update_balance');
     } catch (error) {
         console.error("Error updating Lightning balance:", error);
+        throw error;
+    }
+};
+
+// UTXO interface for TypeScript
+export interface Utxo {
+    txid: string
+    vout: number
+    value: bigint
+}
+
+/**
+ * Get available UTXOs from wallet canister
+ * Used for RGB invoice seal selection
+ * 
+ * @param mnemonic - User's mnemonic phrase
+ * @param network - Network enum (Mainnet, Testnet, Regtest)
+ * @returns Array of available UTXOs
+ */
+export const getUtxos = async (mnemonic: string, network: NetworkEnum = 'Mainnet'): Promise<Utxo[]> => {
+    const seed = await bip39.mnemonicToSeed(mnemonic);
+    const seed32 = new Uint8Array(seed.slice(0, 32));
+    const identity = Ed25519KeyIdentity.fromSecretKey(seed32);
+
+    const agent = new HttpAgent({
+        identity,
+        host: 'https://ic0.app',
+    });
+
+    // Get canister ID from storage (with fallback)
+    const canisterId = await getWalletCanisterId(network);
+
+    const actor = Actor.createActor(walletIdlFactory, {
+        agent,
+        canisterId,
+    });
+
+    try {
+        // @ts-ignore
+        const utxos = await actor.get_utxos();
+
+        // Convert the response to our Utxo interface
+        return (utxos as any[]).map(utxo => ({
+            txid: utxo.txid as string,
+            vout: Number(utxo.vout),
+            value: utxo.value as bigint
+        }));
+    } catch (error) {
+        console.error("Error fetching UTXOs:", error);
         throw error;
     }
 };

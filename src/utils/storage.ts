@@ -44,6 +44,15 @@ interface StorageData {
     assets_testnet3?: string
     assets_testnet4?: string
     assets_regtest?: string
+    // Network settings
+    electrumServer?: string
+    rgbProxy?: string
+    // RGB Asset Contract IDs (stored as JSON string per asset)
+    // Format: { "asset-id": "contract-id", ... }
+    rgbContracts_mainnet?: string
+    rgbContracts_testnet3?: string
+    rgbContracts_testnet4?: string
+    rgbContracts_regtest?: string
 }
 
 // Check if chrome.storage is actually available and functional

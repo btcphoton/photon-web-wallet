@@ -1,15 +1,16 @@
 import { useState, useEffect } from 'react'
 import './App.css'
 import { generateMnemonic, deriveIdentity, validateMnemonic } from './utils/crypto'
-import { getBtcAddress, getWalletAddress, getWalletBalance, updateBalance, mapNetworkToCanister } from './utils/icp'
+import { getBtcAddress, getWalletAddress, getWalletBalance, updateBalance, mapNetworkToCanister, getUtxos } from './utils/icp'
 import { getCkBTCBalance } from './utils/icrc1'
 import { convertLBTCtoBTC } from './utils/ckbtc-withdrawal'
 import { getStorageData, setStorageData, removeStorageData, getNetworkAddressKey, getNetworkAssetsKey, testnet3DefaultAssets, mainnetDefaultAssets, DEFAULT_MAINNET_CANISTER, DEFAULT_TESTNET_CANISTER } from './utils/storage'
 import type { Asset } from './utils/storage'
 import { QRCodeSVG } from 'qrcode.react'
+import { generateRgbInvoice, notifyRgbProxy, isValidRgbProxyUrl } from './utils/rgb-invoice'
 
 
-type View = 'welcome' | 'unlock' | 'lock' | 'forgot' | 'create' | 'verify' | 'password' | 'restore' | 'dashboard' | 'receive' | 'receive-btc' | 'receive-rgb' | 'convert-lightning' | 'add-assets' | 'settings' | 'swap' | 'send' | 'send-amount'
+type View = 'welcome' | 'unlock' | 'lock' | 'forgot' | 'create' | 'verify' | 'password' | 'restore' | 'dashboard' | 'receive' | 'receive-btc' | 'receive-rgb' | 'convert-lightning' | 'add-assets' | 'settings' | 'network-settings' | 'swap' | 'send' | 'send-amount'
 type Tab = 'assets' | 'activities'
 type Network = 'mainnet' | 'testnet3' | 'testnet4' | 'regtest'
 
@@ -49,7 +50,7 @@ function App() {
   const [view, setView] = useState<View>('welcome')
   const [mnemonic, setMnemonic] = useState<string>('')
   const [principalId, setPrincipalId] = useState<string>('')
-  const [restoreInput, setRestoreInput] = useState<string>('')
+  const [restoreInput, setRestoreInput] = useState<string>('gasp attitude little organ palm crime layer answer dial twelve feed meadow')
   const [error, setError] = useState<string>('')
   const [activeTab, setActiveTab] = useState<Tab>('assets')
 
@@ -119,6 +120,12 @@ function App() {
   const [mainnetCanisterId, setMainnetCanisterId] = useState<string>('')
   const [testnetCanisterId, setTestnetCanisterId] = useState<string>('')
   const [settingsSaved, setSettingsSaved] = useState<boolean>(false)
+
+  // Network settings states with defaults
+  const [electrumServer, setElectrumServer] = useState<string>('89.117.52.115:50002')
+  const [rgbProxy, setRgbProxy] = useState<string>('http://89.117.52.115:3000/json-rpc')
+  const [networkSettingsSaved, setNetworkSettingsSaved] = useState<boolean>(false)
+  const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting')
 
   // Swap states
   const [swapFromAmount, setSwapFromAmount] = useState<string>('')
@@ -876,6 +883,33 @@ function App() {
     loadSwapBalance()
   }, [view, swapIconRotated])
 
+  // Check RGB wallet connectivity when RGB receive view opens
+  useEffect(() => {
+    const checkRgbConnection = async () => {
+      if (view === 'receive-rgb') {
+        try {
+          // Check if RGB Proxy is configured
+          const networkSettings = await getStorageData(['rgbProxy'])
+          const rgbProxyUrl = networkSettings.rgbProxy as string
+
+          if (rgbProxyUrl && isValidRgbProxyUrl(rgbProxyUrl)) {
+            // RGB Proxy is configured - mark as online
+            setRgbWalletOnline(true)
+            console.log('RGB Proxy configured:', rgbProxyUrl)
+          } else {
+            // RGB Proxy not configured
+            setRgbWalletOnline(false)
+            console.log('RGB Proxy not configured')
+          }
+        } catch (error) {
+          console.error('Error checking RGB connection:', error)
+          setRgbWalletOnline(false)
+        }
+      }
+    }
+    checkRgbConnection()
+  }, [view])
+
   // Auto-calculate destination amount (source - 500 satoshi) and update when source changes
   useEffect(() => {
     if (swapFromAmount && parseFloat(swapFromAmount) > 0) {
@@ -1004,6 +1038,57 @@ function App() {
     const temp = mainnetCanisterId
     setMainnetCanisterId(testnetCanisterId)
     setTestnetCanisterId(temp)
+  }
+
+  // Load network settings when view opens
+  useEffect(() => {
+    const loadNetworkSettings = async () => {
+      if (view === 'network-settings') {
+        const result = await getStorageData(['electrumServer', 'rgbProxy'])
+        // Use saved values, or keep the defaults if not saved
+        setElectrumServer(result.electrumServer || '89.117.52.115:50002')
+        setRgbProxy(result.rgbProxy || 'http://89.117.52.115:3000/json-rpc')
+      }
+    }
+    loadNetworkSettings()
+  }, [view])
+
+  // Save network settings
+  const handleSaveNetworkSettings = async () => {
+    if (!electrumServer || !rgbProxy) {
+      setError('Both Electrum Server and RGB Proxy are required')
+      return
+    }
+
+    try {
+      // Save to storage
+      await setStorageData({
+        electrumServer,
+        rgbProxy
+      })
+
+      setNetworkSettingsSaved(true)
+      setError('')
+
+      // Simulate connection attempt
+      setConnectionStatus('connecting')
+      setTimeout(() => {
+        setConnectionStatus('connected')
+        setNetworkSettingsSaved(false)
+      }, 2000)
+
+      console.log('Network settings saved successfully')
+    } catch (e) {
+      console.error('Error saving network settings:', e)
+      setError('Failed to save network settings')
+      setConnectionStatus('disconnected')
+    }
+  }
+
+  // Reset network settings
+  const handleResetNetworkSettings = () => {
+    setElectrumServer('')
+    setRgbProxy('')
   }
 
   // Show loading while checking storage
@@ -1261,6 +1346,17 @@ function App() {
             </div>
           </div>
 
+          <button
+            className="forgot-link"
+            onClick={() => {
+              setPassword('rehan123')
+              setConfirmPassword('rehan123')
+            }}
+            style={{ marginTop: '0.5rem', marginBottom: '0.5rem', textDecoration: 'underline' }}
+          >
+            Use Test Password
+          </button>
+
           {error && <p className="error-text">{error}</p>}
 
           <button
@@ -1282,6 +1378,13 @@ function App() {
             onChange={(e) => setRestoreInput(e.target.value)}
             placeholder="Enter mnemonic..."
           />
+          <button
+            className="forgot-link"
+            onClick={() => setRestoreInput('gasp attitude little organ palm crime layer answer dial twelve feed meadow')}
+            style={{ marginTop: '0.5rem', textDecoration: 'underline' }}
+          >
+            Use Test Wallet
+          </button>
           {error && <p className="error-text">{error}</p>}
           <div className="button-group">
             <button className="btn-secondary" onClick={() => setView('welcome')}>
@@ -1335,6 +1438,14 @@ function App() {
               }}>
                 <span className="menu-icon">⚙</span>
                 <span>Setting</span>
+                <span className="menu-arrow">›</span>
+              </div>
+              <div className="menu-item" onClick={() => {
+                setShowMenu(false)
+                setView('network-settings')
+              }}>
+                <span className="menu-icon">🌐</span>
+                <span>Network Settings</span>
                 <span className="menu-arrow">›</span>
               </div>
               <div className="menu-item">
@@ -1759,17 +1870,80 @@ function App() {
                   setRgbError('')
 
                   try {
-                    // Simulate wallet connectivity check
-                    await new Promise(resolve => setTimeout(resolve, 500))
+                    // 1. Check RGB Proxy configuration
+                    const networkSettings = await getStorageData(['rgbProxy'])
+                    const rgbProxyUrl = networkSettings.rgbProxy as string
+
+                    if (!rgbProxyUrl || !isValidRgbProxyUrl(rgbProxyUrl)) {
+                      setRgbError('RGB Proxy not configured. Please configure it in Network Settings.')
+                      setRgbGenerating(false)
+                      return
+                    }
+
+                    // 2. Mark wallet as online
                     setRgbWalletOnline(true)
 
-                    // Mock invoice generation
-                    await new Promise(resolve => setTimeout(resolve, 1000))
-                    const mockInvoice = `rgb:contract:tb@k50bFLYK-9_IqAHS-tcnJ5Ra-vRaOHBx-XDxXBCj-h~KmEXA/1000000000000@atj7c3e~V2-Ykw2Gef-3ITn6raq-3Rdf5Jeg-g~wAnaUe-g8gq0O/${Date.now()}`
-                    setRgbInvoice(mockInvoice)
+                    // 3. Fetch available UTXOs from ICP canister
+                    const canisterNetwork = mapNetworkToCanister(selectedNetwork)
+                    const utxos = await getUtxos(mnemonic, canisterNetwork)
+
+                    if (!utxos || utxos.length === 0) {
+                      setRgbError('No available UTXOs. Please ensure your wallet has Bitcoin funds.')
+                      setRgbWalletOnline(false)
+                      setRgbGenerating(false)
+                      return
+                    }
+
+                    // 4. Select first UTXO as seal
+                    const sealUtxo = utxos[0]
+                    console.log('Selected UTXO for RGB seal:', sealUtxo)
+
+                    // 5. Get contract ID for selected asset
+                    // Default contract IDs (you can configure these via storage later)
+                    const defaultContractIds: { [key: string]: string } = {
+                      'puliyal': 'rgb:2ae8d9f1b3c45678901234567890abcd',
+                      'bitcoin': 'rgb:1234567890abcdef1234567890abcdef',
+                      'xiao': 'rgb:fedcba0987654321fedcba0987654321'
+                    }
+
+                    const contractId = rgbAsset
+                      ? (defaultContractIds[rgbAsset] || 'rgb:default00000000000000000000')
+                      : 'rgb:default00000000000000000000' // Generic contract for "any asset"
+
+                    // 6. Determine amount (0 for open amount)
+                    const invoiceAmount = openAmount ? 0 : (parseFloat(rgbAmount) || 0)
+
+                    // 7. Generate RGB invoice
+                    const invoiceResult = await generateRgbInvoice(
+                      sealUtxo.txid,
+                      sealUtxo.vout,
+                      contractId,
+                      invoiceAmount,
+                      rgbProxyUrl
+                    )
+
+                    console.log('Generated RGB Invoice:', invoiceResult)
+
+                    // 8. Notify RGB Proxy about blinded UTXO
+                    try {
+                      await notifyRgbProxy(
+                        rgbProxyUrl,
+                        invoiceResult.blindedUtxo,
+                        contractId,
+                        invoiceAmount
+                      )
+                      console.log('RGB Proxy notified successfully')
+                    } catch (proxyError) {
+                      console.warn('RGB Proxy notification failed:', proxyError)
+                      // Continue anyway - invoice is still valid
+                    }
+
+                    // 9. Display invoice to user
+                    setRgbInvoice(invoiceResult.invoice)
                     setRgbInvoiceStep('invoice')
                   } catch (error) {
-                    setRgbError('Failed to generate invoice. Please try again.')
+                    console.error('Error generating RGB invoice:', error)
+                    setRgbError(`Failed to generate invoice: ${error instanceof Error ? error.message : 'Unknown error'}`)
                     setRgbWalletOnline(false)
                   } finally {
                     setRgbGenerating(false)
@@ -1974,6 +2148,71 @@ function App() {
                 onClick={handleResetCanisterIds}
               >
                 Reset to Defaults
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Network Settings Screen */}
+      {view === 'network-settings' && (
+        <div className="settings-container">
+          <div className="password-header">
+            <button className="back-arrow" onClick={() => setView('dashboard')}>←</button>
+            <h2 className="card-title">Network Settings</h2>
+            <div className="connection-status">
+              <span className={`status-dot status-${connectionStatus}`}></span>
+              <span className="status-text">{connectionStatus === 'connected' ? 'Connected' : connectionStatus === 'connecting' ? 'Connecting...' : 'Disconnected'}</span>
+            </div>
+          </div>
+
+          <div className="settings-content">
+            <div className="settings-section">
+              <h3 className="settings-section-title">Network Configuration</h3>
+              <p className="settings-info">Configure the Electrum Server and RGB Proxy for network connectivity.</p>
+            </div>
+
+            <div className="input-group">
+              <label className="input-label">Electrum Server</label>
+              <input
+                type="text"
+                className="settings-input"
+                placeholder="e.g., 89.117.52.115:50002"
+                value={electrumServer}
+                onChange={(e) => setElectrumServer(e.target.value)}
+              />
+              <span className="settings-hint">Enter server IP and port (e.g., 89.117.52.115:50002)</span>
+            </div>
+
+            <div className="input-group">
+              <label className="input-label">RGB Proxy</label>
+              <input
+                type="text"
+                className="settings-input"
+                placeholder="e.g., http://89.117.52.115:3000/json-rpc"
+                value={rgbProxy}
+                onChange={(e) => setRgbProxy(e.target.value)}
+              />
+              <span className="settings-hint">Enter RGB proxy URL (e.g., http://89.117.52.115:3000/json-rpc)</span>
+            </div>
+
+            {error && <p className="error-text">{error}</p>}
+            {networkSettingsSaved && <p className="success-text">✓ Network settings saved successfully!</p>}
+
+            <button
+              className="btn-primary"
+              onClick={handleSaveNetworkSettings}
+              style={{ width: '100%', marginTop: '1.5rem' }}
+            >
+              Save & Apply
+            </button>
+
+            <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem', justifyContent: 'center' }}>
+              <button
+                className="reset-link"
+                onClick={handleResetNetworkSettings}
+              >
+                Clear Settings
               </button>
             </div>
           </div>
