@@ -43,12 +43,25 @@ const getLightningCanisterId = (network: NetworkEnum): string => {
     return LIGHTNING_CANISTER_IDS[network];
 };
 
+// Utility: Convert byte array to Bitcoin hex (reversed)
+const toBitcoinHex = (bytes: Uint8Array | number[]): string => {
+    // Reverse bytes and convert to hex (matches block explorers)
+    return [...bytes].reverse()
+        .map(byte => byte.toString(16).padStart(2, '0'))
+        .join('');
+};
+
 // IDL for wallet canister methods
 const walletIdlFactory = ({ IDL }: any) => {
-    // UTXO record type
-    const Utxo = IDL.Record({
-        'txid': IDL.Text,
+    // Outpoint structure
+    const Outpoint = IDL.Record({
+        'txid': IDL.Vec(IDL.Nat8), // Byte array for transaction ID
         'vout': IDL.Nat32,
+    });
+
+    // UTXO record type with outpoint
+    const Utxo = IDL.Record({
+        'outpoint': Outpoint,
         'value': IDL.Nat64,
     });
 
@@ -240,9 +253,9 @@ export const updateBalance = async (mnemonic: string, network: NetworkEnum = 'Ma
     }
 };
 
-// UTXO interface for TypeScript
+// UTXO interface for TypeScript (processed format)
 export interface Utxo {
-    txid: string
+    txid: string // Bitcoin hex format (reversed from canister bytes)
     vout: number
     value: bigint
 }
@@ -275,14 +288,26 @@ export const getUtxos = async (mnemonic: string, network: NetworkEnum = 'Mainnet
 
     try {
         // @ts-ignore
-        const utxos = await actor.get_utxos();
+        const rawUtxos = await actor.get_utxos();
 
-        // Convert the response to our Utxo interface
-        return (utxos as any[]).map(utxo => ({
-            txid: utxo.txid as string,
-            vout: Number(utxo.vout),
-            value: utxo.value as bigint
-        }));
+        // Convert raw UTXOs to processed format
+        const processedUtxos: Utxo[] = (rawUtxos as any[]).map((rawUtxo: any) => {
+            // Extract outpoint and convert txid bytes to Bitcoin hex
+            const txidBytes = rawUtxo.outpoint.txid;
+            const txidString = toBitcoinHex(txidBytes);
+            const vout = Number(rawUtxo.outpoint.vout);
+            const value = rawUtxo.value as bigint;
+
+            console.log(`Processed UTXO Seal: ${txidString}:${vout}, Value: ${value}`);
+
+            return {
+                txid: txidString,
+                vout,
+                value
+            };
+        });
+
+        return processedUtxos;
     } catch (error) {
         console.error("Error fetching UTXOs:", error);
         throw error;
