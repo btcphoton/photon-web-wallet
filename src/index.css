@@ -1203,7 +1203,7 @@ textarea:focus {
   align-items: center;
   gap: 1rem;
   margin-bottom: 2rem;
-  padding: 0.5rem 0;
+  padding: 0.5rem 1.5rem;
 }
 
 .back-arrow {
@@ -1320,11 +1320,12 @@ textarea:focus {
   justify-content: space-between;
   background: linear-gradient(180deg, #0a0a0a 0%, #131313 100%);
   min-height: 100vh;
+  overflow: hidden;
 }
 
 .receive-rgb-content {
   flex: 1;
-  padding: 1rem 0;
+  padding: 1rem 1.5rem;
   background: transparent;
 }
 
@@ -1584,6 +1585,8 @@ textarea:focus {
 /* Create Invoice Button */
 .create-invoice-btn {
   width: 100%;
+  max-width: calc(100% - 3rem);
+  margin: 0 1.5rem;
   padding: 1rem;
   border-radius: 12px;
   font-size: 0.95rem;
