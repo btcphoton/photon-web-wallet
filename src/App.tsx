@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import './App.css'
 import { generateMnemonic, deriveIdentity, validateMnemonic } from './utils/crypto'
-import { getBtcAddress, getWalletAddress, getWalletBalance, updateBalance, mapNetworkToCanister, getUtxos } from './utils/icp'
+import { getBtcAddress, getWalletAddress, getWalletBalance, updateBalance, mapNetworkToCanister, getUtxos, getEstimatedBitcoinFees, sendBitcoin } from './utils/icp'
 import { getCkBTCBalance } from './utils/icrc1'
 import { convertLBTCtoBTC } from './utils/ckbtc-withdrawal'
 import { getStorageData, setStorageData, removeStorageData, getNetworkAddressKey, getNetworkAssetsKey, testnet3DefaultAssets, mainnetDefaultAssets, DEFAULT_MAINNET_CANISTER, DEFAULT_TESTNET_CANISTER } from './utils/storage'
@@ -10,7 +10,7 @@ import { QRCodeSVG } from 'qrcode.react'
 import { generateRgbInvoice, notifyRgbProxy, isValidRgbProxyUrl } from './utils/rgb-invoice'
 
 
-type View = 'welcome' | 'unlock' | 'lock' | 'forgot' | 'create' | 'verify' | 'password' | 'restore' | 'dashboard' | 'receive' | 'receive-btc' | 'receive-rgb' | 'convert-lightning' | 'add-assets' | 'settings' | 'network-settings' | 'swap' | 'send' | 'send-amount'
+type View = 'welcome' | 'unlock' | 'lock' | 'forgot' | 'create' | 'verify' | 'password' | 'restore' | 'dashboard' | 'receive' | 'receive-btc' | 'receive-rgb' | 'convert-lightning' | 'add-assets' | 'settings' | 'network-settings' | 'swap' | 'send' | 'send-amount' | 'send-confirm' | 'send-success'
 type Tab = 'assets' | 'activities'
 type Network = 'mainnet' | 'testnet3' | 'testnet4' | 'regtest'
 
@@ -140,6 +140,12 @@ function App() {
   const [sendAmount, setSendAmount] = useState<string>('')
   const [sendFeeOption, setSendFeeOption] = useState<'slow' | 'avg' | 'fast' | 'custom'>('fast')
   const [sendUserBalance, setSendUserBalance] = useState<string>('0.00000000')
+  const [sendEstimatedFees, setSendEstimatedFees] = useState<bigint[]>([2n, 3n, 5n]) // Default: [slow, avg, fast]
+  const [sendLoadingFees, setSendLoadingFees] = useState<boolean>(false)
+  const [sendNetworkFee, setSendNetworkFee] = useState<string>('0')
+  const [sendTxId, setSendTxId] = useState<string>('')
+  const [sendProcessing, setSendProcessing] = useState<boolean>(false)
+  const [sendError, setSendError] = useState<string>('')
 
 
 
@@ -322,6 +328,11 @@ function App() {
         if (result.mnemonic && networkAddress) {
           fetchBalance(result.mnemonic, networkAddress as string, network)
         }
+
+        // Load assets for current network
+        if (result.mnemonic) {
+          loadAssetsForNetwork(network, result.mnemonic)
+        }
       } else {
         setError('Incorrect password')
       }
@@ -375,6 +386,11 @@ function App() {
         if (currentMnemonic && networkAddress) {
           fetchBalance(currentMnemonic, networkAddress as string, network)
         }
+
+        // Load assets for current network
+        if (currentMnemonic) {
+          loadAssetsForNetwork(network, currentMnemonic)
+        }
       } else {
         setError('Incorrect password')
       }
@@ -405,6 +421,99 @@ function App() {
     setVerifyWords([])
     setSelectedNetwork('mainnet')
     setView('welcome')
+  }
+
+  // Load assets for a specific network
+  const loadAssetsForNetwork = async (network: Network, mnemonicPhrase?: string) => {
+    const currentMnemonic = mnemonicPhrase || mnemonic
+
+    // Load network-specific assets
+    const assetsKey = getNetworkAssetsKey(network)
+    const assetsResult = await getStorageData([assetsKey])
+    const cachedAssets = assetsResult[assetsKey]
+
+    if (cachedAssets) {
+      // Use cached assets
+      try {
+        const parsedAssets = JSON.parse(cachedAssets as string)
+        setAssets(parsedAssets)
+        console.log('Loaded cached assets for', network)
+
+        // Update ckBTC balance for Lightning BTC asset
+        if (currentMnemonic) {
+          try {
+            const canisterNetwork = mapNetworkToCanister(network)
+            const ckBTCBalance = await getCkBTCBalance(currentMnemonic, canisterNetwork)
+            // Store as user_lbtc_balance
+            await setStorageData({ user_lbtc_balance: ckBTCBalance })
+            const updatedAssets = parsedAssets.map((asset: Asset) =>
+              asset.id === 'lightning-btc'
+                ? { ...asset, amount: ckBTCBalance }
+                : asset
+            )
+            setAssets(updatedAssets)
+            await setStorageData({ [assetsKey]: JSON.stringify(updatedAssets) })
+          } catch (error) {
+            console.error('Error fetching ckBTC balance:', error)
+          }
+        }
+      } catch (e) {
+        console.error('Error parsing cached assets:', e)
+        setAssets([])
+      }
+    } else if (network === 'mainnet') {
+      // Initialize mainnet with default assets
+      setAssets(mainnetDefaultAssets)
+      await setStorageData({ [assetsKey]: JSON.stringify(mainnetDefaultAssets) })
+      console.log('Initialized mainnet with default assets')
+
+      // Fetch ckBTC balance for Lightning BTC
+      if (currentMnemonic) {
+        try {
+          const canisterNetwork = mapNetworkToCanister(network)
+          const ckBTCBalance = await getCkBTCBalance(currentMnemonic, canisterNetwork)
+          // Store as user_lbtc_balance
+          await setStorageData({ user_lbtc_balance: ckBTCBalance })
+          const updatedAssets = mainnetDefaultAssets.map(asset =>
+            asset.id === 'lightning-btc'
+              ? { ...asset, amount: ckBTCBalance }
+              : asset
+          )
+          setAssets(updatedAssets)
+          await setStorageData({ [assetsKey]: JSON.stringify(updatedAssets) })
+        } catch (error) {
+          console.error('Error fetching ckBTC balance:', error)
+        }
+      }
+    } else if (network === 'testnet3' || network === 'testnet4' || network === 'regtest') {
+      // Initialize testnet with default assets
+      setAssets(testnet3DefaultAssets)
+      await setStorageData({ [assetsKey]: JSON.stringify(testnet3DefaultAssets) })
+      console.log('Initialized', network, 'with default assets')
+
+      // Fetch ckBTC balance for Lightning BTC
+      if (currentMnemonic) {
+        try {
+          const canisterNetwork = mapNetworkToCanister(network)
+          const ckBTCBalance = await getCkBTCBalance(currentMnemonic, canisterNetwork)
+          // Store as user_lbtc_balance
+          await setStorageData({ user_lbtc_balance: ckBTCBalance })
+          const updatedAssets = testnet3DefaultAssets.map(asset =>
+            asset.id === 'lightning-btc'
+              ? { ...asset, amount: ckBTCBalance }
+              : asset
+          )
+          setAssets(updatedAssets)
+          await setStorageData({ [assetsKey]: JSON.stringify(updatedAssets) })
+        } catch (error) {
+          console.error('Error fetching ckBTC balance:', error)
+        }
+      }
+    } else {
+      // Clear assets for other networks
+      setAssets([])
+      console.log('Cleared assets for', network)
+    }
   }
 
   // Handle network switch
@@ -465,93 +574,8 @@ function App() {
       fetchBalance(mnemonic, currentAddress, network)
     }
 
-    // Load network-specific assets
-    const assetsKey = getNetworkAssetsKey(network)
-    const assetsResult = await getStorageData([assetsKey])
-    const cachedAssets = assetsResult[assetsKey]
-
-    if (cachedAssets) {
-      // Use cached assets
-      try {
-        const parsedAssets = JSON.parse(cachedAssets as string)
-        setAssets(parsedAssets)
-        console.log('Loaded cached assets for', network)
-
-        // Update ckBTC balance for Lightning BTC asset
-        if (mnemonic) {
-          try {
-            const canisterNetwork = mapNetworkToCanister(network)
-            const ckBTCBalance = await getCkBTCBalance(mnemonic, canisterNetwork)
-            // Store as user_lbtc_balance
-            await setStorageData({ user_lbtc_balance: ckBTCBalance })
-            const updatedAssets = parsedAssets.map((asset: Asset) =>
-              asset.id === 'lightning-btc'
-                ? { ...asset, amount: ckBTCBalance }
-                : asset
-            )
-            setAssets(updatedAssets)
-            await setStorageData({ [assetsKey]: JSON.stringify(updatedAssets) })
-          } catch (error) {
-            console.error('Error fetching ckBTC balance:', error)
-          }
-        }
-      } catch (e) {
-        console.error('Error parsing cached assets:', e)
-        setAssets([])
-      }
-    } else if (network === 'mainnet') {
-      // Initialize mainnet with default assets
-      setAssets(mainnetDefaultAssets)
-      await setStorageData({ [assetsKey]: JSON.stringify(mainnetDefaultAssets) })
-      console.log('Initialized mainnet with default assets')
-
-      // Fetch ckBTC balance for Lightning BTC
-      if (mnemonic) {
-        try {
-          const canisterNetwork = mapNetworkToCanister(network)
-          const ckBTCBalance = await getCkBTCBalance(mnemonic, canisterNetwork)
-          // Store as user_lbtc_balance
-          await setStorageData({ user_lbtc_balance: ckBTCBalance })
-          const updatedAssets = mainnetDefaultAssets.map(asset =>
-            asset.id === 'lightning-btc'
-              ? { ...asset, amount: ckBTCBalance }
-              : asset
-          )
-          setAssets(updatedAssets)
-          await setStorageData({ [assetsKey]: JSON.stringify(updatedAssets) })
-        } catch (error) {
-          console.error('Error fetching ckBTC balance:', error)
-        }
-      }
-    } else if (network === 'testnet3' || network === 'testnet4' || network === 'regtest') {
-      // Initialize testnet with default assets
-      setAssets(testnet3DefaultAssets)
-      await setStorageData({ [assetsKey]: JSON.stringify(testnet3DefaultAssets) })
-      console.log('Initialized', network, 'with default assets')
-
-      // Fetch ckBTC balance for Lightning BTC
-      if (mnemonic) {
-        try {
-          const canisterNetwork = mapNetworkToCanister(network)
-          const ckBTCBalance = await getCkBTCBalance(mnemonic, canisterNetwork)
-          // Store as user_lbtc_balance
-          await setStorageData({ user_lbtc_balance: ckBTCBalance })
-          const updatedAssets = testnet3DefaultAssets.map(asset =>
-            asset.id === 'lightning-btc'
-              ? { ...asset, amount: ckBTCBalance }
-              : asset
-          )
-          setAssets(updatedAssets)
-          await setStorageData({ [assetsKey]: JSON.stringify(updatedAssets) })
-        } catch (error) {
-          console.error('Error fetching ckBTC balance:', error)
-        }
-      }
-    } else {
-      // Clear assets for other networks
-      setAssets([])
-      console.log('Cleared assets for', network)
-    }
+    // Load assets for the new network
+    await loadAssetsForNetwork(network)
   }
 
   const handleCreateWallet = () => {
@@ -798,6 +822,9 @@ function App() {
           console.error('Error updating balance on canister:', e)
         }
         fetchBalance(mnemonic, address, selectedNetwork)
+
+        // Load assets for current network
+        loadAssetsForNetwork(selectedNetwork, mnemonic)
       }
     } catch (e) {
       console.error('Error creating wallet:', e)
@@ -986,17 +1013,110 @@ function App() {
     }
   }
 
-  // Load user balance when send-amount view opens
+  // Load user balance and fees when send-amount view opens
   useEffect(() => {
     const loadSendBalance = async () => {
       if (view === 'send-amount') {
         const result = await getStorageData(['user_bitcoin_balance'])
         const balance = result.user_bitcoin_balance || '0.00000000'
         setSendUserBalance(balance)
+
+        // Fetch estimated fees from canister
+        if (mnemonic) {
+          setSendLoadingFees(true)
+          try {
+            const canisterNetwork = mapNetworkToCanister(selectedNetwork)
+            const fees = await getEstimatedBitcoinFees(mnemonic, canisterNetwork)
+            setSendEstimatedFees(fees)
+            console.log('Estimated fees:', fees)
+          } catch (error) {
+            console.error('Error fetching estimated fees:', error)
+            // Keep default fees if fetch fails
+          } finally {
+            setSendLoadingFees(false)
+          }
+        }
       }
     }
     loadSendBalance()
-  }, [view])
+  }, [view, mnemonic, selectedNetwork])
+
+  // Navigate to send confirm screen
+  const handleSendNext = () => {
+    if (!sendAmount || parseFloat(sendAmount) === 0) {
+      setSendError('Please enter a valid amount')
+      return
+    }
+
+    // Calculate network fee based on selected option
+    const feeRate = sendFeeOption === 'slow' ? sendEstimatedFees[0] :
+      sendFeeOption === 'avg' ? sendEstimatedFees[1] :
+        sendEstimatedFees[2] // fast
+
+    // Estimate transaction size (1 input + 2 outputs ≈ 200 vbytes)
+    const estimatedTxSize = 200
+    const networkFeeSats = Number(feeRate) * estimatedTxSize
+    const networkFeeBtc = (networkFeeSats / 100000000).toFixed(8)
+    setSendNetworkFee(networkFeeBtc)
+
+    setSendError('')
+    setView('send-confirm')
+  }
+
+  // Execute Bitcoin send transaction
+  const handleSendBitcoin = async () => {
+    if (!mnemonic || !sendReceiverAddress || !sendAmount) {
+      setSendError('Missing required information')
+      return
+    }
+
+    setSendProcessing(true)
+    setSendError('')
+
+    try {
+      const amountBtc = parseFloat(sendAmount)
+      const amountSats = BigInt(Math.floor(amountBtc * 100000000))
+
+      const canisterNetwork = mapNetworkToCanister(selectedNetwork)
+      const txid = await sendBitcoin(mnemonic, sendReceiverAddress, amountSats, canisterNetwork)
+
+      setSendTxId(txid)
+      console.log('Transaction sent successfully:', txid)
+
+      // Navigate to success screen
+      setView('send-success')
+
+      // Refresh balance after 3 seconds
+      setTimeout(async () => {
+        if (btcAddress) {
+          await fetchBalance(mnemonic, btcAddress, selectedNetwork)
+        }
+      }, 3000)
+    } catch (error: any) {
+      console.error('Send Bitcoin error:', error)
+      setSendError(error.message || 'Failed to send Bitcoin')
+    } finally {
+      setSendProcessing(false)
+    }
+  }
+
+  // Refresh fee estimates
+  const handleRefreshFees = async () => {
+    if (!mnemonic) return
+
+    setSendLoadingFees(true)
+    try {
+      const canisterNetwork = mapNetworkToCanister(selectedNetwork)
+      const fees = await getEstimatedBitcoinFees(mnemonic, canisterNetwork)
+      setSendEstimatedFees(fees)
+      console.log('Refreshed estimated fees:', fees)
+    } catch (error) {
+      console.error('Error refreshing fees:', error)
+    } finally {
+      setSendLoadingFees(false)
+    }
+  }
+
 
   // Save canister settings
   const handleSaveCanisterIds = async () => {
@@ -2207,14 +2327,14 @@ function App() {
               Save & Apply
             </button>
 
-            <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem', justifyContent: 'center' }}>
-              <button
-                className="reset-link"
-                onClick={handleResetNetworkSettings}
-              >
-                Clear Settings
-              </button>
-            </div>
+
+            <button
+              className="reset-link"
+              onClick={handleResetNetworkSettings}
+              style={{ display: 'block', margin: '1rem auto 0', textAlign: 'center' }}
+            >
+              Clear Settings
+            </button>
           </div>
         </div>
       )}
@@ -2358,16 +2478,17 @@ function App() {
         </div>
       )}
 
+
       {/* Send Screen */}
       {view === 'send' && (
-        <div className="send-container">
-          <div className="send-header">
-            <button className="send-back" onClick={() => setView('dashboard')}>←</button>
-            <h2 className="send-title">Send</h2>
+        <div className="receive-container">
+          <div className="receive-header">
+            <button className="back-arrow" onClick={() => setView('dashboard')}>←</button>
+            <h2 className="receive-title">Send</h2>
           </div>
 
-          <div className="send-content">
-            <div className="send-input-group">
+          <div className="receive-btc-content">
+            <div className="send-input-group" style={{ maxWidth: '320px', width: '100%' }}>
               <label className="send-label">Receiver</label>
               <input
                 type="text"
@@ -2377,20 +2498,21 @@ function App() {
                 onChange={(e) => setSendReceiverAddress(e.target.value)}
               />
             </div>
-
-            <button
-              className="send-next-btn"
-              disabled={!sendReceiverAddress}
-            >
-              Next
-            </button>
           </div>
+
+          <button
+            className="btn-primary copy-btc-btn"
+            disabled={!sendReceiverAddress}
+            onClick={() => setView('send-amount')}
+          >
+            Next
+          </button>
         </div>
       )}
 
       {/* Send Amount Screen */}
       {view === 'send-amount' && (
-        <div className="send-container">
+        <div className="send-container" style={{ overflow: 'hidden' }}>
           <div className="send-header">
             <button className="send-back" onClick={() => setView('send')}>←</button>
             <h2 className="send-title">Send BTC</h2>
@@ -2437,8 +2559,31 @@ function App() {
 
             <div className="send-input-group" style={{ marginTop: '1.5rem' }}>
               <div className="send-fee-header">
-                <label className="send-label">Fee</label>
-                <button className="send-refresh-btn">⟳</button>
+                <label className="send-label">
+                  Fee
+                  <button
+                    onClick={() => setSendEstimatedFees([2n, 3n, 5n])}
+                    style={{
+                      marginLeft: '0.5rem',
+                      background: 'none',
+                      border: 'none',
+                      color: '#ff6b2c',
+                      fontSize: '0.7rem',
+                      cursor: 'pointer',
+                      textDecoration: 'underline',
+                      padding: 0
+                    }}
+                  >
+                    (use default [2,3,5])
+                  </button>
+                </label>
+                <button
+                  className="send-refresh-btn"
+                  onClick={handleRefreshFees}
+                  disabled={sendLoadingFees}
+                >
+                  {sendLoadingFees ? '...' : '⟳'}
+                </button>
               </div>
               <div className="send-fee-options">
                 <button
@@ -2446,7 +2591,7 @@ function App() {
                   onClick={() => setSendFeeOption('slow')}
                 >
                   <div className="send-fee-title">Slow</div>
-                  <div className="send-fee-rate">2 sat/VB</div>
+                  <div className="send-fee-rate">{Number(sendEstimatedFees[0])} sat/VB</div>
                   <div className="send-fee-time">~ 1 hours</div>
                 </button>
                 <button
@@ -2454,7 +2599,7 @@ function App() {
                   onClick={() => setSendFeeOption('avg')}
                 >
                   <div className="send-fee-title">Avg</div>
-                  <div className="send-fee-rate">2 sat/VB</div>
+                  <div className="send-fee-rate">{Number(sendEstimatedFees[1])} sat/VB</div>
                   <div className="send-fee-time">~ 30 mins</div>
                 </button>
                 <button
@@ -2462,7 +2607,7 @@ function App() {
                   onClick={() => setSendFeeOption('fast')}
                 >
                   <div className="send-fee-title">Fast</div>
-                  <div className="send-fee-rate">2 sat/VB</div>
+                  <div className="send-fee-rate">{Number(sendEstimatedFees[2])} sat/VB</div>
                   <div className="send-fee-time">~ 10 mins</div>
                 </button>
                 <button
@@ -2477,8 +2622,118 @@ function App() {
             <button
               className="send-next-btn"
               disabled={!sendAmount || parseFloat(sendAmount) === 0}
+              onClick={handleSendNext}
             >
               Next
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Send Confirm Screen */}
+      {view === 'send-confirm' && (
+        <div className="send-container" style={{ overflow: 'hidden' }}>
+          <div className="send-header">
+            <button className="send-back" onClick={() => setView('send-amount')}>←</button>
+            <h2 className="send-title">Sign Transaction</h2>
+          </div>
+
+          <div className="send-content">
+            <div className="send-confirm-box" style={{ backgroundColor: '#1f2937', borderRadius: '12px', padding: '1.5rem', marginBottom: '1.5rem', border: '1px solid #374151' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginBottom: '0.5rem' }}>From</div>
+                  <div style={{ fontSize: '0.875rem', fontWeight: '500', color: '#f3f4f6' }}>{truncateAddress(walletAddress || btcAddress)}</div>
+                </div>
+                <div style={{ padding: '0 1rem', fontSize: '1.25rem', color: '#6b7280' }}>→</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginBottom: '0.5rem' }}>Send to</div>
+                  <div style={{ fontSize: '0.875rem', fontWeight: '500', color: '#f3f4f6' }}>{truncateAddress(sendReceiverAddress)}</div>
+                </div>
+              </div>
+
+              <div style={{ borderTop: '1px solid #374151', paddingTop: '1rem' }}>
+                <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginBottom: '0.5rem' }}>Send Amount</div>
+                <div style={{ fontSize: '1.5rem', fontWeight: '600', color: '#f3f4f6' }}>{sendAmount} BTC</div>
+              </div>
+            </div>
+
+            <div className="send-input-group">
+              <label className="send-label">Network Fee</label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem', backgroundColor: '#1f2937', borderRadius: '8px', border: '1px solid #374151' }}>
+                <span style={{ fontSize: '1rem', fontWeight: '500', color: '#f3f4f6' }}>{sendNetworkFee}</span>
+                <span style={{ fontSize: '0.875rem', color: '#9ca3af' }}>BTC</span>
+              </div>
+            </div>
+
+            <div className="send-input-group" style={{ marginTop: '1rem' }}>
+              <label className="send-label">Network Fee Rate</label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem', backgroundColor: '#1f2937', borderRadius: '8px', border: '1px solid #374151' }}>
+                <span style={{ fontSize: '1rem', fontWeight: '500', color: '#f3f4f6' }}>
+                  {sendFeeOption === 'slow' ? Number(sendEstimatedFees[0]) :
+                    sendFeeOption === 'avg' ? Number(sendEstimatedFees[1]) :
+                      Number(sendEstimatedFees[2])}
+                </span>
+                <span style={{ fontSize: '0.875rem', color: '#9ca3af' }}>sat/VB</span>
+              </div>
+            </div>
+
+            {sendError && (
+              <div style={{ marginTop: '1rem', padding: '0.75rem', backgroundColor: '#fee2e2', borderRadius: '8px' }}>
+                <span style={{ color: '#ef4444', fontSize: '0.875rem' }}>{sendError}</span>
+              </div>
+            )}
+
+            <button
+              className="send-next-btn"
+              onClick={handleSendBitcoin}
+              disabled={sendProcessing}
+              style={{ marginTop: '2rem', backgroundColor: '#ff6b2c' }}
+            >
+              {sendProcessing ? 'Sending...' : 'Sign & Pay'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Send Success Screen */}
+      {view === 'send-success' && (
+        <div className="send-container">
+          <div className="send-header">
+            <h2 className="send-title">Sign Transaction</h2>
+          </div>
+
+          <div className="send-content" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', paddingTop: '3rem' }}>
+            <div style={{ width: '80px', height: '80px', borderRadius: '50%', backgroundColor: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1.5rem' }}>
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+            </div>
+
+            <p style={{ fontSize: '1rem', color: '#111827', textAlign: 'center', marginBottom: '2rem', maxWidth: '300px', fontWeight: '500' }}>
+              Payment of {sendAmount} BTC successfully!
+            </p>
+
+            {sendTxId && (
+              <div style={{ backgroundColor: '#f3f4f6', borderRadius: '8px', padding: '1rem', marginBottom: '2rem', maxWidth: '320px' }}>
+                <p style={{ fontSize: '0.7rem', color: '#6b7280', marginBottom: '0.5rem' }}>Transaction ID:</p>
+                <p style={{ fontSize: '0.75rem', color: '#111827', wordBreak: 'break-all', fontFamily: 'monospace' }}>
+                  {sendTxId}
+                </p>
+              </div>
+            )}
+
+            <button
+              className="send-next-btn"
+              onClick={() => {
+                setView('dashboard')
+                setSendReceiverAddress('')
+                setSendAmount('')
+                setSendTxId('')
+                setSendError('')
+              }}
+            >
+              Close
             </button>
           </div>
         </div>

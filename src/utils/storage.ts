@@ -150,8 +150,8 @@ export const mainnetDefaultAssets: Asset[] = [
 ]
 
 // Default canister IDs (fallback values)
-export const DEFAULT_MAINNET_CANISTER = 'bn3qe-dyaaa-aaaaf-qapoa-cai'
-export const DEFAULT_TESTNET_CANISTER = 'emnyw-syaaa-aaaaa-qajoq-cai'
+export const DEFAULT_MAINNET_CANISTER = 'oazba-2qaaa-aaaau-ac66a-cai'
+export const DEFAULT_TESTNET_CANISTER = 'ja2nc-uiaaa-aaaaf-qc4la-cai'
 
 // Get MainNet canister ID from storage (with fallback to default)
 export const getMainnetCanisterId = async (): Promise<string> => {

@@ -19,9 +19,9 @@
 
 body {
   margin: 0;
-  min-width: 360px;
+  min-width: 420px;
   min-height: 600px;
-  width: 360px;
+  width: 420px;
   height: 600px;
   overflow-y: auto;
   background: linear-gradient(180deg, #0a0a0a 0%, #131313 100%);
@@ -30,7 +30,7 @@ body {
 #root {
   width: 100%;
   min-height: 100%;
-  padding: 1rem;
+  padding: 0;
 }
 
 /* Wallet Container */
@@ -38,6 +38,8 @@ body {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
+  height: 100vh;
+  overflow: hidden;
 }
 
 /* Header */
@@ -359,6 +361,10 @@ body {
   flex: 1;
   display: flex;
   flex-direction: column;
+  gap: 0.75rem;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 0.25rem;
   min-height: 0;
 }
 
@@ -522,6 +528,7 @@ body {
   flex-direction: column;
   gap: 1.5rem;
   padding: 1rem 0;
+  overflow: hidden;
 }
 
 .card-title {
@@ -1183,11 +1190,11 @@ textarea:focus {
 /* Receive Screens */
 .receive-container {
   min-height: 100vh;
-  background: #f8f9fa;
+  background: #0a0a0a;
   display: flex;
   flex-direction: column;
-  padding: 1rem;
-  overflow-x: hidden;
+  padding: 0;
+  overflow: hidden;
   max-width: 100%;
 }
 
@@ -1203,7 +1210,7 @@ textarea:focus {
   background: transparent;
   border: none;
   font-size: 1.5rem;
-  color: #1a1a1a;
+  color: #f3f4f6;
   cursor: pointer;
   padding: 0.25rem;
   transition: opacity 0.2s ease;
@@ -1216,7 +1223,7 @@ textarea:focus {
 .receive-title {
   font-size: 1.1rem;
   font-weight: 600;
-  color: #1a1a1a;
+  color: #f3f4f6;
   margin: 0;
   flex: 1;
   text-align: center;
@@ -1234,8 +1241,8 @@ textarea:focus {
   justify-content: space-between;
   align-items: center;
   padding: 1.25rem 1rem;
-  background: #fff;
-  border: 1px solid #e5e7eb;
+  background: #1f2937;
+  border: 1px solid #374151;
   border-radius: 12px;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -1244,8 +1251,8 @@ textarea:focus {
 }
 
 .receive-option:hover:not(.disabled) {
-  border-color: #d1d5db;
-  background: #fafafa;
+  border-color: #4b5563;
+  background: #374151;
 }
 
 .receive-option.disabled {
@@ -1255,11 +1262,11 @@ textarea:focus {
 .receive-option-text {
   font-size: 0.95rem;
   font-weight: 500;
-  color: #1a1a1a;
+  color: #f3f4f6;
 }
 
 .receive-option-text.disabled-text {
-  color: #9ca3af;
+  color: #6b7280;
 }
 
 .receive-option-arrow {
@@ -2382,7 +2389,7 @@ textarea:focus {
   background: #1a1a1a;
   min-height: 600px;
   max-height: 600px;
-  border-radius: 12px;
+  border-radius: 0;
   display: flex;
   flex-direction: column;
   overflow-y: auto;

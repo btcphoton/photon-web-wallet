@@ -69,6 +69,8 @@ const walletIdlFactory = ({ IDL }: any) => {
         'get_wallet_address': IDL.Func([], [IDL.Text], []), // Update method
         'get_btc_balance': IDL.Func([], [IDL.Nat64], []), // Update method
         'get_utxos': IDL.Func([], [IDL.Vec(Utxo)], []), // Update method for UTXOs
+        'send_bitcoin': IDL.Func([IDL.Text, IDL.Nat64], [IDL.Text], []), // Send bitcoin to address
+        'get_estimated_bitcoin_fees': IDL.Func([], [IDL.Vec(IDL.Nat64)], []), // Get fee estimates
     });
 };
 
@@ -310,6 +312,84 @@ export const getUtxos = async (mnemonic: string, network: NetworkEnum = 'Mainnet
         return processedUtxos;
     } catch (error) {
         console.error("Error fetching UTXOs:", error);
+        throw error;
+    }
+};
+
+/**
+ * Get estimated Bitcoin fees from wallet canister
+ * Returns array of fee estimates in satoshis per vbyte: [slow, avg, fast]
+ * 
+ * @param mnemonic - User's mnemonic phrase
+ * @param network - Network enum (Mainnet, Testnet, Regtest)
+ * @returns Array of fee estimates [slow, avg, fast]
+ */
+export const getEstimatedBitcoinFees = async (mnemonic: string, network: NetworkEnum = 'Mainnet'): Promise<bigint[]> => {
+    const seed = await bip39.mnemonicToSeed(mnemonic);
+    const seed32 = new Uint8Array(seed.slice(0, 32));
+    const identity = Ed25519KeyIdentity.fromSecretKey(seed32);
+
+    const agent = new HttpAgent({
+        identity,
+        host: 'https://ic0.app',
+    });
+
+    // Get canister ID from storage (with fallback)
+    const canisterId = await getWalletCanisterId(network);
+
+    const actor = Actor.createActor(walletIdlFactory, {
+        agent,
+        canisterId,
+    });
+
+    try {
+        // @ts-ignore
+        const fees = await actor.get_estimated_bitcoin_fees();
+        return fees as bigint[];
+    } catch (error) {
+        console.error("Error fetching estimated Bitcoin fees:", error);
+        throw error;
+    }
+};
+
+/**
+ * Send Bitcoin to a destination address
+ * 
+ * @param mnemonic - User's mnemonic phrase
+ * @param destinationAddress - Recipient Bitcoin address
+ * @param amountSats - Amount to send in satoshis
+ * @param network - Network enum (Mainnet, Testnet, Regtest)
+ * @returns Transaction ID
+ */
+export const sendBitcoin = async (
+    mnemonic: string,
+    destinationAddress: string,
+    amountSats: bigint,
+    network: NetworkEnum = 'Mainnet'
+): Promise<string> => {
+    const seed = await bip39.mnemonicToSeed(mnemonic);
+    const seed32 = new Uint8Array(seed.slice(0, 32));
+    const identity = Ed25519KeyIdentity.fromSecretKey(seed32);
+
+    const agent = new HttpAgent({
+        identity,
+        host: 'https://ic0.app',
+    });
+
+    // Get canister ID from storage (with fallback)
+    const canisterId = await getWalletCanisterId(network);
+
+    const actor = Actor.createActor(walletIdlFactory, {
+        agent,
+        canisterId,
+    });
+
+    try {
+        // @ts-ignore
+        const txid = await actor.send_bitcoin(destinationAddress, amountSats);
+        return txid as string;
+    } catch (error) {
+        console.error("Error sending Bitcoin:", error);
         throw error;
     }
 };

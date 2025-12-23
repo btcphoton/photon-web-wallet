@@ -3,14 +3,26 @@ cab1c9c6-319e-4e0f-ae58-e0b10006397e
 
 gasp attitude little organ palm crime layer answer dial twelve feed meadow rehan123
 
-Mainnet bn3qe-dyaaa-aaaaf-qapoa-cai
-TestNet emnyw-syaaa-aaaaa-qajoq-cai
+Mainnet oazba-2qaaa-aaaau-ac66a-cai
+TestNet ja2nc-uiaaa-aaaaf-qc4la-cai
 
-emnyw-syaaa-aaaaa-qajoq-cai
+
+
+
+
 bc1qk9mxtgqa2sv6j6xpnvp2w36s8fucs8n99sn9rc
 bc1q3mpgqpu3hc8k43ge2fxyludf0pmu6slkp7pyc4
 tb1qcw6wvegn5u4s8fuafzvva9qmntva6ghcz3vk7e
 tb1qcw6wvegn5u4s8fuafzvva9qmntva6ghcz3vk7e
+
+
+TestNet Canister ID: ja2nc-uiaaa-aaaaf-qc4la-cai
+tb1q830tsxudfsnz033jv04pcqw37xzw93n9ew3g3s
+
+T-TestNet Canister ID : ja2nc-uiaaa-aaaaf-qc4la-cai
+tb1qc7zv9655p5cnjrjtvcumr9ve2czg3ylx0ev4fk
+
+
 
 https://testnet-faucet.ckboost.com/
 
