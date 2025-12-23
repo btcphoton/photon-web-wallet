@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Animated ⚡ Emoji</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+        }
+
+        .container {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .emoji-container {
+            position: relative;
+            width: 400px;
+            height: 400px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .emoji {
+            font-size: 280px;
+            position: absolute;
+            user-select: none;
+            filter: drop-shadow(0 0 20px rgba(255, 215, 0, 0.5));
+            transition: all 0.3s ease;
+        }
+
+        .particles-container {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+        }
+
+        .particle {
+            position: absolute;
+            border-radius: 50%;
+            pointer-events: none;
+        }
+
+        .spark {
+            position: absolute;
+            background: linear-gradient(90deg, #ff0, #f90);
+            border-radius: 2px;
+            transform-origin: center;
+            pointer-events: none;
+        }
+
+        h1 {
+            color: #FFD700;
+            margin-bottom: 30px;
+            text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+            font-size: 2.5rem;
+        }
+
+        .controls {
+            margin-top: 30px;
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            background-color: #222;
+            color: #FFD700;
+            border: 2px solid #FFD700;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+
+        button:hover {
+            background-color: #FFD700;
+            color: #000;
+            box-shadow: 0 0 15px rgba(255, 215, 0, 0.7);
+        }
+
+        .stats {
+            color: #FFD700;
+            margin-top: 20px;
+            font-size: 1.1rem;
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            flex-wrap: wrap;
+        }
+
+        .stat-item {
+            background-color: rgba(255, 215, 0, 0.1);
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 215, 0, 0.3);
+        }
+
+        .footer {
+            color: #666;
+            margin-top: 25px;
+            font-size: 0.9rem;
+        }
+
+        @media (max-width: 600px) {
+            .emoji-container {
+                width: 300px;
+                height: 300px;
+            }
+
+            .emoji {
+                font-size: 200px;
+            }
+
+            h1 {
+                font-size: 2rem;
+            }
+
+            .controls {
+                gap: 10px;
+            }
+
+            button {
+                padding: 8px 16px;
+                font-size: 0.9rem;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Animated ⚡ Emoji</h1>
+
+        <div class="emoji-container">
+            <div class="emoji" id="zapEmoji">⚡</div>
+            <div class="particles-container" id="particlesContainer"></div>
+        </div>
+
+        <div class="stats">
+            <div class="stat-item">Particles: <span id="particleCount">0</span></div>
+            <div class="stat-item">Animation Speed: <span id="speedValue">1.0x</span></div>
+            <div class="stat-item">Active Effects: <span id="effectsCount">3</span></div>
+        </div>
+
+        <div class="controls">
+            <button id="togglePulse">Pulse Effect: ON</button>
+            <button id="toggleSparks">Sparks: ON</button>
+            <button id="toggleRotation">Rotation: OFF</button>
+            <button id="increaseSpeed">Speed +</button>
+            <button id="decreaseSpeed">Speed -</button>
+            <button id="addParticles">Add Particles</button>
+            <button id="resetAll">Reset All</button>
+        </div>
+
+        <div class="footer">
+            Click/tap on the ⚡ emoji to create electric explosions! | Made with JavaScript & CSS
+        </div>
+    </div>
+
+    <script>
+        // Get DOM elements
+        const zapEmoji = document.getElementById('zapEmoji');
+        const particlesContainer = document.getElementById('particlesContainer');
+        const particleCountElement = document.getElementById('particleCount');
+        const speedValueElement = document.getElementById('speedValue');
+        const effectsCountElement = document.getElementById('effectsCount');
+
+        // Animation state
+        let animationId = null;
+        let particles = [];
+        let sparks = [];
+        let animationSpeed = 1.0;
+        let effectsActive = 3;
+
+        // Effects state
+        let pulseEnabled = true;
+        let sparksEnabled = true;
+        let rotationEnabled = false;
+
+        // Colors for electric effects
+        const electricColors = [
+            '#FFD700', // Gold
+            '#FFFF00', // Yellow
+            '#FFA500', // Orange
+            '#FF4500', // Orange Red
+            '#FF6347', // Tomato
+            '#FF0000', // Red
+            '#00FFFF', // Cyan
+            '#FFFFFF'  // White
+        ];
+
+        // Initialize particles
+        function initParticles() {
+            particles = [];
+            // Clear container
+            particlesContainer.innerHTML = '';
+
+            // Create initial particles
+            for (let i = 0; i < 30; i++) {
+                createParticle();
+            }
+            updateParticleCount();
+        }
+
+        // Create a single particle
+        function createParticle(x, y) {
+            const particle = document.createElement('div');
+            particle.className = 'particle';
+
+            // Random size between 2 and 8px
+            const size = Math.random() * 6 + 2;
+            particle.style.width = `${size}px`;
+            particle.style.height = `${size}px`;
+
+            // Random position around the emoji or at specified location
+            if (x && y) {
+                particle.style.left = `${x}px`;
+                particle.style.top = `${y}px`;
+            } else {
+                const containerRect = particlesContainer.getBoundingClientRect();
+                particle.style.left = `${Math.random() * containerRect.width}px`;
+                particle.style.top = `${Math.random() * containerRect.height}px`;
+            }
+
+            // Random electric color
+            const color = electricColors[Math.floor(Math.random() * electricColors.length)];
+            particle.style.backgroundColor = color;
+
+            // Random animation properties
+            const duration = (Math.random() * 3 + 2) / animationSpeed;
+            const delay = Math.random() * 2;
+
+            // Random movement direction
+            const angle = Math.random() * Math.PI * 2;
+            const distance = Math.random() * 100 + 50;
+
+            // Set initial opacity
+            particle.style.opacity = '0.8';
+
+            // Store animation data
+            particle.animationData = {
+                startX: parseFloat(particle.style.left),
+                startY: parseFloat(particle.style.top),
+                angle: angle,
+                distance: distance,
+                startTime: Date.now() + delay * 1000,
+                duration: duration * 1000,
+                size: size,
+                color: color
+            };
+
+            particlesContainer.appendChild(particle);
+            particles.push(particle);
+            updateParticleCount();
+
+            // Remove particle after animation
+            setTimeout(() => {
+                const index = particles.indexOf(particle);
+                if (index > -1) {
+                    particles.splice(index, 1);
+                    particle.remove();
+                    updateParticleCount();
+                }
+            }, (duration + delay) * 1000);
+        }
+
+        // Create electric sparks
+        function createSpark(x, y) {
+            if (!sparksEnabled) return;
+
+            const spark = document.createElement('div');
+            spark.className = 'spark';
+
+            // Random size
+            const width = Math.random() * 15 + 5;
+            const height = Math.random() * 3 + 1;
+            spark.style.width = `${width}px`;
+            spark.style.height = `${height}px`;
+
+            // Position at click location
+            spark.style.left = `${x}px`;
+            spark.style.top = `${y}px`;
+
+            // Random color
+            const color1 = electricColors[Math.floor(Math.random() * electricColors.length)];
+            const color2 = electricColors[Math.floor(Math.random() * electricColors.length)];
+            spark.style.background = `linear-gradient(90deg, ${color1}, ${color2})`;
+
+            // Random rotation
+            const rotation = Math.random() * 360;
+            spark.style.transform = `rotate(${rotation}deg)`;
+
+            particlesContainer.appendChild(spark);
+            sparks.push(spark);
+
+            // Animate spark
+            const duration = 0.5 / animationSpeed;
+            spark.animate([
+                { transform: `rotate(${rotation}deg) scale(1)`, opacity: 1 },
+                { transform: `rotate(${rotation + 180}deg) scale(0)`, opacity: 0 }
+            ], {
+                duration: duration * 1000,
+                easing: 'cubic-bezier(0.215, 0.61, 0.355, 1)'
+            });
+
+            // Remove spark after animation
+            setTimeout(() => {
+                const index = sparks.indexOf(spark);
+                if (index > -1) {
+                    sparks.splice(index, 1);
+                    spark.remove();
+                }
+            }, duration * 1000);
+        }
+
+        // Update particle count display
+        function updateParticleCount() {
+            particleCountElement.textContent = particles.length + sparks.length;
+        }
+
+        // Update effects count display
+        function updateEffectsCount() {
+            effectsActive = (pulseEnabled ? 1 : 0) + (sparksEnabled ? 1 : 0) + (rotationEnabled ? 1 : 0);
+            effectsCountElement.textContent = effectsActive;
+        }
+
+        // Create explosion effect
+        function createExplosion(x, y) {
+            // Create multiple particles and sparks
+            for (let i = 0; i < 15; i++) {
+                createParticle(x, y);
+            }
+
+            for (let i = 0; i < 8; i++) {
+                setTimeout(() => {
+                    createSpark(x, y);
+                }, i * 50);
+            }
+
+            // Add a "shockwave" effect to the emoji
+            zapEmoji.style.transform = 'scale(1.2)';
+            setTimeout(() => {
+                zapEmoji.style.transform = '';
+            }, 200);
+        }
+
+        // Animate particles
+        function animateParticles() {
+            const now = Date.now();
+
+            particles.forEach(particle => {
+                const data = particle.animationData;
+
+                // Check if animation should start
+                if (now < data.startTime) return;
+
+                // Calculate animation progress (0 to 1)
+                const elapsed = now - data.startTime;
+                const progress = Math.min(elapsed / data.duration, 1);
+
+                // Easing function
+                const easeOut = 1 - Math.pow(1 - progress, 3);
+
+                // Calculate new position
+                const newX = data.startX + Math.cos(data.angle) * data.distance * easeOut;
+                const newY = data.startY + Math.sin(data.angle) * data.distance * easeOut;
+
+                // Update position
+                particle.style.left = `${newX}px`;
+                particle.style.top = `${newY}px`;
+
+                // Fade out
+                particle.style.opacity = `${0.8 * (1 - progress)}`;
+
+                // Shrink
+                const newSize = data.size * (1 - progress * 0.5);
+                particle.style.width = `${newSize}px`;
+                particle.style.height = `${newSize}px`;
+            });
+        }
+
+        // Animate the emoji
+        function animateEmoji() {
+            const now = Date.now();
+
+            // Pulse animation
+            if (pulseEnabled) {
+                const pulseScale = 1 + Math.sin(now * 0.003 * animationSpeed) * 0.1;
+                const brightness = 100 + Math.sin(now * 0.005 * animationSpeed) * 30;
+                const shadowBlur = 20 + Math.sin(now * 0.004 * animationSpeed) * 10;
+
+                zapEmoji.style.transform = rotationEnabled ?
+                    `rotate(${now * 0.01 * animationSpeed}deg) scale(${pulseScale})` :
+                    `scale(${pulseScale})`;
+
+                zapEmoji.style.filter = `drop-shadow(0 0 ${shadowBlur}px rgba(255, 215, 0, 0.7)) brightness(${brightness}%)`;
+            } else if (rotationEnabled) {
+                // Only rotation without pulse
+                zapEmoji.style.transform = `rotate(${now * 0.01 * animationSpeed}deg)`;
+            } else {
+                zapEmoji.style.transform = '';
+                zapEmoji.style.filter = 'drop-shadow(0 0 20px rgba(255, 215, 0, 0.5))';
+            }
+
+            // Animate particles
+            animateParticles();
+
+            // Continue animation
+            animationId = requestAnimationFrame(animateEmoji);
+        }
+
+        // Initialize and start animation
+        function init() {
+            initParticles();
+            animateEmoji();
+
+            // Add click handler for explosions
+            zapEmoji.addEventListener('click', function (e) {
+                const rect = zapEmoji.getBoundingClientRect();
+                const containerRect = particlesContainer.getBoundingClientRect();
+
+                // Calculate position relative to container
+                const x = e.clientX - containerRect.left;
+                const y = e.clientY - containerRect.top;
+
+                createExplosion(x, y);
+            });
+
+            // Add click handler for container (background particles)
+            particlesContainer.addEventListener('click', function (e) {
+                if (e.target === particlesContainer) {
+                    const rect = particlesContainer.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const y = e.clientY - rect.top;
+
+                    createExplosion(x, y);
+                }
+            });
+
+            // Initialize stats
+            updateEffectsCount();
+            speedValueElement.textContent = `${animationSpeed.toFixed(1)}x`;
+        }
+
+        // Control functions
+        document.getElementById('togglePulse').addEventListener('click', function () {
+            pulseEnabled = !pulseEnabled;
+            this.textContent = `Pulse Effect: ${pulseEnabled ? 'ON' : 'OFF'}`;
+            updateEffectsCount();
+        });
+
+        document.getElementById('toggleSparks').addEventListener('click', function () {
+            sparksEnabled = !sparksEnabled;
+            this.textContent = `Sparks: ${sparksEnabled ? 'ON' : 'OFF'}`;
+            updateEffectsCount();
+        });
+
+        document.getElementById('toggleRotation').addEventListener('click', function () {
+            rotationEnabled = !rotationEnabled;
+            this.textContent = `Rotation: ${rotationEnabled ? 'ON' : 'OFF'}`;
+            updateEffectsCount();
+        });
+
+        document.getElementById('increaseSpeed').addEventListener('click', function () {
+            animationSpeed = Math.min(animationSpeed + 0.25, 3.0);
+            speedValueElement.textContent = `${animationSpeed.toFixed(1)}x`;
+        });
+
+        document.getElementById('decreaseSpeed').addEventListener('click', function () {
+            animationSpeed = Math.max(animationSpeed - 0.25, 0.25);
+            speedValueElement.textContent = `${animationSpeed.toFixed(1)}x`;
+        });
+
+        document.getElementById('addParticles').addEventListener('click', function () {
+            for (let i = 0; i < 20; i++) {
+                createParticle();
+            }
+        });
+
+        document.getElementById('resetAll').addEventListener('click', function () {
+            // Reset animation state
+            animationSpeed = 1.0;
+            pulseEnabled = true;
+            sparksEnabled = true;
+            rotationEnabled = false;
+
+            // Update button texts
+            document.getElementById('togglePulse').textContent = 'Pulse Effect: ON';
+            document.getElementById('toggleSparks').textContent = 'Sparks: ON';
+            document.getElementById('toggleRotation').textContent = 'Rotation: OFF';
+            speedValueElement.textContent = `${animationSpeed.toFixed(1)}x`;
+
+            // Clear and reset particles
+            particles.forEach(p => p.remove());
+            sparks.forEach(s => s.remove());
+            particles = [];
+            sparks = [];
+
+            // Reinitialize
+            initParticles();
+            updateEffectsCount();
+        });
+
+        // Start the animation
+        init();
+
+        // Handle window resize
+        window.addEventListener('resize', function () {
+            // If particles are positioned absolutely, they might need repositioning
+            // For simplicity, we'll just clear and recreate them
+            if (particles.length > 0) {
+                particles.forEach(p => p.remove());
+                sparks.forEach(s => s.remove());
+                particles = [];
+                sparks = [];
+                initParticles();
+            }
+        });
+    </script>
+</body>
+
+</html>
