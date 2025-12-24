@@ -8,6 +8,7 @@ import { getStorageData, setStorageData, removeStorageData, getNetworkAddressKey
 import type { Asset } from './utils/storage'
 import { QRCodeSVG } from 'qrcode.react'
 import { generateRgbInvoice, notifyRgbProxy, isValidRgbProxyUrl } from './utils/rgb-invoice'
+import { LightningAnimation } from './components/LightningAnimation'
 
 
 type View = 'welcome' | 'unlock' | 'lock' | 'forgot' | 'create' | 'verify' | 'password' | 'restore' | 'dashboard' | 'receive' | 'receive-btc' | 'receive-rgb' | 'convert-lightning' | 'add-assets' | 'settings' | 'network-settings' | 'swap' | 'send' | 'send-amount' | 'send-confirm' | 'send-success'
@@ -1215,7 +1216,7 @@ function App() {
   if (isLoading) {
     return (
       <div className="welcome-container">
-        <div className="welcome-logo">⚡</div>
+        <LightningAnimation size={200} />
         <p className="welcome-subtitle">Loading...</p>
       </div>
     )
@@ -1225,7 +1226,7 @@ function App() {
     <>
       {view === 'welcome' && (
         <div className="welcome-container">
-          <div className="welcome-logo">⚡</div>
+          <LightningAnimation size={200} />
           <div>
             <h1 className="welcome-title">Photon Wallet</h1>
             <p className="welcome-subtitle">A one-stop suite for RGB assets : Issue, Send & Receive RGB Assets like never before !</p>
@@ -1244,7 +1245,7 @@ function App() {
       {view === 'unlock' && (
         <div className="card-container unlock-container">
           <div className="version-label">V1.0.0</div>
-          <div className="welcome-logo">⚡</div>
+          <LightningAnimation size={180} />
           <h2 className="brand-title">PHOTON</h2>
           <p className="welcome-subtitle">A one-stop suite for RGB assets : Issue, Send & Receive RGB Assets like never before !</p>
 
