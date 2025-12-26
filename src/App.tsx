@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react'
 import './App.css'
 import { generateMnemonic, deriveIdentity, validateMnemonic } from './utils/crypto'
-import { getBtcAddress, getWalletAddress, getWalletBalance, updateBalance, mapNetworkToCanister, getUtxos, getEstimatedBitcoinFees, sendBitcoin } from './utils/icp'
+import { getBtcAddress, getWalletAddress, getWalletBalance, updateBalance, mapNetworkToCanister, getUtxos, getEstimatedBitcoinFees, sendBitcoin, type Utxo } from './utils/icp'
+import { deriveBitcoinAddress } from './utils/bitcoin-address'
+import { signAndBroadcastTransaction, broadcastTransaction, fetchUTXOsFromBlockchain } from './utils/bitcoin-transactions'
 import { getCkBTCBalance } from './utils/icrc1'
 import { convertLBTCtoBTC } from './utils/ckbtc-withdrawal'
 import { getStorageData, setStorageData, removeStorageData, getNetworkAddressKey, getNetworkAssetsKey, testnet3DefaultAssets, mainnetDefaultAssets, DEFAULT_MAINNET_CANISTER, DEFAULT_TESTNET_CANISTER } from './utils/storage'
@@ -11,7 +13,7 @@ import { generateRgbInvoice, notifyRgbProxy, isValidRgbProxyUrl } from './utils/
 import { LightningAnimation } from './components/LightningAnimation'
 
 
-type View = 'welcome' | 'unlock' | 'lock' | 'forgot' | 'create' | 'verify' | 'password' | 'restore' | 'dashboard' | 'receive' | 'receive-btc' | 'receive-rgb' | 'convert-lightning' | 'add-assets' | 'settings' | 'network-settings' | 'swap' | 'send' | 'send-amount' | 'send-confirm' | 'send-success'
+type View = 'welcome' | 'unlock' | 'lock' | 'forgot' | 'create' | 'verify' | 'password' | 'restore' | 'dashboard' | 'receive' | 'receive-btc' | 'receive-rgb' | 'convert-lightning' | 'add-assets' | 'settings' | 'network-settings' | 'swap' | 'send' | 'send-amount' | 'send-confirm' | 'send-success' | 'utxos'
 type Tab = 'assets' | 'activities'
 type Network = 'mainnet' | 'testnet3' | 'testnet4' | 'regtest'
 
@@ -122,6 +124,9 @@ function App() {
   const [testnetCanisterId, setTestnetCanisterId] = useState<string>('')
   const [settingsSaved, setSettingsSaved] = useState<boolean>(false)
 
+  // Address generation method state
+  const [addressGenerationMethod, setAddressGenerationMethod] = useState<'icp' | 'bitcoin'>('icp')
+
   // Network settings states with defaults
   const [electrumServer, setElectrumServer] = useState<string>('89.117.52.115:50002')
   const [rgbProxy, setRgbProxy] = useState<string>('http://89.117.52.115:3000/json-rpc')
@@ -147,6 +152,12 @@ function App() {
   const [sendTxId, setSendTxId] = useState<string>('')
   const [sendProcessing, setSendProcessing] = useState<boolean>(false)
   const [sendError, setSendError] = useState<string>('')
+
+  // UTXOs State
+  const [utxosTab, setUtxosTab] = useState<'occupied' | 'unoccupied' | 'unlockable'>('unoccupied')
+  const [bitcoinUtxos, setBitcoinUtxos] = useState<Utxo[]>([])
+  const [rgbUtxos, setRgbUtxos] = useState<any[]>([])
+  const [loadingUtxos, setLoadingUtxos] = useState(false)
 
 
 
@@ -178,6 +189,12 @@ function App() {
 
   // Handle expand address - fetch from canister
   const handleExpandAddress = async () => {
+    // Don't allow expand in Bitcoin mode - addresses are generated locally
+    if (addressGenerationMethod === 'bitcoin') {
+      console.log('Expand disabled in Bitcoin mode')
+      return
+    }
+
     if (!mnemonic) return
 
     setLoadingExpand(true)
@@ -209,12 +226,26 @@ function App() {
     setLoadingAddress(true)
     try {
       const canisterNetwork = mapNetworkToCanister(network)
+      let walletAddr: string
+      let lightningAddr: string
 
-      // Fetch BOTH addresses in parallel
-      const [walletAddr, lightningAddr] = await Promise.all([
-        getWalletAddress(mnemonicPhrase, canisterNetwork),
-        getBtcAddress(mnemonicPhrase, canisterNetwork)
-      ])
+      // Check which address generation method to use
+      if (addressGenerationMethod === 'bitcoin') {
+        // Generate Bitcoin address locally from mnemonic
+        walletAddr = await deriveBitcoinAddress(mnemonicPhrase, network)
+        // For Bitcoin method, use the same address for lightning (or generate a second one if needed)
+        lightningAddr = walletAddr
+        console.log(`Generated Bitcoin address locally for ${network}:`, walletAddr)
+      } else {
+        // Fetch addresses from ICP canister (default/existing behavior)
+        const [canisterWalletAddr, canisterLightningAddr] = await Promise.all([
+          getWalletAddress(mnemonicPhrase, canisterNetwork),
+          getBtcAddress(mnemonicPhrase, canisterNetwork)
+        ])
+        walletAddr = canisterWalletAddr
+        lightningAddr = canisterLightningAddr
+        console.log(`Fetched addresses from canister for ${network}:`, walletAddr)
+      }
 
       // Update both addresses in state
       setWalletAddress(walletAddr)
@@ -237,7 +268,7 @@ function App() {
 
       return walletAddr
     } catch (e) {
-      console.error('Failed to fetch addresses:', e)
+      console.error('Failed to fetch/generate addresses:', e)
       setWalletAddress('')
       setLightningAddress('')
       setBtcAddress('')
@@ -256,7 +287,8 @@ function App() {
           'walletAddress', 'lightningAddress', // Load both addresses
           'btcAddress_mainnet', 'btcAddress_testnet3', 'btcAddress_testnet4', 'btcAddress_regtest',
           'walletAddress_mainnet', 'walletAddress_testnet3', 'walletAddress_testnet4', 'walletAddress_regtest',
-          'lightningAddress_mainnet', 'lightningAddress_testnet3', 'lightningAddress_testnet4', 'lightningAddress_regtest'
+          'lightningAddress_mainnet', 'lightningAddress_testnet3', 'lightningAddress_testnet4', 'lightningAddress_regtest',
+          'addressGenerationMethod' // Load address generation method
         ])
         console.log('Storage check result:', result)
 
@@ -275,6 +307,11 @@ function App() {
           }
           if (result.btcAddress) {
             setBtcAddress(result.btcAddress)
+          }
+
+          // Load address generation method (default to 'icp' for backward compatibility)
+          if (result.addressGenerationMethod) {
+            setAddressGenerationMethod(result.addressGenerationMethod as 'icp' | 'bitcoin')
           }
 
           console.log('Wallet found, showing unlock screen')
@@ -1014,6 +1051,69 @@ function App() {
     }
   }
 
+  // Calculate maximum sendable amount (balance - fee)
+  const handleMaxAmount = async () => {
+    if (!mnemonic || !walletAddress) {
+      setSendAmount(btcBalance)
+      return
+    }
+
+    try {
+      // Get current fee rate based on selected option
+      const feeRateMap = { slow: 0, avg: 1, fast: 2, custom: 2 }
+      const feeIndex = feeRateMap[sendFeeOption as 'slow' | 'avg' | 'fast' | 'custom'] || 2
+      const feeRate = Number(sendEstimatedFees[feeIndex])
+
+      let numUTXOs = 0
+
+      // Fetch UTXOs to get accurate count
+      if (addressGenerationMethod === 'bitcoin') {
+        // Fetch from blockchain
+        const utxos = await fetchUTXOsFromBlockchain(walletAddress, selectedNetwork)
+        numUTXOs = utxos?.length || 0
+      } else {
+        // Fetch from canister
+        try {
+          const canisterNetwork = mapNetworkToCanister(selectedNetwork)
+          const utxos = await getUtxos(walletAddress, canisterNetwork)
+          numUTXOs = utxos?.length || 0
+        } catch (e) {
+          // If canister fails, estimate with 1 UTXO
+          numUTXOs = 1
+        }
+      }
+
+      // Calculate transaction size
+      // Inputs: numUTXOs * 148 bytes each (SegWit input)
+      // Outputs: 1 output * 34 bytes (no change when sending max)
+      // Overhead: 10 bytes
+      const estimatedSize = numUTXOs * 148 + 1 * 34 + 10
+      const estimatedFeeSats = Math.ceil(estimatedSize * feeRate)
+      const estimatedFeeBtc = estimatedFeeSats / 100000000
+
+      // Calculate max sendable amount
+      const balanceBtc = parseFloat(btcBalance)
+      const maxSendable = Math.max(0, balanceBtc - estimatedFeeBtc)
+
+      // Set the amount
+      setSendAmount(maxSendable.toFixed(8))
+
+      console.log(`Max calculation: Balance=${balanceBtc}, Fee=${estimatedFeeBtc}, Max=${maxSendable}, UTXOs=${numUTXOs}`)
+    } catch (error) {
+      console.error('Error calculating max amount:', error)
+      // Fallback to balance - estimated fee with 1 UTXO
+      const feeRateMap = { slow: 0, avg: 1, fast: 2, custom: 2 }
+      const feeIndex = feeRateMap[sendFeeOption as 'slow' | 'avg' | 'fast' | 'custom'] || 2
+      const feeRate = Number(sendEstimatedFees[feeIndex])
+      const estimatedSize = 1 * 148 + 1 * 34 + 10 // Assume 1 UTXO
+      const estimatedFeeSats = Math.ceil(estimatedSize * feeRate)
+      const estimatedFeeBtc = estimatedFeeSats / 100000000
+      const balanceBtc = parseFloat(btcBalance)
+      const maxSendable = Math.max(0, balanceBtc - estimatedFeeBtc)
+      setSendAmount(maxSendable.toFixed(8))
+    }
+  }
+
   // Load user balance and fees when send-amount view opens
   useEffect(() => {
     const loadSendBalance = async () => {
@@ -1043,25 +1143,55 @@ function App() {
   }, [view, mnemonic, selectedNetwork])
 
   // Navigate to send confirm screen
-  const handleSendNext = () => {
+  const handleSendNext = async () => {
     if (!sendAmount || parseFloat(sendAmount) === 0) {
       setSendError('Please enter a valid amount')
       return
     }
 
-    // Calculate network fee based on selected option
-    const feeRate = sendFeeOption === 'slow' ? sendEstimatedFees[0] :
-      sendFeeOption === 'avg' ? sendEstimatedFees[1] :
-        sendEstimatedFees[2] // fast
+    try {
+      // Calculate network fee based on selected option
+      const feeRate = sendFeeOption === 'slow' ? sendEstimatedFees[0] :
+        sendFeeOption === 'avg' ? sendEstimatedFees[1] :
+          sendEstimatedFees[2] // fast
 
-    // Estimate transaction size (1 input + 2 outputs ≈ 200 vbytes)
-    const estimatedTxSize = 200
-    const networkFeeSats = Number(feeRate) * estimatedTxSize
-    const networkFeeBtc = (networkFeeSats / 100000000).toFixed(8)
-    setSendNetworkFee(networkFeeBtc)
+      let numUTXOs = 1 // Default to 1 if we can't fetch
 
-    setSendError('')
-    setView('send-confirm')
+      // Fetch UTXOs to get accurate count for fee calculation
+      if (mnemonic && walletAddress) {
+        try {
+          if (addressGenerationMethod === 'bitcoin') {
+            // Fetch from blockchain
+            const utxos = await fetchUTXOsFromBlockchain(walletAddress, selectedNetwork)
+            numUTXOs = utxos?.length || 1
+          } else {
+            // Fetch from canister
+            const canisterNetwork = mapNetworkToCanister(selectedNetwork)
+            const utxos = await getUtxos(walletAddress, canisterNetwork)
+            numUTXOs = utxos?.length || 1
+          }
+        } catch (e) {
+          console.warn('Could not fetch UTXOs for fee estimation, using 1 UTXO estimate:', e)
+        }
+      }
+
+      // Calculate actual transaction size based on UTXOs
+      // Inputs: numUTXOs * 148 bytes each (SegWit)
+      // Outputs: 2 outputs * 34 bytes (recipient + change)
+      // Overhead: 10 bytes
+      const estimatedTxSize = numUTXOs * 148 + 2 * 34 + 10
+      const networkFeeSats = Number(feeRate) * estimatedTxSize
+      const networkFeeBtc = (networkFeeSats / 100000000).toFixed(8)
+      setSendNetworkFee(networkFeeBtc)
+
+      console.log(`Fee calculation: ${numUTXOs} UTXOs × 148 + 2×34 + 10 = ${estimatedTxSize} bytes × ${feeRate} sat/vB = ${networkFeeSats} sats`)
+
+      setSendError('')
+      setView('send-confirm')
+    } catch (error) {
+      console.error('Error calculating fee:', error)
+      setSendError('Failed to calculate network fee')
+    }
   }
 
   // Execute Bitcoin send transaction
@@ -1077,9 +1207,51 @@ function App() {
     try {
       const amountBtc = parseFloat(sendAmount)
       const amountSats = BigInt(Math.floor(amountBtc * 100000000))
+      let txid: string
 
-      const canisterNetwork = mapNetworkToCanister(selectedNetwork)
-      const txid = await sendBitcoin(mnemonic, sendReceiverAddress, amountSats, canisterNetwork)
+      // Check which signing method to use based on addressGenerationMethod
+      if (addressGenerationMethod === 'bitcoin') {
+        // Use local Bitcoin signing (offline signing)
+        console.log('Using local Bitcoin transaction signing')
+
+        // Get UTXOs from blockchain API (not canister)
+        if (!walletAddress) {
+          throw new Error('Wallet address not available')
+        }
+
+        const utxos = await fetchUTXOsFromBlockchain(walletAddress, selectedNetwork)
+
+        if (!utxos || utxos.length === 0) {
+          throw new Error('No UTXOs available for spending')
+        }
+
+        console.log(`Found ${utxos.length} UTXOs from blockchain`)
+
+        // Get fee rate from selected fee option
+        const feeRateMap = { slow: 0, avg: 1, fast: 2 }
+        const feeIndex = feeRateMap[sendFeeOption as 'slow' | 'avg' | 'fast'] || 2
+        const feeRate = Number(sendEstimatedFees[feeIndex])
+
+        // Sign transaction locally
+        const txHex = await signAndBroadcastTransaction(
+          mnemonic,
+          utxos,
+          sendReceiverAddress,
+          Number(amountSats),
+          feeRate,
+          selectedNetwork
+        )
+
+        // Broadcast to network
+        txid = await broadcastTransaction(txHex, selectedNetwork)
+        console.log('Transaction broadcast via local signing:', txid)
+      } else {
+        // Use ICP canister signing (existing method)
+        console.log('Using ICP canister transaction signing')
+        const canisterNetwork = mapNetworkToCanister(selectedNetwork)
+        txid = await sendBitcoin(mnemonic, sendReceiverAddress, amountSats, canisterNetwork)
+        console.log('Transaction sent via canister:', txid)
+      }
 
       setSendTxId(txid)
       console.log('Transaction sent successfully:', txid)
@@ -1130,21 +1302,22 @@ function App() {
       // Save to storage
       await setStorageData({
         mainnetCanisterId,
-        testnetCanisterId
+        testnetCanisterId,
+        addressGenerationMethod // Save the address generation method
       })
 
       setSettingsSaved(true)
       setTimeout(() => setSettingsSaved(false), 2000)
 
-      // Refresh wallet address with new canister
+      // Refresh wallet address with new canister or method
       if (mnemonic) {
         await fetchAndSaveBtcAddress(mnemonic, selectedNetwork)
       }
 
-      console.log('Canister IDs saved successfully')
+      console.log('Settings saved successfully')
     } catch (e) {
-      console.error('Error saving canister IDs:', e)
-      setError('Failed to save canister IDs')
+      console.error('Error saving settings:', e)
+      setError('Failed to save settings')
     }
   }
 
@@ -1210,6 +1383,24 @@ function App() {
   const handleResetNetworkSettings = () => {
     setElectrumServer('')
     setRgbProxy('')
+  }
+
+  // Fetch and display UTXOs
+  const handleViewUtxos = async () => {
+    if (!walletAddress) return
+
+    setLoadingUtxos(true)
+    try {
+      const canisterNetwork = mapNetworkToCanister(selectedNetwork)
+      const utxos = await getUtxos(walletAddress, canisterNetwork)
+      setBitcoinUtxos(utxos)
+      setRgbUtxos([])
+      setView('utxos')
+    } catch (error) {
+      console.error('Error fetching UTXOs:', error)
+    } finally {
+      setLoadingUtxos(false)
+    }
   }
 
   // Show loading while checking storage
@@ -1665,7 +1856,12 @@ function App() {
               <button
                 className="icon-btn-sm"
                 onClick={handleExpandAddress}
-                title="Expand - Fetch from canister"
+                title={addressGenerationMethod === 'bitcoin' ? 'Expand disabled in Bitcoin mode' : 'Expand - Fetch from canister'}
+                disabled={addressGenerationMethod === 'bitcoin'}
+                style={{
+                  opacity: addressGenerationMethod === 'bitcoin' ? 0.5 : 1,
+                  cursor: addressGenerationMethod === 'bitcoin' ? 'not-allowed' : 'pointer'
+                }}
               >
                 ⊡
               </button>
@@ -1696,7 +1892,7 @@ function App() {
               <div className="action-icon send">↗</div>
               <span className="action-label">Send</span>
             </button>
-            <button className="action-btn">
+            <button className="action-btn" onClick={handleViewUtxos}>
               <div className="action-icon utxos">▤</div>
               <span className="action-label">UTXOs</span>
             </button>
@@ -2006,7 +2202,7 @@ function App() {
 
                     // 3. Fetch available UTXOs from ICP canister
                     const canisterNetwork = mapNetworkToCanister(selectedNetwork)
-                    const utxos = await getUtxos(mnemonic, canisterNetwork)
+                    const utxos = await getUtxos(walletAddress, canisterNetwork)
 
                     if (!utxos || utxos.length === 0) {
                       setRgbError('No available UTXOs. Please ensure your wallet has Bitcoin funds.')
@@ -2244,6 +2440,47 @@ function App() {
                 onChange={(e) => setTestnetCanisterId(e.target.value)}
               />
               <span className="settings-hint">Default: {DEFAULT_TESTNET_CANISTER} (Also used for Regtest)</span>
+            </div>
+
+            <div className="settings-section" style={{ marginTop: '2rem' }}>
+              <h3 className="settings-section-title">Bitcoin Address Generation</h3>
+              <p className="settings-info">Choose how Bitcoin addresses are generated for your wallet.</p>
+
+              <div style={{ marginTop: '1rem' }}>
+                <label style={{ display: 'flex', alignItems: 'center', marginBottom: '0.75rem', cursor: 'pointer' }}>
+                  <input
+                    type="radio"
+                    name="addressMethod"
+                    value="icp"
+                    checked={addressGenerationMethod === 'icp'}
+                    onChange={(e) => setAddressGenerationMethod(e.target.value as 'icp' | 'bitcoin')}
+                    style={{ marginRight: '0.5rem', cursor: 'pointer' }}
+                  />
+                  <div>
+                    <div style={{ fontWeight: '500', color: '#fff' }}>Generate with ICP</div>
+                    <div style={{ fontSize: '0.875rem', color: '#9ca3af', marginTop: '0.25rem' }}>
+                      Fetch Bitcoin address from ICP canister (requires network connection)
+                    </div>
+                  </div>
+                </label>
+
+                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                  <input
+                    type="radio"
+                    name="addressMethod"
+                    value="bitcoin"
+                    checked={addressGenerationMethod === 'bitcoin'}
+                    onChange={(e) => setAddressGenerationMethod(e.target.value as 'icp' | 'bitcoin')}
+                    style={{ marginRight: '0.5rem', cursor: 'pointer' }}
+                  />
+                  <div>
+                    <div style={{ fontWeight: '500', color: '#fff' }}>Generate with Bitcoin</div>
+                    <div style={{ fontSize: '0.875rem', color: '#9ca3af', marginTop: '0.25rem' }}>
+                      Generate Bitcoin address locally from your mnemonic (works offline)
+                    </div>
+                  </div>
+                </label>
+              </div>
             </div>
 
             {error && <p className="error-text">{error}</p>}
@@ -2513,7 +2750,7 @@ function App() {
 
       {/* Send Amount Screen */}
       {view === 'send-amount' && (
-        <div className="send-container" style={{ overflow: 'hidden' }}>
+        <div className="send-container">
           <div className="send-header">
             <button className="send-back" onClick={() => setView('send')}>←</button>
             <h2 className="send-title">Send BTC</h2>
@@ -2550,7 +2787,7 @@ function App() {
                   <span className="send-amount-unit">BTC</span>
                   <button
                     className="send-max-btn"
-                    onClick={() => setSendAmount(btcBalance)}
+                    onClick={handleMaxAmount}
                   >
                     Max
                   </button>
@@ -2633,7 +2870,7 @@ function App() {
 
       {/* Send Confirm Screen */}
       {view === 'send-confirm' && (
-        <div className="send-container" style={{ overflow: 'hidden' }}>
+        <div className="send-container">
           <div className="send-header">
             <button className="send-back" onClick={() => setView('send-amount')}>←</button>
             <h2 className="send-title">Sign Transaction</h2>
@@ -2784,6 +3021,78 @@ function App() {
                 </button>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* UTXOs View */}
+      {view === 'utxos' && (
+        <div className="wallet-container" style={{ padding: '1rem' }}>
+          <div className="wallet-header">
+            <button className="icon-btn" onClick={() => setView('dashboard')}>←</button>
+            <h2 style={{ flex: 1, textAlign: 'center', margin: 0 }}>UTXOs</h2>
+            <button className="icon-btn" style={{ visibility: 'hidden' }}>⋮</button>
+          </div>
+
+          <div className="utxos-tabs" style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', borderBottom: '1px solid rgba(255, 255, 255, 0.1)', paddingBottom: '0.5rem' }}>
+            <button onClick={() => setUtxosTab('unoccupied')} style={{ background: utxosTab === 'unoccupied' ? 'rgba(247, 147, 26, 0.2)' : 'transparent', color: utxosTab === 'unoccupied' ? '#f7931a' : 'rgba(255, 255, 255, 0.6)', border: 'none', padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem', transition: 'all 0.2s ease' }}>Unoccupied</button>
+            <button onClick={() => setUtxosTab('occupied')} style={{ background: utxosTab === 'occupied' ? 'rgba(247, 147, 26, 0.2)' : 'transparent', color: utxosTab === 'occupied' ? '#f7931a' : 'rgba(255, 255, 255, 0.6)', border: 'none', padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem', transition: 'all 0.2s ease' }}>Occupied</button>
+            <button onClick={() => setUtxosTab('unlockable')} style={{ background: utxosTab === 'unlockable' ? 'rgba(247, 147, 26, 0.2)' : 'transparent', color: utxosTab === 'unlockable' ? '#f7931a' : 'rgba(255, 255, 255, 0.6)', border: 'none', padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem', transition: 'all 0.2s ease' }}>Unlockable</button>
+          </div>
+
+          <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
+            {loadingUtxos ? (
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '3rem', color: 'rgba(255, 255, 255, 0.5)' }}>Loading UTXOs...</div>
+            ) : (
+              <>
+                {utxosTab === 'unoccupied' && (
+                  <>
+                    {bitcoinUtxos.length === 0 ? (
+                      <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'rgba(255, 255, 255, 0.4)' }}>
+                        <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📦</div>
+                        <p>No Data Available</p>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                        {bitcoinUtxos.map((utxo) => (
+                          <div key={`${utxo.txid}:${utxo.vout}`} style={{ background: 'rgba(255, 255, 255, 0.04)', borderRadius: '12px', padding: '1rem', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                            <div style={{ marginBottom: '0.75rem' }}>
+                              <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.85rem' }}>Output</span>
+                              <div style={{ color: '#fff', fontSize: '0.95rem', marginTop: '0.25rem' }}>{utxo.txid.slice(0, 12)}...{utxo.txid.slice(-8)}:{utxo.vout}</div>
+                            </div>
+                            <div>
+                              <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.85rem' }}>Available UTXO balance</span>
+                              <div style={{ color: '#fff', fontSize: '0.95rem', marginTop: '0.25rem', fontWeight: 600 }}>{(Number(utxo.value) / 100000000).toFixed(8)} BTC</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {utxosTab === 'occupied' && (
+                  <>
+                    {rgbUtxos.length === 0 ? (
+                      <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'rgba(255, 255, 255, 0.4)' }}>
+                        <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📦</div>
+                        <p>No RGB UTXOs Available</p>
+                        <p style={{ fontSize: '0.85rem', marginTop: '0.5rem' }}>RGB UTXOs will appear here when assets are bound</p>
+                      </div>
+                    ) : (
+                      <div>RGB UTXOs: {rgbUtxos.length}</div>
+                    )}
+                  </>
+                )}
+
+                {utxosTab === 'unlockable' && (
+                  <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'rgba(255, 255, 255, 0.4)' }}>
+                    <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔓</div>
+                    <p>No Unlockable UTXOs</p>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
       )}

@@ -22,15 +22,19 @@ body {
   min-width: 420px;
   min-height: 600px;
   width: 420px;
+  max-width: 420px;
   height: 600px;
   overflow-y: auto;
+  overflow-x: hidden;
   background: linear-gradient(180deg, #0a0a0a 0%, #131313 100%);
 }
 
 #root {
   width: 100%;
+  max-width: 420px;
   min-height: 100%;
   padding: 0;
+  overflow-x: hidden;
 }
 
 /* Wallet Container */
@@ -39,7 +43,9 @@ body {
   flex-direction: column;
   gap: 1.25rem;
   height: 100vh;
-  overflow: hidden;
+  max-width: 100%;
+  overflow-x: hidden;
+  overflow-y: hidden;
 }
 
 /* Header */
@@ -477,6 +483,12 @@ body {
 .welcome-subtitle {
   color: rgba(255, 255, 255, 0.6);
   font-size: 0.95rem;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  max-width: 100%;
+  padding: 0 1rem;
+  text-align: center;
+  line-height: 1.5;
 }
 
 .welcome-buttons {
@@ -527,8 +539,10 @@ body {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
-  padding: 1rem 0;
+  padding: 1rem 1.5rem;
   overflow: hidden;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .card-title {
@@ -2452,6 +2466,8 @@ textarea:focus {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .send-input-group {

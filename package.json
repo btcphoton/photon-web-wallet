@@ -14,11 +14,16 @@
     "@dfinity/candid": "^3.4.3",
     "@dfinity/identity": "^3.4.3",
     "@dfinity/principal": "^3.4.3",
+    "@types/bitcoinjs-lib": "^4.0.1",
+    "bip32": "^5.0.0",
     "bip39": "^3.1.0",
+    "bitcoinjs-lib": "^7.0.0",
     "buffer": "^6.0.3",
+    "ecpair": "^3.0.0",
     "qrcode.react": "^4.2.0",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "tiny-secp256k1": "^2.2.4"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
@@ -35,6 +40,8 @@
     "typescript-eslint": "^8.46.4",
     "vite": "^7.2.4",
     "vite-plugin-node-polyfills": "^0.24.0",
+    "vite-plugin-top-level-await": "^1.6.0",
+    "vite-plugin-wasm": "^3.5.0",
     "vitest": "^4.0.16"
   }
 }

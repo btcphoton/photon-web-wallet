@@ -270,13 +270,9 @@ export interface Utxo {
  * @param network - Network enum (Mainnet, Testnet, Regtest)
  * @returns Array of available UTXOs
  */
-export const getUtxos = async (mnemonic: string, network: NetworkEnum = 'Mainnet'): Promise<Utxo[]> => {
-    const seed = await bip39.mnemonicToSeed(mnemonic);
-    const seed32 = new Uint8Array(seed.slice(0, 32));
-    const identity = Ed25519KeyIdentity.fromSecretKey(seed32);
-
+export const getUtxos = async (address: string, network: NetworkEnum = 'Mainnet'): Promise<Utxo[]> => {
+    // Create an anonymous agent (no identity needed for get_utxos)
     const agent = new HttpAgent({
-        identity,
         host: 'https://ic0.app',
     });
 
@@ -289,8 +285,8 @@ export const getUtxos = async (mnemonic: string, network: NetworkEnum = 'Mainnet
     });
 
     try {
-        // @ts-ignore
-        const rawUtxos = await actor.get_utxos();
+        // @ts-ignore - Call get_utxos with address parameter
+        const rawUtxos = await actor.get_utxos(address);
 
         // Convert raw UTXOs to processed format
         const processedUtxos: Utxo[] = (rawUtxos as any[]).map((rawUtxo: any) => {

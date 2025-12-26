@@ -53,6 +53,8 @@ interface StorageData {
     rgbContracts_testnet3?: string
     rgbContracts_testnet4?: string
     rgbContracts_regtest?: string
+    // Bitcoin Address Generation Method
+    addressGenerationMethod?: 'icp' | 'bitcoin'
 }
 
 // Check if chrome.storage is actually available and functional
@@ -82,7 +84,8 @@ export const getStorageData = (keys: (keyof StorageData)[]): Promise<Partial<Sto
             keys.forEach((key) => {
                 const value = localStorage.getItem(`photon_${key}`)
                 if (value) {
-                    result[key] = value
+                    // Type assertion needed because localStorage always returns strings
+                    result[key] = value as any
                 }
             })
             resolve(result)
