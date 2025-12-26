@@ -1391,13 +1391,33 @@ function App() {
 
     setLoadingUtxos(true)
     try {
-      const canisterNetwork = mapNetworkToCanister(selectedNetwork)
-      const utxos = await getUtxos(walletAddress, canisterNetwork)
+      let utxos;
+
+      // Determine fetch method based on address generation mode
+      if (addressGenerationMethod === 'bitcoin') {
+        // Bitcoin mode: Fetch from blockchain API
+        console.log('Fetching UTXOs from blockchain API')
+        const blockchainUtxos = await fetchUTXOsFromBlockchain(walletAddress, selectedNetwork)
+        // Convert to canister format (number → bigint)
+        utxos = blockchainUtxos.map(u => ({
+          ...u,
+          value: BigInt(u.value)
+        }))
+      } else {
+        // ICP mode: Fetch from canister
+        console.log('Fetching UTXOs from ICP canister')
+        const canisterNetwork = mapNetworkToCanister(selectedNetwork)
+        utxos = await getUtxos(walletAddress, canisterNetwork)
+      }
+
+      console.log('UTXOs received:', utxos?.length || 0)
       setBitcoinUtxos(utxos)
       setRgbUtxos([])
       setView('utxos')
     } catch (error) {
       console.error('Error fetching UTXOs:', error)
+      setBitcoinUtxos([])
+      setView('utxos')
     } finally {
       setLoadingUtxos(false)
     }

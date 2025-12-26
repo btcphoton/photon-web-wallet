@@ -68,7 +68,7 @@ const walletIdlFactory = ({ IDL }: any) => {
     return IDL.Service({
         'get_wallet_address': IDL.Func([], [IDL.Text], []), // Update method
         'get_btc_balance': IDL.Func([], [IDL.Nat64], []), // Update method
-        'get_utxos': IDL.Func([], [IDL.Vec(Utxo)], []), // Update method for UTXOs
+        'get_utxos': IDL.Func([IDL.Text], [IDL.Vec(Utxo)], []), // Update method - now accepts address parameter
         'send_bitcoin': IDL.Func([IDL.Text, IDL.Nat64], [IDL.Text], []), // Send bitcoin to address
         'get_estimated_bitcoin_fees': IDL.Func([], [IDL.Vec(IDL.Nat64)], []), // Get fee estimates
     });
