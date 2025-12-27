@@ -1769,7 +1769,7 @@ function App() {
                 setView('settings')
               }}>
                 <span className="menu-icon">⚙</span>
-                <span>Setting</span>
+                <span>Admin</span>
                 <span className="menu-arrow">›</span>
               </div>
               <div className="menu-item" onClick={() => {
@@ -2429,7 +2429,7 @@ function App() {
         <div className="settings-container">
           <div className="password-header">
             <button className="back-arrow" onClick={() => setView('dashboard')}>←</button>
-            <h2 className="card-title">Settings</h2>
+            <h2 className="card-title">Admin</h2>
           </div>
 
           <div className="settings-content">
