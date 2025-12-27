@@ -124,8 +124,8 @@ function App() {
   const [testnetCanisterId, setTestnetCanisterId] = useState<string>('')
   const [settingsSaved, setSettingsSaved] = useState<boolean>(false)
 
-  // Address generation method state
-  const [addressGenerationMethod, setAddressGenerationMethod] = useState<'icp' | 'bitcoin'>('icp')
+  // Address generation method state (default to 'bitcoin')
+  const [addressGenerationMethod, setAddressGenerationMethod] = useState<'icp' | 'bitcoin'>('bitcoin')
 
   // Network settings states with defaults
   const [electrumServer, setElectrumServer] = useState<string>('89.117.52.115:50002')
@@ -300,7 +300,8 @@ function App() {
           'walletAddress_mainnet', 'walletAddress_testnet3', 'walletAddress_testnet4', 'walletAddress_regtest',
           'lightningAddress_mainnet', 'lightningAddress_testnet3', 'lightningAddress_testnet4', 'lightningAddress_regtest',
           'addressGenerationMethod', // Load address generation method
-          'AutoLockTimer' // Load auto-lock timer setting
+          'AutoLockTimer', // Load auto-lock timer setting
+          'LoginTime' // Load last login time
         ])
         console.log('Storage check result:', result)
 
@@ -327,10 +328,52 @@ function App() {
           }
 
           // Load auto-lock timer setting (default to 15 minutes)
+          const autoLockMinutesValue = result.AutoLockTimer ? Number(result.AutoLockTimer) : 15
           if (result.AutoLockTimer) {
             const minutes = Number(result.AutoLockTimer)
             setAutoLockMinutes(minutes)
             setAutoLockTimer(`${minutes} minutes`)
+          }
+
+          // Check if user should be auto-logged in
+          if (result.LoginTime) {
+            const loginTime = Number(result.LoginTime)
+            const currentTime = Date.now()
+            const elapsedMinutes = (currentTime - loginTime) / (1000 * 60)
+
+            console.log(`Time since last login: ${elapsedMinutes.toFixed(2)} minutes`)
+            console.log(`Auto-lock timer: ${autoLockMinutesValue} minutes`)
+
+            // If still within the auto-lock window, auto-login to dashboard
+            if (elapsedMinutes < autoLockMinutesValue) {
+              console.log('Auto-logging in to dashboard')
+
+              // Restore wallet state
+              setMnemonic(result.mnemonic)
+              setPrincipalId(result.principalId)
+
+              // Restore network and address
+              const network = (result.selectedNetwork as Network) || 'mainnet'
+              setSelectedNetwork(network)
+              const networkAddressKey = getNetworkAddressKey(network)
+              const networkAddress = result[networkAddressKey] || result.btcAddress || ''
+              setBtcAddress(networkAddress as string)
+
+              setView('dashboard')
+              setIsLoading(false)
+
+              // Fetch balance after auto-login
+              if (result.mnemonic && networkAddress) {
+                fetchBalance(result.mnemonic, networkAddress as string, network)
+              }
+
+              // Load assets for current network
+              if (result.mnemonic) {
+                loadAssetsForNetwork(network, result.mnemonic)
+              }
+
+              return
+            }
           }
 
           console.log('Wallet found, showing unlock screen')
@@ -378,6 +421,11 @@ function App() {
 
         setError('')
         setUnlockPassword('')
+
+        // Save login time for auto-login feature
+        await setStorageData({ LoginTime: Date.now() })
+        console.log('Login time saved:', Date.now())
+
         setView('dashboard')
         console.log('Unlock successful, going to dashboard')
 
@@ -435,6 +483,11 @@ function App() {
 
         setError('')
         setUnlockPassword('')
+
+        // Save login time for auto-login feature
+        await setStorageData({ LoginTime: Date.now() })
+        console.log('Login time saved:', Date.now())
+
         setView('dashboard')
         console.log('Unlock from lock successful')
 
@@ -709,6 +762,17 @@ function App() {
   const fetchBalance = async (currentMnemonic: string, currentAddress: string, networkId: Network) => {
     if (!currentMnemonic || !currentAddress) return
 
+    // Load cached balance from storage first
+    try {
+      const cachedData = await getStorageData(['walletBalance'])
+      if (cachedData.walletBalance) {
+        setBtcBalance(cachedData.walletBalance)
+        console.log('Using cached balance:', cachedData.walletBalance)
+      }
+    } catch (error) {
+      console.error('Error loading cached balance:', error)
+    }
+
     setLoadingBalance(true)
     setBalanceError('') // Clear previous error
     try {
@@ -731,8 +795,11 @@ function App() {
             const balanceFromAPI = (data.chain_stats?.funded_txo_sum || 0) - (data.chain_stats?.spent_txo_sum || 0)
             const apiBalanceBtc = (balanceFromAPI / 100000000).toFixed(8)
 
-            // Store in Chrome storage
-            await setStorageData({ user_bitcoin_balance: apiBalanceBtc })
+            // Store in Chrome storage (both old and new keys for compatibility)
+            await setStorageData({
+              user_bitcoin_balance: apiBalanceBtc,
+              walletBalance: apiBalanceBtc
+            })
             setBtcBalance(apiBalanceBtc)
             setBalanceError('')
             console.log('Balance from Blockstream API (canister was zero):', apiBalanceBtc)
@@ -749,6 +816,11 @@ function App() {
           }
         }
 
+        // Store in Chrome storage (both keys for compatibility)
+        await setStorageData({
+          user_bitcoin_balance: balanceBtc,
+          walletBalance: balanceBtc
+        })
         setBtcBalance(balanceBtc)
         setBalanceError('')
         console.log('Balance from wallet canister:', balanceBtc)
@@ -788,8 +860,11 @@ function App() {
       const balanceFromAPI = (data.chain_stats?.funded_txo_sum || 0) - (data.chain_stats?.spent_txo_sum || 0)
       const balanceBtc = (balanceFromAPI / 100000000).toFixed(8)
 
-      // Store in Chrome storage
-      await setStorageData({ user_bitcoin_balance: balanceBtc })
+      // Store in Chrome storage (both keys for compatibility)
+      await setStorageData({
+        user_bitcoin_balance: balanceBtc,
+        walletBalance: balanceBtc
+      })
       setBtcBalance(balanceBtc)
       setBalanceError('')
       console.log('Balance from Blockstream API:', balanceBtc)
@@ -874,9 +949,10 @@ function App() {
       await setStorageData({
         mnemonic,
         walletPassword: password,
-        principalId: id
+        principalId: id,
+        addressGenerationMethod // Save the address generation method (default: 'bitcoin')
       })
-      console.log('Wallet data saved to storage: mnemonic, password, principalId')
+      console.log('Wallet data saved to storage: mnemonic, password, principalId, addressGenerationMethod')
 
       // Fetch and save BTC address
       setView('dashboard')
@@ -969,13 +1045,28 @@ function App() {
       setLastActivityTimestamp(Date.now())
     }
 
+    // Reset activity when user returns to the tab (prevents lock on tab switch)
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        // User returned to the tab, reset activity timestamp
+        setLastActivityTimestamp(Date.now())
+        console.log('User returned to tab, activity timestamp reset')
+      }
+    }
+
     // Add event listeners for user activity
     window.addEventListener('click', resetActivity)
     window.addEventListener('mousemove', resetActivity)
     window.addEventListener('keydown', resetActivity)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
 
     // Set up interval to check for inactivity (every 30 seconds)
     const checkInactivity = () => {
+      // Don't check if tab is hidden (user is on another tab)
+      if (document.hidden) {
+        return
+      }
+
       const now = Date.now()
       const inactiveTime = now - lastActivityTimestamp
       const inactiveMinutes = inactiveTime / (1000 * 60)
@@ -995,6 +1086,7 @@ function App() {
       window.removeEventListener('click', resetActivity)
       window.removeEventListener('mousemove', resetActivity)
       window.removeEventListener('keydown', resetActivity)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
 
       if (autoLockIntervalRef.current) {
         clearInterval(autoLockIntervalRef.current)
@@ -1340,10 +1432,34 @@ function App() {
       setSendTxId(txid)
       console.log('Transaction sent successfully:', txid)
 
+      // Immediately deduct amount from cached balance
+      try {
+        const currentBalance = parseFloat(btcBalance || '0')
+        const sentAmount = parseFloat(sendAmount)
+        const networkFee = parseFloat(sendNetworkFee)
+        const newBalance = (currentBalance - sentAmount - networkFee).toFixed(8)
+
+        console.log('=== INSTANT BALANCE DEDUCTION ===')
+        console.log('Current:', currentBalance, '| Sent:', sentAmount, '| Fee:', networkFee, '| New:', newBalance)
+        console.log('=================================')
+
+        // Update UI immediately
+        setBtcBalance(newBalance)
+
+        // Update cached balance in storage
+        await setStorageData({
+          walletBalance: newBalance,
+          user_bitcoin_balance: newBalance
+        })
+        console.log(`Balance updated: ${currentBalance} - ${sentAmount} - ${networkFee} = ${newBalance}`)
+      } catch (balanceError) {
+        console.error('Error updating balance after send:', balanceError)
+      }
+
       // Navigate to success screen
       setView('send-success')
 
-      // Refresh balance after 3 seconds
+      // Refresh balance from blockchain after 3 seconds to get accurate balance
       setTimeout(async () => {
         if (btcAddress) {
           await fetchBalance(mnemonic, btcAddress, selectedNetwork)
@@ -1540,11 +1656,11 @@ function App() {
       {view === 'unlock' && (
         <div className="card-container unlock-container">
           <div className="version-label">V1.0.0</div>
-          <LightningAnimation size={180} />
-          <h2 className="brand-title">PHOTON</h2>
-          <p className="welcome-subtitle">A one-stop suite for RGB assets : Issue, Send & Receive RGB Assets like never before !</p>
+          <LightningAnimation size={120} />
+          <h2 className="brand-title" style={{ marginTop: '0.5rem' }}>PHOTON</h2>
+          <p className="welcome-subtitle" style={{ marginBottom: '0' }}>A one-stop suite for RGB assets : Issue, Send & Receive RGB Assets like never before !</p>
 
-          <div className="input-group unlock-input-group">
+          <div className="input-group unlock-input-group" style={{ marginTop: '-5px' }}>
             <div className="input-wrapper">
               <input
                 type={showUnlockPassword ? 'text' : 'password'}
@@ -1569,11 +1685,12 @@ function App() {
             className="btn-primary continue-btn"
             onClick={handleUnlock}
             disabled={!unlockPassword}
+            style={{ marginTop: '0.5rem' }}
           >
             Unlock Wallet
           </button>
 
-          <button className="forgot-link" onClick={handleForgotPassword}>
+          <button className="forgot-link" onClick={handleForgotPassword} style={{ marginTop: '0.25rem' }}>
             Forgot the Password?
           </button>
         </div>
@@ -1584,9 +1701,9 @@ function App() {
           <div className="version-label">V1.0.0</div>
           <div className="welcome-logo">⚡</div>
           <h2 className="brand-title">PHOTON</h2>
-          <p className="welcome-subtitle">A one-stop suite for RGB assets : Issue, Send & Receive RGB Assets like never before !</p>
+          <p className="welcome-subtitle" style={{ marginBottom: '0' }}>A one-stop suite for RGB assets : Issue, Send & Receive RGB Assets like never before !</p>
 
-          <div className="input-group unlock-input-group">
+          <div className="input-group unlock-input-group" style={{ marginTop: '-5px' }}>
             <div className="input-wrapper">
               <input
                 type={showUnlockPassword ? 'text' : 'password'}
@@ -1611,11 +1728,12 @@ function App() {
             className="btn-primary continue-btn"
             onClick={handleUnlockFromLock}
             disabled={!unlockPassword}
+            style={{ marginTop: '0.5rem' }}
           >
             Unlock Wallet
           </button>
 
-          <button className="forgot-link" onClick={handleForgotPassword}>
+          <button className="forgot-link" onClick={handleForgotPassword} style={{ marginTop: '0.25rem' }}>
             Forgot the Password?
           </button>
         </div>
@@ -1762,25 +1880,26 @@ function App() {
             </div>
           </div>
 
-          <button
-            className="forgot-link"
-            onClick={() => {
-              setPassword('rehan123')
-              setConfirmPassword('rehan123')
-            }}
-            style={{ marginTop: '0.5rem', marginBottom: '0.5rem', textDecoration: 'underline' }}
-          >
-            Use Test Password
-          </button>
-
           {error && <p className="error-text">{error}</p>}
 
           <button
             className="btn-primary continue-btn"
             onClick={handlePasswordContinue}
             disabled={!password || !confirmPassword}
+            style={{ marginTop: '-25px' }}
           >
             Continue
+          </button>
+
+          <button
+            className="forgot-link"
+            onClick={() => {
+              setPassword('rehan123')
+              setConfirmPassword('rehan123')
+            }}
+            style={{ marginTop: '0.5rem', textDecoration: 'underline' }}
+          >
+            Use Test Password
           </button>
         </div>
       )}
@@ -3000,125 +3119,199 @@ function App() {
             className="btn-primary copy-btc-btn"
             disabled={!sendReceiverAddress}
             onClick={() => setView('send-amount')}
+            style={{ marginBottom: '30px' }}
           >
             Next
           </button>
         </div>
       )}
 
+
       {/* Send Amount Screen */}
       {view === 'send-amount' && (
-        <div className="send-container">
-          <div className="send-header">
-            <button className="send-back" onClick={() => setView('send')}>←</button>
-            <h2 className="send-title">Send BTC</h2>
+        <div style={{ minHeight: '100vh', maxWidth: '100vw', background: '#0a0a0a', display: 'flex', flexDirection: 'column', padding: '0', boxSizing: 'border-box', overflowX: 'hidden' }}>
+          {/* Header */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', position: 'relative' }}>
+            <button
+              onClick={() => setView('send')}
+              style={{ position: 'absolute', left: '1rem', background: 'transparent', border: 'none', color: '#fff', fontSize: '1.5rem', cursor: 'pointer', padding: '0.25rem' }}
+            >
+              ←
+            </button>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: '700', color: '#fff', margin: 0 }}>Send BTC</h2>
           </div>
 
-          <div className="send-content">
-            <div className="send-input-group">
-              <label className="send-label">Recipient</label>
-              <div className="send-recipient-display">
-                <span className="send-recipient-text">{sendReceiverAddress}</span>
-                <button
-                  className="send-copy-btn"
-                  onClick={() => navigator.clipboard.writeText(sendReceiverAddress)}
-                >
-                  ⎘
-                </button>
-              </div>
-            </div>
-
-            <div className="send-input-group" style={{ marginTop: '1.5rem' }}>
-              <div className="send-amount-header">
-                <label className="send-label">Amount</label>
-                <span className="send-balance-label">Balance: {sendUserBalance} BTC</span>
-              </div>
-              <div className="send-amount-input-container">
-                <input
-                  type="text"
-                  className="send-amount-input"
-                  placeholder="Please enter send amount"
-                  value={sendAmount}
-                  onChange={(e) => setSendAmount(e.target.value)}
-                />
-                <div className="send-amount-suffix">
-                  <span className="send-amount-unit">BTC</span>
+          {/* Content */}
+          <div style={{ flex: 1, padding: '0 1rem', display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%', boxSizing: 'border-box' }}>
+            {/* Card 1: Recipient + Amount */}
+            <div style={{ background: 'rgba(255, 255, 255, 0.05)', borderRadius: '16px', padding: '1.25rem', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
+              {/* Recipient */}
+              <div style={{ marginBottom: '1.25rem' }}>
+                <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: '600', color: '#fff', marginBottom: '0.5rem' }}>Recipient</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '0.75rem 1rem', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                  <span style={{ flex: 1, color: 'rgba(255, 255, 255, 0.9)', fontSize: '0.85rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sendReceiverAddress}</span>
                   <button
-                    className="send-max-btn"
-                    onClick={handleMaxAmount}
+                    onClick={() => navigator.clipboard.writeText(sendReceiverAddress)}
+                    style={{ background: 'transparent', border: 'none', color: 'rgba(255, 255, 255, 0.6)', fontSize: '1rem', cursor: 'pointer', padding: '0.25rem' }}
                   >
-                    Max
+                    ⎘
                   </button>
+                </div>
+              </div>
+
+              {/* Amount */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                  <label style={{ fontSize: '0.9rem', fontWeight: '600', color: '#fff' }}>Amount</label>
+                  <span style={{ fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.6)' }}>Balance: {sendUserBalance} BTC</span>
+                </div>
+                <div style={{ position: 'relative', background: 'rgba(255, 255, 255, 0.08)', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                  <input
+                    type="text"
+                    placeholder="0.000000"
+                    value={sendAmount}
+                    onChange={(e) => setSendAmount(e.target.value)}
+                    style={{ width: '100%', padding: '1rem', paddingRight: '120px', background: 'transparent', border: 'none', color: '#fff', fontSize: '1.5rem', fontWeight: '700', outline: 'none' }}
+                  />
+                  <div style={{ position: 'absolute', right: '1rem', top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.9rem' }}>BTC</span>
+                    <button
+                      onClick={handleMaxAmount}
+                      style={{ background: '#f7931a', color: '#fff', border: 'none', padding: '0.4rem 0.8rem', borderRadius: '8px', fontSize: '0.8rem', fontWeight: '600', cursor: 'pointer' }}
+                    >
+                      Max
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
 
-            <div className="send-input-group" style={{ marginTop: '1.5rem' }}>
-              <div className="send-fee-header">
-                <label className="send-label">
+            {/* Card 2: Fee Selection */}
+            <div style={{ background: 'rgba(255, 255, 255, 0.05)', borderRadius: '16px', padding: '1.25rem', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                <label style={{ fontSize: '0.9rem', fontWeight: '600', color: '#fff' }}>
                   Fee
                   <button
                     onClick={() => setSendEstimatedFees([2n, 3n, 5n])}
-                    style={{
-                      marginLeft: '0.5rem',
-                      background: 'none',
-                      border: 'none',
-                      color: '#ff6b2c',
-                      fontSize: '0.7rem',
-                      cursor: 'pointer',
-                      textDecoration: 'underline',
-                      padding: 0
-                    }}
+                    style={{ marginLeft: '0.5rem', background: 'none', border: 'none', color: '#f7931a', fontSize: '0.7rem', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}
                   >
                     (use default [2,3,5])
                   </button>
                 </label>
                 <button
-                  className="send-refresh-btn"
                   onClick={handleRefreshFees}
                   disabled={sendLoadingFees}
+                  style={{ background: 'transparent', border: 'none', color: 'rgba(255, 255, 255, 0.6)', fontSize: '1.1rem', cursor: 'pointer', padding: '0.25rem' }}
                 >
                   {sendLoadingFees ? '...' : '⟳'}
                 </button>
               </div>
-              <div className="send-fee-options">
+
+              {/* Horizontal Fee Options */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem' }}>
+                {/* Slow */}
                 <button
-                  className={`send-fee-btn ${sendFeeOption === 'slow' ? 'active' : ''}`}
                   onClick={() => setSendFeeOption('slow')}
+                  style={{
+                    background: sendFeeOption === 'slow' ? '#f7931a' : 'rgba(255, 255, 255, 0.08)',
+                    border: sendFeeOption === 'slow' ? '1px solid #f7931a' : '1px solid rgba(255, 255, 255, 0.1)',
+                    borderRadius: '12px',
+                    padding: '0.75rem 0.5rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '0.25rem',
+                    transition: 'all 0.2s ease'
+                  }}
                 >
-                  <div className="send-fee-title">Slow</div>
-                  <div className="send-fee-rate">{Number(sendEstimatedFees[0])} sat/VB</div>
-                  <div className="send-fee-time">~ 1 hours</div>
+                  <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#fff' }}>Slow</div>
+                  <div style={{ fontSize: '0.75rem', fontWeight: '600', color: sendFeeOption === 'slow' ? 'rgba(255, 255, 255, 0.9)' : 'rgba(255, 255, 255, 0.7)' }}>{Number(sendEstimatedFees[0])} sat/VB</div>
+                  <div style={{ fontSize: '0.65rem', color: sendFeeOption === 'slow' ? 'rgba(255, 255, 255, 0.7)' : 'rgba(255, 255, 255, 0.5)' }}>~ 2 hours</div>
                 </button>
+
+                {/* Avg */}
                 <button
-                  className={`send-fee-btn ${sendFeeOption === 'avg' ? 'active' : ''}`}
                   onClick={() => setSendFeeOption('avg')}
+                  style={{
+                    background: sendFeeOption === 'avg' ? '#f7931a' : 'rgba(255, 255, 255, 0.08)',
+                    border: sendFeeOption === 'avg' ? '1px solid #f7931a' : '1px solid rgba(255, 255, 255, 0.1)',
+                    borderRadius: '12px',
+                    padding: '0.75rem 0.5rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '0.25rem',
+                    transition: 'all 0.2s ease'
+                  }}
                 >
-                  <div className="send-fee-title">Avg</div>
-                  <div className="send-fee-rate">{Number(sendEstimatedFees[1])} sat/VB</div>
-                  <div className="send-fee-time">~ 30 mins</div>
+                  <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#fff' }}>Avg</div>
+                  <div style={{ fontSize: '0.75rem', fontWeight: '600', color: sendFeeOption === 'avg' ? 'rgba(255, 255, 255, 0.9)' : 'rgba(255, 255, 255, 0.7)' }}>{Number(sendEstimatedFees[1])} sat/VB</div>
+                  <div style={{ fontSize: '0.65rem', color: sendFeeOption === 'avg' ? 'rgba(255, 255, 255, 0.7)' : 'rgba(255, 255, 255, 0.5)' }}>~ 30 mins</div>
                 </button>
+
+                {/* Fast */}
                 <button
-                  className={`send-fee-btn ${sendFeeOption === 'fast' ? 'active' : ''}`}
                   onClick={() => setSendFeeOption('fast')}
+                  style={{
+                    background: sendFeeOption === 'fast' ? '#f7931a' : 'rgba(255, 255, 255, 0.08)',
+                    border: sendFeeOption === 'fast' ? '1px solid #f7931a' : '1px solid rgba(255, 255, 255, 0.1)',
+                    borderRadius: '12px',
+                    padding: '0.75rem 0.5rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '0.25rem',
+                    transition: 'all 0.2s ease'
+                  }}
                 >
-                  <div className="send-fee-title">Fast</div>
-                  <div className="send-fee-rate">{Number(sendEstimatedFees[2])} sat/VB</div>
-                  <div className="send-fee-time">~ 10 mins</div>
+                  <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#fff' }}>Fast</div>
+                  <div style={{ fontSize: '0.75rem', fontWeight: '600', color: sendFeeOption === 'fast' ? 'rgba(255, 255, 255, 0.9)' : 'rgba(255, 255, 255, 0.7)' }}>{Number(sendEstimatedFees[2])} sat/VB</div>
+                  <div style={{ fontSize: '0.65rem', color: sendFeeOption === 'fast' ? 'rgba(255, 255, 255, 0.7)' : 'rgba(255, 255, 255, 0.5)' }}>~ 10 mins</div>
                 </button>
+
+                {/* Custom */}
                 <button
-                  className={`send-fee-btn ${sendFeeOption === 'custom' ? 'active' : ''}`}
                   onClick={() => setSendFeeOption('custom')}
+                  style={{
+                    background: sendFeeOption === 'custom' ? '#f7931a' : 'rgba(255, 255, 255, 0.08)',
+                    border: sendFeeOption === 'custom' ? '1px solid #f7931a' : '1px solid rgba(255, 255, 255, 0.1)',
+                    borderRadius: '12px',
+                    padding: '0.75rem 0.5rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.2s ease'
+                  }}
                 >
-                  <div className="send-fee-title">Custom</div>
+                  <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#fff' }}>Custom</div>
                 </button>
               </div>
             </div>
+          </div>
 
+          {/* Next Button */}
+          <div style={{ padding: '1rem' }}>
             <button
-              className="send-next-btn"
               disabled={!sendAmount || parseFloat(sendAmount) === 0}
               onClick={handleSendNext}
+              style={{
+                width: '100%',
+                padding: '1rem',
+                background: (!sendAmount || parseFloat(sendAmount) === 0) ? 'rgba(247, 147, 26, 0.5)' : 'linear-gradient(135deg, #f7931a 0%, #e67e00 100%)',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '50px',
+                fontSize: '1rem',
+                fontWeight: '700',
+                cursor: (!sendAmount || parseFloat(sendAmount) === 0) ? 'not-allowed' : 'pointer',
+                transition: 'all 0.3s ease',
+                opacity: (!sendAmount || parseFloat(sendAmount) === 0) ? 0.6 : 1
+              }}
             >
               Next
             </button>
@@ -3154,7 +3347,7 @@ function App() {
               </div>
             </div>
 
-            <div className="send-input-group">
+            <div className="send-input-group" style={{ marginTop: '-25px' }}>
               <label className="send-label">Network Fee</label>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem', backgroundColor: '#1f2937', borderRadius: '8px', border: '1px solid #374151' }}>
                 <span style={{ fontSize: '1rem', fontWeight: '500', color: '#f3f4f6' }}>{sendNetworkFee}</span>
@@ -3162,7 +3355,7 @@ function App() {
               </div>
             </div>
 
-            <div className="send-input-group" style={{ marginTop: '1rem' }}>
+            <div className="send-input-group" style={{ marginTop: '-10px' }}>
               <label className="send-label">Network Fee Rate</label>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem', backgroundColor: '#1f2937', borderRadius: '8px', border: '1px solid #374151' }}>
                 <span style={{ fontSize: '1rem', fontWeight: '500', color: '#f3f4f6' }}>
@@ -3184,7 +3377,7 @@ function App() {
               className="send-next-btn"
               onClick={handleSendBitcoin}
               disabled={sendProcessing}
-              style={{ marginTop: '2rem', backgroundColor: '#ff6b2c' }}
+              style={{ marginTop: 'calc(2rem - 35px)', backgroundColor: '#ff6b2c' }}
             >
               {sendProcessing ? 'Sending...' : 'Sign & Pay'}
             </button>

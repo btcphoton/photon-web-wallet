@@ -57,6 +57,10 @@ interface StorageData {
     addressGenerationMethod?: 'icp' | 'bitcoin'
     // Auto-Lock Timer setting (in minutes)
     AutoLockTimer?: number
+    // Login timestamp for auto-login feature
+    LoginTime?: number
+    // Cached wallet balance
+    walletBalance?: string
 }
 
 // Check if chrome.storage is actually available and functional
