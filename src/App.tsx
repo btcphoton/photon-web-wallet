@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import './App.css'
 import { generateMnemonic, deriveIdentity, validateMnemonic } from './utils/crypto'
 import { getBtcAddress, getWalletAddress, getWalletBalance, updateBalance, mapNetworkToCanister, getUtxos, getEstimatedBitcoinFees, sendBitcoin, type Utxo } from './utils/icp'
@@ -6,14 +6,14 @@ import { deriveBitcoinAddress } from './utils/bitcoin-address'
 import { signAndBroadcastTransaction, broadcastTransaction, fetchUTXOsFromBlockchain } from './utils/bitcoin-transactions'
 import { getCkBTCBalance } from './utils/icrc1'
 import { convertLBTCtoBTC } from './utils/ckbtc-withdrawal'
-import { getStorageData, setStorageData, removeStorageData, getNetworkAddressKey, getNetworkAssetsKey, testnet3DefaultAssets, mainnetDefaultAssets, DEFAULT_MAINNET_CANISTER, DEFAULT_TESTNET_CANISTER } from './utils/storage'
+import { getStorageData, setStorageData, removeStorageData, getNetworkAddressKey, getNetworkAssetsKey, testnet3DefaultAssets, mainnetDefaultAssets } from './utils/storage'
 import type { Asset } from './utils/storage'
 import { QRCodeSVG } from 'qrcode.react'
 import { generateRgbInvoice, notifyRgbProxy, isValidRgbProxyUrl } from './utils/rgb-invoice'
 import { LightningAnimation } from './components/LightningAnimation'
 
 
-type View = 'welcome' | 'unlock' | 'lock' | 'forgot' | 'create' | 'verify' | 'password' | 'restore' | 'dashboard' | 'receive' | 'receive-btc' | 'receive-rgb' | 'convert-lightning' | 'add-assets' | 'settings' | 'network-settings' | 'swap' | 'send' | 'send-amount' | 'send-confirm' | 'send-success' | 'utxos'
+type View = 'welcome' | 'unlock' | 'lock' | 'forgot' | 'create' | 'verify' | 'password' | 'restore' | 'dashboard' | 'receive' | 'receive-btc' | 'receive-rgb' | 'convert-lightning' | 'add-assets' | 'settings' | 'user-settings' | 'auto-lock-settings' | 'network-settings' | 'swap' | 'send' | 'send-amount' | 'send-confirm' | 'send-success' | 'utxos'
 type Tab = 'assets' | 'activities'
 type Network = 'mainnet' | 'testnet3' | 'testnet4' | 'regtest'
 
@@ -153,13 +153,24 @@ function App() {
   const [sendProcessing, setSendProcessing] = useState<boolean>(false)
   const [sendError, setSendError] = useState<string>('')
 
-  // UTXOs State
-  const [utxosTab, setUtxosTab] = useState<'occupied' | 'unoccupied' | 'unlockable'>('unoccupied')
+  // UTXOs states
+  const [loadingUtxos, setLoadingUtxos] = useState<boolean>(false)
   const [bitcoinUtxos, setBitcoinUtxos] = useState<Utxo[]>([])
-  const [rgbUtxos, setRgbUtxos] = useState<any[]>([])
-  const [loadingUtxos, setLoadingUtxos] = useState(false)
+  const [rgbUtxos, setRgbUtxos] = useState<Utxo[]>([])
+  const [utxoTab, setUtxoTab] = useState<'unoccupied' | 'occupied' | 'unlockable'>('unoccupied')
 
+  // User Settings states
+  const [autoLockTimer, setAutoLockTimer] = useState<string>('15 minutes')
+  const [autoLockMinutes, setAutoLockMinutes] = useState<number>(15)
+  const [colorMode, _setColorMode] = useState<string>('Dark Mode')
 
+  // Inactivity tracking for auto-lock
+  const [lastActivityTimestamp, setLastActivityTimestamp] = useState<number>(Date.now())
+  const autoLockIntervalRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Default canisters - these can be overridden by user settings
+  const DEFAULT_MAINNET_CANISTER = import.meta.env.VITE_CANISTER_ID || 'bkyz2-fmaaa-aaaaa-qaaaq-cai'
+  const DEFAULT_TESTNET_CANISTER = import.meta.env.VITE_TESTNET_CANISTER_ID || 'bkyz2-fmaaa-aaaaa-qaaaq-cai'
 
   // Truncate address for display
   const truncateAddress = (addr: string) => {
@@ -288,7 +299,8 @@ function App() {
           'btcAddress_mainnet', 'btcAddress_testnet3', 'btcAddress_testnet4', 'btcAddress_regtest',
           'walletAddress_mainnet', 'walletAddress_testnet3', 'walletAddress_testnet4', 'walletAddress_regtest',
           'lightningAddress_mainnet', 'lightningAddress_testnet3', 'lightningAddress_testnet4', 'lightningAddress_regtest',
-          'addressGenerationMethod' // Load address generation method
+          'addressGenerationMethod', // Load address generation method
+          'AutoLockTimer' // Load auto-lock timer setting
         ])
         console.log('Storage check result:', result)
 
@@ -312,6 +324,13 @@ function App() {
           // Load address generation method (default to 'icp' for backward compatibility)
           if (result.addressGenerationMethod) {
             setAddressGenerationMethod(result.addressGenerationMethod as 'icp' | 'bitcoin')
+          }
+
+          // Load auto-lock timer setting (default to 15 minutes)
+          if (result.AutoLockTimer) {
+            const minutes = Number(result.AutoLockTimer)
+            setAutoLockMinutes(minutes)
+            setAutoLockTimer(`${minutes} minutes`)
           }
 
           console.log('Wallet found, showing unlock screen')
@@ -459,6 +478,18 @@ function App() {
     setVerifyWords([])
     setSelectedNetwork('mainnet')
     setView('welcome')
+  }
+
+  // Handle auto-lock timer selection
+  const handleSelectAutoLockTimer = async (minutes: number) => {
+    setAutoLockMinutes(minutes)
+    setAutoLockTimer(`${minutes} minutes`)
+
+    // Save to storage
+    await setStorageData({ AutoLockTimer: minutes })
+
+    // Navigate back to user settings
+    setView('user-settings')
   }
 
   // Load assets for a specific network
@@ -918,6 +949,59 @@ function App() {
     }
     loadCanisterSettings()
   }, [view])
+
+  // Inactivity tracking for auto-lock
+  useEffect(() => {
+    // Only track inactivity when on dashboard or other wallet screens (not on unlock/lock/welcome screens)
+    const trackableViews = ['dashboard', 'receive', 'receive-btc', 'receive-rgb', 'convert-lightning', 'send', 'send-amount', 'send-confirm', 'settings', 'user-settings', 'auto-lock-settings', 'network-settings', 'add-assets', 'swap', 'utxos']
+
+    if (!trackableViews.includes(view)) {
+      // Clean up interval if navigating away from trackable views
+      if (autoLockIntervalRef.current) {
+        clearInterval(autoLockIntervalRef.current)
+        autoLockIntervalRef.current = null
+      }
+      return
+    }
+
+    // Reset activity timestamp on any user interaction
+    const resetActivity = () => {
+      setLastActivityTimestamp(Date.now())
+    }
+
+    // Add event listeners for user activity
+    window.addEventListener('click', resetActivity)
+    window.addEventListener('mousemove', resetActivity)
+    window.addEventListener('keydown', resetActivity)
+
+    // Set up interval to check for inactivity (every 30 seconds)
+    const checkInactivity = () => {
+      const now = Date.now()
+      const inactiveTime = now - lastActivityTimestamp
+      const inactiveMinutes = inactiveTime / (1000 * 60)
+
+      // Lock if inactive time exceeds the configured auto-lock timer
+      if (inactiveMinutes >= autoLockMinutes) {
+        console.log(`Auto-locking after ${inactiveMinutes.toFixed(2)} minutes of inactivity`)
+        setView('lock')
+      }
+    }
+
+    // Start the interval checker
+    autoLockIntervalRef.current = setInterval(checkInactivity, 30000) // Check every 30 seconds
+
+    // Cleanup on unmount or view change
+    return () => {
+      window.removeEventListener('click', resetActivity)
+      window.removeEventListener('mousemove', resetActivity)
+      window.removeEventListener('keydown', resetActivity)
+
+      if (autoLockIntervalRef.current) {
+        clearInterval(autoLockIntervalRef.current)
+        autoLockIntervalRef.current = null
+      }
+    }
+  }, [view, lastActivityTimestamp, autoLockMinutes])
 
   // Load user balance when swap view opens
   useEffect(() => {
@@ -1766,9 +1850,17 @@ function App() {
               </div>
               <div className="menu-item" onClick={() => {
                 setShowMenu(false)
-                setView('settings')
+                setView('user-settings')
               }}>
                 <span className="menu-icon">⚙</span>
+                <span>Settings</span>
+                <span className="menu-arrow">›</span>
+              </div>
+              <div className="menu-item" onClick={() => {
+                setShowMenu(false)
+                setView('settings')
+              }}>
+                <span className="menu-icon">🔧</span>
                 <span>Admin</span>
                 <span className="menu-arrow">›</span>
               </div>
@@ -2532,7 +2624,153 @@ function App() {
         </div>
       )}
 
+      {/* User Settings Screen */}
+      {view === 'user-settings' && (
+        <div className="settings-container">
+          <div className="password-header">
+            <button className="back-arrow" onClick={() => setView('dashboard')}>←</button>
+            <h2 className="card-title">Settings</h2>
+          </div>
+
+          <div className="settings-content" style={{ padding: '1rem 0' }}>
+            {/* Auto-Lock Timer */}
+            <div
+              className="settings-menu-item"
+              onClick={() => {
+                setView('auto-lock-settings')
+              }}
+              style={{
+                background: 'rgba(255, 255, 255, 0.05)',
+                borderRadius: '12px',
+                padding: '1rem',
+                marginBottom: '0.75rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                cursor: 'pointer',
+                transition: 'background 0.2s ease'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <span style={{ fontSize: '1.25rem' }}>🕐</span>
+                <span style={{ fontWeight: '600', color: '#fff' }}>Auto-Lock Timer</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.9rem' }}>{autoLockTimer}</span>
+                <span style={{ color: 'rgba(255, 255, 255, 0.4)' }}>›</span>
+              </div>
+            </div>
+
+            {/* Color Mode */}
+            <div
+              className="settings-menu-item"
+              onClick={() => {
+                // Placeholder for future functionality
+                console.log('Color Mode clicked')
+              }}
+              style={{
+                background: 'rgba(255, 255, 255, 0.05)',
+                borderRadius: '12px',
+                padding: '1rem',
+                marginBottom: '0.75rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                cursor: 'pointer',
+                transition: 'background 0.2s ease'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <span style={{ fontSize: '1.25rem' }}>🌙</span>
+                <span style={{ fontWeight: '600', color: '#fff' }}>Color Mode</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.9rem' }}>{colorMode}</span>
+                <span style={{ color: 'rgba(255, 255, 255, 0.4)' }}>›</span>
+              </div>
+            </div>
+
+            {/* Advanced Setting */}
+            <div
+              className="settings-menu-item"
+              onClick={() => {
+                // Navigate to admin settings
+                setView('settings')
+              }}
+              style={{
+                background: 'rgba(255, 255, 255, 0.05)',
+                borderRadius: '12px',
+                padding: '1rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                cursor: 'pointer',
+                transition: 'background 0.2s ease'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <span style={{ fontSize: '1.25rem' }}>🔧</span>
+                <span style={{ fontWeight: '600', color: '#fff' }}>Advanced Setting</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={{ color: 'rgba(255, 255, 255, 0.4)' }}>›</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Auto-Lock Settings Screen */}
+      {view === 'auto-lock-settings' && (
+        <div className="settings-container">
+          <div className="password-header">
+            <button className="back-arrow" onClick={() => setView('user-settings')}>←</button>
+            <h2 className="card-title">Auto-lock Timer</h2>
+          </div>
+
+          <div className="settings-content" style={{ padding: '1rem 0' }}>
+            {/* Timer options */}
+            {[
+              { label: '1 minutes', value: 1 },
+              { label: '5 minutes', value: 5 },
+              { label: '15 minutes', value: 15 },
+              { label: '30 minutes', value: 30 }
+            ].map((option) => (
+              <div
+                key={option.value}
+                onClick={() => handleSelectAutoLockTimer(option.value)}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  borderRadius: '12px',
+                  padding: '1rem',
+                  marginBottom: '0.75rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  cursor: 'pointer',
+                  transition: 'background 0.2s ease'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'}
+                onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'}
+              >
+                <span style={{ fontWeight: '600', color: '#fff' }}>{option.label}</span>
+                {autoLockMinutes === option.value && (
+                  <span style={{ color: '#f7931a', fontSize: '1.2rem' }}>✓</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Network Settings Screen */}
+
       {view === 'network-settings' && (
         <div className="settings-container">
           <div className="password-header">
@@ -3055,9 +3293,9 @@ function App() {
           </div>
 
           <div className="utxos-tabs" style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', borderBottom: '1px solid rgba(255, 255, 255, 0.1)', paddingBottom: '0.5rem' }}>
-            <button onClick={() => setUtxosTab('unoccupied')} style={{ background: utxosTab === 'unoccupied' ? 'rgba(247, 147, 26, 0.2)' : 'transparent', color: utxosTab === 'unoccupied' ? '#f7931a' : 'rgba(255, 255, 255, 0.6)', border: 'none', padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem', transition: 'all 0.2s ease' }}>Unoccupied</button>
-            <button onClick={() => setUtxosTab('occupied')} style={{ background: utxosTab === 'occupied' ? 'rgba(247, 147, 26, 0.2)' : 'transparent', color: utxosTab === 'occupied' ? '#f7931a' : 'rgba(255, 255, 255, 0.6)', border: 'none', padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem', transition: 'all 0.2s ease' }}>Occupied</button>
-            <button onClick={() => setUtxosTab('unlockable')} style={{ background: utxosTab === 'unlockable' ? 'rgba(247, 147, 26, 0.2)' : 'transparent', color: utxosTab === 'unlockable' ? '#f7931a' : 'rgba(255, 255, 255, 0.6)', border: 'none', padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem', transition: 'all 0.2s ease' }}>Unlockable</button>
+            <button onClick={() => setUtxoTab('unoccupied')} style={{ background: utxoTab === 'unoccupied' ? 'rgba(247, 147, 26, 0.2)' : 'transparent', color: utxoTab === 'unoccupied' ? '#f7931a' : 'rgba(255, 255, 255, 0.6)', border: 'none', padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem', transition: 'all 0.2s ease' }}>Unoccupied</button>
+            <button onClick={() => setUtxoTab('occupied')} style={{ background: utxoTab === 'occupied' ? 'rgba(247, 147, 26, 0.2)' : 'transparent', color: utxoTab === 'occupied' ? '#f7931a' : 'rgba(255, 255, 255, 0.6)', border: 'none', padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem', transition: 'all 0.2s ease' }}>Occupied</button>
+            <button onClick={() => setUtxoTab('unlockable')} style={{ background: utxoTab === 'unlockable' ? 'rgba(247, 147, 26, 0.2)' : 'transparent', color: utxoTab === 'unlockable' ? '#f7931a' : 'rgba(255, 255, 255, 0.6)', border: 'none', padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem', transition: 'all 0.2s ease' }}>Unlockable</button>
           </div>
 
           <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
@@ -3065,7 +3303,7 @@ function App() {
               <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '3rem', color: 'rgba(255, 255, 255, 0.5)' }}>Loading UTXOs...</div>
             ) : (
               <>
-                {utxosTab === 'unoccupied' && (
+                {utxoTab === 'unoccupied' && (
                   <>
                     {bitcoinUtxos.length === 0 ? (
                       <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'rgba(255, 255, 255, 0.4)' }}>
@@ -3091,7 +3329,7 @@ function App() {
                   </>
                 )}
 
-                {utxosTab === 'occupied' && (
+                {utxoTab === 'occupied' && (
                   <>
                     {rgbUtxos.length === 0 ? (
                       <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'rgba(255, 255, 255, 0.4)' }}>
@@ -3105,7 +3343,7 @@ function App() {
                   </>
                 )}
 
-                {utxosTab === 'unlockable' && (
+                {utxoTab === 'unlockable' && (
                   <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'rgba(255, 255, 255, 0.4)' }}>
                     <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔓</div>
                     <p>No Unlockable UTXOs</p>

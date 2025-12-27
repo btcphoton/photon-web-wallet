@@ -55,6 +55,8 @@ interface StorageData {
     rgbContracts_regtest?: string
     // Bitcoin Address Generation Method
     addressGenerationMethod?: 'icp' | 'bitcoin'
+    // Auto-Lock Timer setting (in minutes)
+    AutoLockTimer?: number
 }
 
 // Check if chrome.storage is actually available and functional
@@ -104,7 +106,7 @@ export const setStorageData = (data: Partial<StorageData>): Promise<void> => {
             // Fallback to localStorage
             Object.entries(data).forEach(([key, value]) => {
                 if (value !== undefined) {
-                    localStorage.setItem(`photon_${key}`, value)
+                    localStorage.setItem(`photon_${key}`, String(value))
                 }
             })
             resolve()
