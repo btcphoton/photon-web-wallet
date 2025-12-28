@@ -3493,7 +3493,7 @@ function App() {
 
           <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
             {loadingUtxos ? (
-              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '3rem', color: 'rgba(255, 255, 255, 0.5)' }}>Loading UTXOs...</div>
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '3rem', color: 'rgba(255, 255, 255, 0.5)' }}>Loading RGB UTXOs...</div>
             ) : (
               <>
                 {utxoTab === 'unoccupied' && (
@@ -3501,18 +3501,22 @@ function App() {
                     {bitcoinUtxos.length === 0 ? (
                       <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'rgba(255, 255, 255, 0.4)' }}>
                         <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📦</div>
-                        <p>No Data Available</p>
+                        <p style={{ fontWeight: 600, marginBottom: '0.5rem' }}>No Unoccupied UTXOs</p>
+                        <p style={{ fontSize: '0.85rem', marginTop: '0.5rem', color: 'rgba(255, 255, 255, 0.3)' }}>Bitcoin UTXOs available for RGB asset binding will appear here</p>
                       </div>
                     ) : (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                        <div style={{ padding: '0.75rem 1rem', background: 'rgba(59, 130, 246, 0.1)', borderRadius: '8px', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+                          <div style={{ fontSize: '0.85rem', color: 'rgba(59, 130, 246, 0.9)' }}>💡 These Bitcoin UTXOs are available for RGB asset binding</div>
+                        </div>
                         {bitcoinUtxos.map((utxo) => (
                           <div key={`${utxo.txid}:${utxo.vout}`} style={{ background: 'rgba(255, 255, 255, 0.04)', borderRadius: '12px', padding: '1rem', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
                             <div style={{ marginBottom: '0.75rem' }}>
                               <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.85rem' }}>Output</span>
-                              <div style={{ color: '#fff', fontSize: '0.95rem', marginTop: '0.25rem' }}>{utxo.txid.slice(0, 12)}...{utxo.txid.slice(-8)}:{utxo.vout}</div>
+                              <div style={{ color: '#fff', fontSize: '0.95rem', marginTop: '0.25rem', fontFamily: 'monospace' }}>{utxo.txid.slice(0, 12)}...{utxo.txid.slice(-8)}:{utxo.vout}</div>
                             </div>
                             <div>
-                              <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.85rem' }}>Available UTXO balance</span>
+                              <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.85rem' }}>Available for RGB Binding</span>
                               <div style={{ color: '#fff', fontSize: '0.95rem', marginTop: '0.25rem', fontWeight: 600 }}>{(Number(utxo.value) / 100000000).toFixed(8)} BTC</div>
                             </div>
                           </div>
@@ -3526,12 +3530,28 @@ function App() {
                   <>
                     {rgbUtxos.length === 0 ? (
                       <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'rgba(255, 255, 255, 0.4)' }}>
-                        <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📦</div>
-                        <p>No RGB UTXOs Available</p>
-                        <p style={{ fontSize: '0.85rem', marginTop: '0.5rem' }}>RGB UTXOs will appear here when assets are bound</p>
+                        <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🎨</div>
+                        <p style={{ fontWeight: 600, marginBottom: '0.5rem' }}>No Occupied UTXOs</p>
+                        <p style={{ fontSize: '0.85rem', marginTop: '0.5rem', color: 'rgba(255, 255, 255, 0.3)' }}>UTXOs with RGB assets bound to them will appear here</p>
                       </div>
                     ) : (
-                      <div>RGB UTXOs: {rgbUtxos.length}</div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                        <div style={{ padding: '0.75rem 1rem', background: 'rgba(168, 85, 247, 0.1)', borderRadius: '8px', border: '1px solid rgba(168, 85, 247, 0.2)' }}>
+                          <div style={{ fontSize: '0.85rem', color: 'rgba(168, 85, 247, 0.9)' }}>🎨 These UTXOs have RGB assets bound to them</div>
+                        </div>
+                        {rgbUtxos.map((_, index) => (
+                          <div key={index} style={{ background: 'rgba(255, 255, 255, 0.04)', borderRadius: '12px', padding: '1rem', border: '1px solid rgba(168, 85, 247, 0.2)' }}>
+                            <div style={{ marginBottom: '0.75rem' }}>
+                              <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.85rem' }}>RGB UTXO</span>
+                              <div style={{ color: '#fff', fontSize: '0.95rem', marginTop: '0.25rem', fontFamily: 'monospace' }}>Output #{index + 1}</div>
+                            </div>
+                            <div>
+                              <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.85rem' }}>Status</span>
+                              <div style={{ color: 'rgba(168, 85, 247, 0.9)', fontSize: '0.95rem', marginTop: '0.25rem', fontWeight: 600 }}>Occupied with RGB Assets</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </>
                 )}
@@ -3539,7 +3559,8 @@ function App() {
                 {utxoTab === 'unlockable' && (
                   <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'rgba(255, 255, 255, 0.4)' }}>
                     <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔓</div>
-                    <p>No Unlockable UTXOs</p>
+                    <p style={{ fontWeight: 600, marginBottom: '0.5rem' }}>No Unlockable UTXOs</p>
+                    <p style={{ fontSize: '0.85rem', marginTop: '0.5rem', color: 'rgba(255, 255, 255, 0.3)' }}>UTXOs that can be unlocked for spending will appear here</p>
                   </div>
                 )}
               </>
