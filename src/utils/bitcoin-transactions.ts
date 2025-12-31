@@ -17,6 +17,7 @@ export interface UTXO {
     txid: string;
     vout: number;
     value: number; // satoshis
+    addressSource?: 'main' | 'utxo-holder' | 'dust-holder'; // Track which address this UTXO came from
 }
 
 /**
@@ -48,6 +49,41 @@ export const fetchUTXOsFromBlockchain = async (
         vout: utxo.vout,
         value: utxo.value
     }));
+};
+
+/**
+ * Fetch UTXOs from all three wallet addresses (Main, UTXO Holder, Dust Holder)
+ * 
+ * @param mainAddress - Main address (chain 0)
+ * @param utxoHolderAddress - UTXO Holder address (chain 100)
+ * @param dustHolderAddress - Dust Holder address (chain 999)
+ * @param network - Bitcoin network
+ * @returns Combined array of UTXOs from all addresses with source tracking
+ */
+export const fetchUTXOsFromAllAddresses = async (
+    mainAddress: string,
+    utxoHolderAddress: string,
+    dustHolderAddress: string,
+    network: 'mainnet' | 'testnet3' | 'testnet4' | 'regtest' = 'mainnet'
+): Promise<UTXO[]> => {
+    console.log('[Multi-Address] Fetching UTXOs from all three addresses...');
+
+    // Fetch UTXOs from all three addresses in parallel
+    const [mainUtxos, utxoHolderUtxos, dustHolderUtxos] = await Promise.all([
+        fetchUTXOsFromBlockchain(mainAddress, network),
+        fetchUTXOsFromBlockchain(utxoHolderAddress, network),
+        fetchUTXOsFromBlockchain(dustHolderAddress, network)
+    ]);
+
+    // Tag UTXOs with their source address
+    const taggedMainUtxos = mainUtxos.map(utxo => ({ ...utxo, addressSource: 'main' as const }));
+    const taggedUtxoHolderUtxos = utxoHolderUtxos.map(utxo => ({ ...utxo, addressSource: 'utxo-holder' as const }));
+    const taggedDustHolderUtxos = dustHolderUtxos.map(utxo => ({ ...utxo, addressSource: 'dust-holder' as const }));
+
+    console.log(`[Multi-Address] Found ${mainUtxos.length} UTXOs in Main, ${utxoHolderUtxos.length} in UTXO Holder, ${dustHolderUtxos.length} in Dust Holder`);
+
+    // Combine all UTXOs
+    return [...taggedMainUtxos, ...taggedUtxoHolderUtxos, ...taggedDustHolderUtxos];
 };
 
 /**

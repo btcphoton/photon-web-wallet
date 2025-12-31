@@ -34,6 +34,22 @@ interface StorageData {
     walletAddress_testnet3?: string
     walletAddress_testnet4?: string
     walletAddress_regtest?: string
+    // Multi-address wallet structure (per network)
+    // MainBalance - receives Bitcoin from outside (index 0)
+    MainBalance_mainnet?: string
+    MainBalance_testnet3?: string
+    MainBalance_testnet4?: string
+    MainBalance_regtest?: string
+    // UTXOHolder - holds UTXOs for RGB assets (index 1)
+    UTXOHolder_mainnet?: string
+    UTXOHolder_testnet3?: string
+    UTXOHolder_testnet4?: string
+    UTXOHolder_regtest?: string
+    // DustHolder - holds dust to protect RGB UTXOs (index 2)
+    DustHolder_mainnet?: string
+    DustHolder_testnet3?: string
+    DustHolder_testnet4?: string
+    DustHolder_regtest?: string
     // Per-network lightning addresses
     lightningAddress_mainnet?: string
     lightningAddress_testnet3?: string

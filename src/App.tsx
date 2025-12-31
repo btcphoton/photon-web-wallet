@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
 import './App.css'
 import { generateMnemonic, deriveIdentity, validateMnemonic } from './utils/crypto'
-import { getBtcAddress, getWalletAddress, getWalletBalance, updateBalance, mapNetworkToCanister, getUtxos, getEstimatedBitcoinFees, sendBitcoin, type Utxo } from './utils/icp'
+import { getBtcAddress, getWalletAddress, getWalletBalance, updateBalance, mapNetworkToCanister, getUtxos, getEstimatedBitcoinFees, sendBitcoin } from './utils/icp'
 import { deriveBitcoinAddress } from './utils/bitcoin-address'
-import { signAndBroadcastTransaction, broadcastTransaction, fetchUTXOsFromBlockchain } from './utils/bitcoin-transactions'
+import { signAndBroadcastTransaction, broadcastTransaction, fetchUTXOsFromBlockchain, fetchUTXOsFromAllAddresses } from './utils/bitcoin-transactions'
+import type { UtxoWithRgbStatus } from './utils/rgb'
+import { fetchRgbOccupiedUtxos } from './utils/rgb-fetcher'
 import { getCkBTCBalance } from './utils/icrc1'
 import { convertLBTCtoBTC } from './utils/ckbtc-withdrawal'
 import { getStorageData, setStorageData, removeStorageData, getNetworkAddressKey, getNetworkAssetsKey, testnet3DefaultAssets, mainnetDefaultAssets } from './utils/storage'
@@ -11,9 +13,10 @@ import type { Asset } from './utils/storage'
 import { QRCodeSVG } from 'qrcode.react'
 import { generateRgbInvoice, notifyRgbProxy, isValidRgbProxyUrl } from './utils/rgb-invoice'
 import { LightningAnimation } from './components/LightningAnimation'
+import { fetchBtcActivities, type BitcoinActivity } from './utils/bitcoin-activities'
 
 
-type View = 'welcome' | 'unlock' | 'lock' | 'forgot' | 'create' | 'verify' | 'password' | 'restore' | 'dashboard' | 'receive' | 'receive-btc' | 'receive-rgb' | 'convert-lightning' | 'add-assets' | 'settings' | 'user-settings' | 'auto-lock-settings' | 'network-settings' | 'swap' | 'send' | 'send-amount' | 'send-confirm' | 'send-success' | 'utxos'
+type View = 'welcome' | 'unlock' | 'lock' | 'forgot' | 'create' | 'verify' | 'password' | 'restore' | 'dashboard' | 'receive' | 'receive-btc' | 'receive-rgb' | 'convert-lightning' | 'add-assets' | 'settings' | 'user-settings' | 'auto-lock-settings' | 'network-settings' | 'swap' | 'send' | 'send-amount' | 'send-confirm' | 'send-success' | 'utxos' | 'create-rgb-utxo' | 'create-utxo-confirm' | 'faucet'
 type Tab = 'assets' | 'activities'
 type Network = 'mainnet' | 'testnet3' | 'testnet4' | 'regtest'
 
@@ -109,6 +112,10 @@ function App() {
   // Network-specific assets
   const [assets, setAssets] = useState<Asset[]>([])
 
+  // Bitcoin activities state
+  const [activities, setActivities] = useState<BitcoinActivity[]>([])
+  const [loadingActivities, setLoadingActivities] = useState<boolean>(false)
+
   // Add asset state
   const [tokenInput, setTokenInput] = useState<string>('')
 
@@ -126,6 +133,11 @@ function App() {
 
   // Address generation method state (default to 'bitcoin')
   const [addressGenerationMethod, setAddressGenerationMethod] = useState<'icp' | 'bitcoin'>('bitcoin')
+
+  // Multi-address wallet structure states
+  const [mainBalanceAddress, setMainBalanceAddress] = useState<string>('')
+  const [utxoHolderAddress, setUtxoHolderAddress] = useState<string>('')
+  const [dustHolderAddress, setDustHolderAddress] = useState<string>('')
 
   // Network settings states with defaults
   const [electrumServer, setElectrumServer] = useState<string>('89.117.52.115:50002')
@@ -153,11 +165,20 @@ function App() {
   const [sendProcessing, setSendProcessing] = useState<boolean>(false)
   const [sendError, setSendError] = useState<string>('')
 
+
   // UTXOs states
   const [loadingUtxos, setLoadingUtxos] = useState<boolean>(false)
-  const [bitcoinUtxos, setBitcoinUtxos] = useState<Utxo[]>([])
-  const [rgbUtxos, setRgbUtxos] = useState<Utxo[]>([])
+  const [bitcoinUtxos, setBitcoinUtxos] = useState<UtxoWithRgbStatus[]>([])
+  const [rgbUtxos, setRgbUtxos] = useState<UtxoWithRgbStatus[]>([])
   const [utxoTab, setUtxoTab] = useState<'unoccupied' | 'occupied' | 'unlockable'>('unoccupied')
+  const [rgbClassificationError, setRgbClassificationError] = useState<string>('')
+
+  // Create RGB UTXO states
+  const [createUtxoMode, setCreateUtxoMode] = useState<'default' | 'custom'>('default')
+  const [createUtxoAmount, setCreateUtxoAmount] = useState<string>('')
+  const [createUtxoFeeOption, setCreateUtxoFeeOption] = useState<'slow' | 'avg' | 'fast' | 'custom'>('fast')
+  const [createUtxoCustomFee, setCreateUtxoCustomFee] = useState<string>('2')
+
 
   // User Settings states
   const [autoLockTimer, setAutoLockTimer] = useState<string>('15 minutes')
@@ -239,14 +260,24 @@ function App() {
       const canisterNetwork = mapNetworkToCanister(network)
       let walletAddr: string
       let lightningAddr: string
+      let mainBalanceAddr: string
+      let utxoHolderAddr: string
+      let dustHolderAddr: string
 
       // Check which address generation method to use
       if (addressGenerationMethod === 'bitcoin') {
-        // Generate Bitcoin address locally from mnemonic
-        walletAddr = await deriveBitcoinAddress(mnemonicPhrase, network)
+        // Generate Bitcoin addresses locally from mnemonic (3 addresses with different indices)
+        walletAddr = await deriveBitcoinAddress(mnemonicPhrase, network, 0, 0, 0)      // Main address (chain 0)
+        mainBalanceAddr = await deriveBitcoinAddress(mnemonicPhrase, network, 0, 0, 0) // MainBalance (chain 0, index 0)
+        utxoHolderAddr = await deriveBitcoinAddress(mnemonicPhrase, network, 0, 100, 0) // UTXOHolder (chain 100, index 0)
+        dustHolderAddr = await deriveBitcoinAddress(mnemonicPhrase, network, 0, 999, 0) // DustHolder (chain 999, index 0)
+
         // For Bitcoin method, use the same address for lightning (or generate a second one if needed)
         lightningAddr = walletAddr
-        console.log(`Generated Bitcoin address locally for ${network}:`, walletAddr)
+        console.log(`Generated Bitcoin addresses locally for ${network}:`)
+        console.log(`  MainBalance: ${mainBalanceAddr} (chain 0)`)
+        console.log(`  UTXOHolder:  ${utxoHolderAddr} (chain 100)`)
+        console.log(`  DustHolder:  ${dustHolderAddr} (chain 999)`)
       } else {
         // Fetch addresses from ICP canister (default/existing behavior)
         const [canisterWalletAddr, canisterLightningAddr] = await Promise.all([
@@ -255,6 +286,10 @@ function App() {
         ])
         walletAddr = canisterWalletAddr
         lightningAddr = canisterLightningAddr
+        // For ICP method, use the same main address for all three
+        mainBalanceAddr = walletAddr
+        utxoHolderAddr = walletAddr
+        dustHolderAddr = walletAddr
         console.log(`Fetched addresses from canister for ${network}:`, walletAddr)
       }
 
@@ -263,7 +298,7 @@ function App() {
       setLightningAddress(lightningAddr)
       setBtcAddress(walletAddr) // For backward compatibility, use wallet address
 
-      // Save both to network-specific storage
+      // Save all addresses to network-specific storage
       const addressKey = getNetworkAddressKey(network)
       await setStorageData({
         [addressKey]: walletAddr, // Network-specific wallet address
@@ -271,7 +306,11 @@ function App() {
         walletAddress: walletAddr, // Main wallet address
         lightningAddress: lightningAddr, // Lightning/ckBTC address
         [`walletAddress_${network}`]: walletAddr,
-        [`lightningAddress_${network}`]: lightningAddr
+        [`lightningAddress_${network}`]: lightningAddr,
+        // Store the three addresses for RGB wallet structure
+        [`MainBalance_${network}`]: mainBalanceAddr,
+        [`UTXOHolder_${network}`]: utxoHolderAddr,
+        [`DustHolder_${network}`]: dustHolderAddr
       })
 
       console.log(`Wallet address for ${network}:`, walletAddr)
@@ -637,6 +676,28 @@ function App() {
       console.log('Cleared assets for', network)
     }
   }
+
+  // Load activities for current address
+  const loadActivities = async () => {
+    if (!walletAddress) {
+      setActivities([])
+      return
+    }
+
+    setLoadingActivities(true)
+    try {
+      console.log('Fetching activities for address:', walletAddress, 'on network:', selectedNetwork)
+      const btcActivities = await fetchBtcActivities(walletAddress, selectedNetwork)
+      setActivities(btcActivities)
+      console.log(`Loaded ${btcActivities.length} activities`)
+    } catch (error) {
+      console.error('Error loading activities:', error)
+      setActivities([])
+    } finally {
+      setLoadingActivities(false)
+    }
+  }
+
 
   // Handle network switch
   const handleNetworkSwitch = async (network: Network) => {
@@ -1018,13 +1079,24 @@ function App() {
   useEffect(() => {
     const loadCanisterSettings = async () => {
       if (view === 'settings') {
-        const result = await getStorageData(['mainnetCanisterId', 'testnetCanisterId'])
+        const result = await getStorageData([
+          'mainnetCanisterId',
+          'testnetCanisterId',
+          `MainBalance_${selectedNetwork}`,
+          `UTXOHolder_${selectedNetwork}`,
+          `DustHolder_${selectedNetwork}`
+        ])
         setMainnetCanisterId(result.mainnetCanisterId || DEFAULT_MAINNET_CANISTER)
         setTestnetCanisterId(result.testnetCanisterId || DEFAULT_TESTNET_CANISTER)
+
+        // Load the three addresses for current network
+        setMainBalanceAddress((result[`MainBalance_${selectedNetwork}` as keyof typeof result] as string) || '')
+        setUtxoHolderAddress((result[`UTXOHolder_${selectedNetwork}` as keyof typeof result] as string) || '')
+        setDustHolderAddress((result[`DustHolder_${selectedNetwork}` as keyof typeof result] as string) || '')
       }
     }
     loadCanisterSettings()
-  }, [view])
+  }, [view, selectedNetwork])
 
   // Inactivity tracking for auto-lock
   useEffect(() => {
@@ -1590,14 +1662,40 @@ function App() {
     if (!walletAddress) return
 
     setLoadingUtxos(true)
+    setRgbClassificationError('')
+
     try {
       let utxos;
 
       // Determine fetch method based on address generation mode
       if (addressGenerationMethod === 'bitcoin') {
-        // Bitcoin mode: Fetch from blockchain API
-        console.log('Fetching UTXOs from blockchain API')
-        const blockchainUtxos = await fetchUTXOsFromBlockchain(walletAddress, selectedNetwork)
+        // Bitcoin mode: Fetch from all three addresses
+        console.log('[Multi-Address] Fetching UTXOs from all wallet addresses...')
+
+        // Load the three addresses from storage
+        const storage = await getStorageData([
+          `MainBalance_${selectedNetwork}`,
+          `UTXOHolder_${selectedNetwork}`,
+          `DustHolder_${selectedNetwork}`
+        ]);
+
+        const mainAddr = (storage[`MainBalance_${selectedNetwork}` as keyof typeof storage] as string) || walletAddress;
+        const utxoHolderAddr = (storage[`UTXOHolder_${selectedNetwork}` as keyof typeof storage] as string) || walletAddress;
+        const dustHolderAddr = (storage[`DustHolder_${selectedNetwork}` as keyof typeof storage] as string) || walletAddress;
+
+        console.log('[Multi-Address] Fetching from:');
+        console.log(`  Main: ${mainAddr}`);
+        console.log(`  UTXO Holder: ${utxoHolderAddr}`);
+        console.log(`  Dust Holder: ${dustHolderAddr}`);
+
+        // Fetch UTXOs from all three addresses
+        const blockchainUtxos = await fetchUTXOsFromAllAddresses(
+          mainAddr,
+          utxoHolderAddr,
+          dustHolderAddr,
+          selectedNetwork
+        );
+
         // Convert to canister format (number → bigint)
         utxos = blockchainUtxos.map(u => ({
           ...u,
@@ -1611,12 +1709,67 @@ function App() {
       }
 
       console.log('UTXOs received:', utxos?.length || 0)
-      setBitcoinUtxos(utxos)
-      setRgbUtxos([])
+
+      // Fetch RGB-occupied UTXOs using the new RGB fetcher
+      try {
+        console.log('[RGB] Fetching RGB-occupied UTXOs from proxy...')
+
+        // Get RGB proxy URL from storage or use default
+        const storageData = await getStorageData(['rgbProxy'])
+        const rgbProxyUrl = (storageData.rgbProxy as string) || 'http://89.117.52.115:3000/json-rpc'
+
+        // Fetch RGB UTXOs directly from the proxy
+        const rgbOccupiedUtxos = await fetchRgbOccupiedUtxos(walletAddress, rgbProxyUrl)
+
+        console.log(`[RGB] Found ${rgbOccupiedUtxos.length} RGB-occupied UTXOs`)
+
+        // For Bitcoin UTXOs (unoccupied), filter out the occupied ones
+        if (utxos && utxos.length > 0) {
+          const occupiedOutpoints = new Set(
+            rgbOccupiedUtxos.map(u => `${u.txid}:${u.vout}`)
+          )
+
+          const unoccupiedUtxos = utxos
+            .filter(u => !occupiedOutpoints.has(`${u.txid}:${u.vout}`))
+            .map(u => ({ ...u, isOccupied: false }))
+
+          setBitcoinUtxos(unoccupiedUtxos)
+
+          // Convert RGB UTXOs to the expected format
+          const occupiedUtxos = rgbOccupiedUtxos.map(u => ({
+            txid: u.txid,
+            vout: u.vout,
+            value: BigInt(u.btcAmount),
+            isOccupied: true,
+            rgbAssets: u.assets
+          }))
+
+          setRgbUtxos(occupiedUtxos)
+
+          console.log(`[RGB] Split complete: ${unoccupiedUtxos.length} unoccupied, ${occupiedUtxos.length} occupied`)
+        } else {
+          setBitcoinUtxos([])
+          setRgbUtxos([])
+        }
+      } catch (rgbError) {
+        console.error('[RGB] RGB fetcher failed, showing all as unoccupied:', rgbError)
+        setRgbClassificationError('RGB proxy unavailable. Showing all UTXOs as unoccupied.')
+
+        // Fallback: treat all as unoccupied if RGB fetcher fails
+        if (utxos && utxos.length > 0) {
+          setBitcoinUtxos(utxos.map(u => ({ ...u, isOccupied: false })))
+          setRgbUtxos([])
+        } else {
+          setBitcoinUtxos([])
+          setRgbUtxos([])
+        }
+      }
+
       setView('utxos')
     } catch (error) {
       console.error('Error fetching UTXOs:', error)
       setBitcoinUtxos([])
+      setRgbUtxos([])
       setView('utxos')
     } finally {
       setLoadingUtxos(false)
@@ -1991,6 +2144,17 @@ function App() {
                 <span>Network Settings</span>
                 <span className="menu-arrow">›</span>
               </div>
+              {/* Faucet menu - only visible on TestNet */}
+              {(selectedNetwork === 'testnet3' || selectedNetwork === 'testnet4' || selectedNetwork === 'regtest') && (
+                <div className="menu-item" onClick={() => {
+                  setShowMenu(false)
+                  setView('faucet')
+                }}>
+                  <span className="menu-icon">🚰</span>
+                  <span>Faucet</span>
+                  <span className="menu-arrow">›</span>
+                </div>
+              )}
               <div className="menu-item">
                 <span className="menu-icon">ⓘ</span>
                 <span>About</span>
@@ -2139,7 +2303,10 @@ function App() {
             </button>
             <button
               className={`tab-btn ${activeTab === 'activities' ? 'active' : ''}`}
-              onClick={() => setActiveTab('activities')}
+              onClick={() => {
+                setActiveTab('activities')
+                loadActivities() // Load activities when tab is clicked
+              }}
             >
               Activities
             </button>
@@ -2186,8 +2353,53 @@ function App() {
           )}
 
           {activeTab === 'activities' && (
-            <div className="activities-empty">
-              <p>No activities yet</p>
+            <div className="activities-list">
+              {loadingActivities ? (
+                <div className="activities-loading">
+                  <div className="skeleton-loader"></div>
+                  <div className="skeleton-loader"></div>
+                  <div className="skeleton-loader"></div>
+                </div>
+              ) : activities.length === 0 ? (
+                <div className="activities-empty">
+                  <div className="empty-icon">📋</div>
+                  <p className="empty-text">No activities yet</p>
+                </div>
+              ) : (
+                activities.map((activity) => {
+                  // Build Blockstream URL based on network
+                  const explorerUrl = selectedNetwork === 'mainnet'
+                    ? `https://blockstream.info/tx/${activity.txid}`
+                    : `https://blockstream.info/testnet/tx/${activity.txid}`;
+
+                  return (
+                    <div
+                      key={activity.txid}
+                      className="activity-item"
+                      onClick={() => window.open(explorerUrl, '_blank')}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      <div className="activity-left">
+                        <div className={`activity-icon ${activity.type.toLowerCase()}`}>
+                          {activity.type === 'Receive' ? '↓' : '↗'}
+                        </div>
+                        <div className="activity-info">
+                          <span className="activity-type">{activity.type} Bitcoin</span>
+                          <span className="activity-date">{activity.date}</span>
+                        </div>
+                      </div>
+                      <div className="activity-right">
+                        <span className={`activity-amount ${activity.type.toLowerCase()}`}>
+                          {activity.type === 'Receive' ? '+' : '-'}{activity.amount.toFixed(8)} BTC
+                        </span>
+                        <span className={`activity-status ${activity.status.toLowerCase()}`}>
+                          {activity.status}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
           )}
         </div>
@@ -2712,6 +2924,36 @@ function App() {
                   </div>
                 </label>
               </div>
+
+              {/* Display the three addresses when using Bitcoin generation method */}
+              {addressGenerationMethod === 'bitcoin' && (mainBalanceAddress || utxoHolderAddress || dustHolderAddress) && (
+                <div style={{ marginTop: '1.5rem', padding: '1rem', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                  <div style={{ fontSize: '0.9rem', fontWeight: '600', color: '#f7931a', marginBottom: '1rem' }}>
+                    Multi-Address Wallet Structure
+                  </div>
+
+                  {mainBalanceAddress && (
+                    <div style={{ marginBottom: '0.75rem' }}>
+                      <div style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.5)', marginBottom: '0.25rem' }}>Main Address</div>
+                      <div style={{ fontSize: '0.9rem', color: '#fff', fontFamily: 'monospace', wordBreak: 'break-all' }}>{mainBalanceAddress}</div>
+                    </div>
+                  )}
+
+                  {utxoHolderAddress && (
+                    <div style={{ marginBottom: '0.75rem' }}>
+                      <div style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.5)', marginBottom: '0.25rem' }}>UTXO Holder</div>
+                      <div style={{ fontSize: '0.9rem', color: '#fff', fontFamily: 'monospace', wordBreak: 'break-all' }}>{utxoHolderAddress}</div>
+                    </div>
+                  )}
+
+                  {dustHolderAddress && (
+                    <div>
+                      <div style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.5)', marginBottom: '0.25rem' }}>Dust Holder</div>
+                      <div style={{ fontSize: '0.9rem', color: '#fff', fontFamily: 'monospace', wordBreak: 'break-all' }}>{dustHolderAddress}</div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {error && <p className="error-text">{error}</p>}
@@ -2954,6 +3196,53 @@ function App() {
         </div>
       )}
 
+      {/* Faucet Screen - TestNet Only */}
+      {view === 'faucet' && (
+        <div className="settings-container">
+          <div className="password-header">
+            <button className="back-arrow" onClick={() => setView('dashboard')}>←</button>
+            <h2 className="card-title">Faucet</h2>
+          </div>
+
+          <div className="settings-content">
+            <div className="settings-section">
+              <h3 className="settings-section-title">Get Free Testnet Coins</h3>
+              <p className="settings-info">Use these faucets to get free testnet Bitcoin and ckBTC for testing.</p>
+            </div>
+
+            {/* ckBTC Faucet */}
+            <div className="faucet-item" onClick={() => window.open('https://testnet-faucet.ckboost.com/', '_blank')}>
+              <div className="faucet-icon">⚡</div>
+              <div className="faucet-details">
+                <div className="faucet-name">ckBTC Faucet</div>
+                <div className="faucet-url">testnet-faucet.ckboost.com</div>
+              </div>
+              <div className="faucet-arrow">↗</div>
+            </div>
+
+            {/* tBTC Faucet 1 */}
+            <div className="faucet-item" onClick={() => window.open('https://testnet-faucet.devwork.tech/', '_blank')}>
+              <div className="faucet-icon">🚰</div>
+              <div className="faucet-details">
+                <div className="faucet-name">tBTC Faucet</div>
+                <div className="faucet-url">testnet-faucet.devwork.tech</div>
+              </div>
+              <div className="faucet-arrow">↗</div>
+            </div>
+
+            {/* tBTC Faucet 2 */}
+            <div className="faucet-item" onClick={() => window.open('https://coinfaucet.eu/en/', '_blank')}>
+              <div className="faucet-icon">🚰</div>
+              <div className="faucet-details">
+                <div className="faucet-name">tBTC Faucet</div>
+                <div className="faucet-url">coinfaucet.eu</div>
+              </div>
+              <div className="faucet-arrow">↗</div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Swap Screen */}
       {view === 'swap' && (
         <div className="swap-container">
@@ -3091,483 +3380,694 @@ function App() {
             </button>
           </div>
         </div>
-      )}
+      )
+      }
 
 
       {/* Send Screen */}
-      {view === 'send' && (
-        <div className="receive-container">
-          <div className="receive-header">
-            <button className="back-arrow" onClick={() => setView('dashboard')}>←</button>
-            <h2 className="receive-title">Send</h2>
-          </div>
-
-          <div className="receive-btc-content">
-            <div className="send-input-group" style={{ maxWidth: '320px', width: '100%' }}>
-              <label className="send-label">Receiver</label>
-              <input
-                type="text"
-                className="send-input"
-                placeholder="Invoice or Bitcoin address"
-                value={sendReceiverAddress}
-                onChange={(e) => setSendReceiverAddress(e.target.value)}
-              />
+      {
+        view === 'send' && (
+          <div className="receive-container">
+            <div className="receive-header">
+              <button className="back-arrow" onClick={() => setView('dashboard')}>←</button>
+              <h2 className="receive-title">Send</h2>
             </div>
-          </div>
 
-          <button
-            className="btn-primary copy-btc-btn"
-            disabled={!sendReceiverAddress}
-            onClick={() => setView('send-amount')}
-            style={{ marginBottom: '30px' }}
-          >
-            Next
-          </button>
-        </div>
-      )}
+            <div className="receive-btc-content">
+              <div className="send-input-group" style={{ maxWidth: '320px', width: '100%' }}>
+                <label className="send-label">Receiver</label>
+                <input
+                  type="text"
+                  className="send-input"
+                  placeholder="Invoice or Bitcoin address"
+                  value={sendReceiverAddress}
+                  onChange={(e) => setSendReceiverAddress(e.target.value)}
+                />
+              </div>
+            </div>
 
-
-      {/* Send Amount Screen */}
-      {view === 'send-amount' && (
-        <div style={{ minHeight: '100vh', maxWidth: '100vw', background: '#0a0a0a', display: 'flex', flexDirection: 'column', padding: '0', boxSizing: 'border-box', overflowX: 'hidden' }}>
-          {/* Header */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', position: 'relative' }}>
             <button
-              onClick={() => setView('send')}
-              style={{ position: 'absolute', left: '1rem', background: 'transparent', border: 'none', color: '#fff', fontSize: '1.5rem', cursor: 'pointer', padding: '0.25rem' }}
-            >
-              ←
-            </button>
-            <h2 style={{ fontSize: '1.25rem', fontWeight: '700', color: '#fff', margin: 0 }}>Send BTC</h2>
-          </div>
-
-          {/* Content */}
-          <div style={{ flex: 1, padding: '0 1rem', display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%', boxSizing: 'border-box' }}>
-            {/* Card 1: Recipient + Amount */}
-            <div style={{ background: 'rgba(255, 255, 255, 0.05)', borderRadius: '16px', padding: '1.25rem', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
-              {/* Recipient */}
-              <div style={{ marginBottom: '1.25rem' }}>
-                <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: '600', color: '#fff', marginBottom: '0.5rem' }}>Recipient</label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '0.75rem 1rem', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
-                  <span style={{ flex: 1, color: 'rgba(255, 255, 255, 0.9)', fontSize: '0.85rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sendReceiverAddress}</span>
-                  <button
-                    onClick={() => navigator.clipboard.writeText(sendReceiverAddress)}
-                    style={{ background: 'transparent', border: 'none', color: 'rgba(255, 255, 255, 0.6)', fontSize: '1rem', cursor: 'pointer', padding: '0.25rem' }}
-                  >
-                    ⎘
-                  </button>
-                </div>
-              </div>
-
-              {/* Amount */}
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                  <label style={{ fontSize: '0.9rem', fontWeight: '600', color: '#fff' }}>Amount</label>
-                  <span style={{ fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.6)' }}>Balance: {sendUserBalance} BTC</span>
-                </div>
-                <div style={{ position: 'relative', background: 'rgba(255, 255, 255, 0.08)', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
-                  <input
-                    type="text"
-                    placeholder="0.000000"
-                    value={sendAmount}
-                    onChange={(e) => setSendAmount(e.target.value)}
-                    style={{ width: '100%', padding: '1rem', paddingRight: '120px', background: 'transparent', border: 'none', color: '#fff', fontSize: '1.5rem', fontWeight: '700', outline: 'none' }}
-                  />
-                  <div style={{ position: 'absolute', right: '1rem', top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <span style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.9rem' }}>BTC</span>
-                    <button
-                      onClick={handleMaxAmount}
-                      style={{ background: '#f7931a', color: '#fff', border: 'none', padding: '0.4rem 0.8rem', borderRadius: '8px', fontSize: '0.8rem', fontWeight: '600', cursor: 'pointer' }}
-                    >
-                      Max
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Card 2: Fee Selection */}
-            <div style={{ background: 'rgba(255, 255, 255, 0.05)', borderRadius: '16px', padding: '1.25rem', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                <label style={{ fontSize: '0.9rem', fontWeight: '600', color: '#fff' }}>
-                  Fee
-                  <button
-                    onClick={() => setSendEstimatedFees([2n, 3n, 5n])}
-                    style={{ marginLeft: '0.5rem', background: 'none', border: 'none', color: '#f7931a', fontSize: '0.7rem', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}
-                  >
-                    (use default [2,3,5])
-                  </button>
-                </label>
-                <button
-                  onClick={handleRefreshFees}
-                  disabled={sendLoadingFees}
-                  style={{ background: 'transparent', border: 'none', color: 'rgba(255, 255, 255, 0.6)', fontSize: '1.1rem', cursor: 'pointer', padding: '0.25rem' }}
-                >
-                  {sendLoadingFees ? '...' : '⟳'}
-                </button>
-              </div>
-
-              {/* Horizontal Fee Options */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem' }}>
-                {/* Slow */}
-                <button
-                  onClick={() => setSendFeeOption('slow')}
-                  style={{
-                    background: sendFeeOption === 'slow' ? '#f7931a' : 'rgba(255, 255, 255, 0.08)',
-                    border: sendFeeOption === 'slow' ? '1px solid #f7931a' : '1px solid rgba(255, 255, 255, 0.1)',
-                    borderRadius: '12px',
-                    padding: '0.75rem 0.5rem',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: '0.25rem',
-                    transition: 'all 0.2s ease'
-                  }}
-                >
-                  <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#fff' }}>Slow</div>
-                  <div style={{ fontSize: '0.75rem', fontWeight: '600', color: sendFeeOption === 'slow' ? 'rgba(255, 255, 255, 0.9)' : 'rgba(255, 255, 255, 0.7)' }}>{Number(sendEstimatedFees[0])} sat/VB</div>
-                  <div style={{ fontSize: '0.65rem', color: sendFeeOption === 'slow' ? 'rgba(255, 255, 255, 0.7)' : 'rgba(255, 255, 255, 0.5)' }}>~ 2 hours</div>
-                </button>
-
-                {/* Avg */}
-                <button
-                  onClick={() => setSendFeeOption('avg')}
-                  style={{
-                    background: sendFeeOption === 'avg' ? '#f7931a' : 'rgba(255, 255, 255, 0.08)',
-                    border: sendFeeOption === 'avg' ? '1px solid #f7931a' : '1px solid rgba(255, 255, 255, 0.1)',
-                    borderRadius: '12px',
-                    padding: '0.75rem 0.5rem',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: '0.25rem',
-                    transition: 'all 0.2s ease'
-                  }}
-                >
-                  <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#fff' }}>Avg</div>
-                  <div style={{ fontSize: '0.75rem', fontWeight: '600', color: sendFeeOption === 'avg' ? 'rgba(255, 255, 255, 0.9)' : 'rgba(255, 255, 255, 0.7)' }}>{Number(sendEstimatedFees[1])} sat/VB</div>
-                  <div style={{ fontSize: '0.65rem', color: sendFeeOption === 'avg' ? 'rgba(255, 255, 255, 0.7)' : 'rgba(255, 255, 255, 0.5)' }}>~ 30 mins</div>
-                </button>
-
-                {/* Fast */}
-                <button
-                  onClick={() => setSendFeeOption('fast')}
-                  style={{
-                    background: sendFeeOption === 'fast' ? '#f7931a' : 'rgba(255, 255, 255, 0.08)',
-                    border: sendFeeOption === 'fast' ? '1px solid #f7931a' : '1px solid rgba(255, 255, 255, 0.1)',
-                    borderRadius: '12px',
-                    padding: '0.75rem 0.5rem',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: '0.25rem',
-                    transition: 'all 0.2s ease'
-                  }}
-                >
-                  <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#fff' }}>Fast</div>
-                  <div style={{ fontSize: '0.75rem', fontWeight: '600', color: sendFeeOption === 'fast' ? 'rgba(255, 255, 255, 0.9)' : 'rgba(255, 255, 255, 0.7)' }}>{Number(sendEstimatedFees[2])} sat/VB</div>
-                  <div style={{ fontSize: '0.65rem', color: sendFeeOption === 'fast' ? 'rgba(255, 255, 255, 0.7)' : 'rgba(255, 255, 255, 0.5)' }}>~ 10 mins</div>
-                </button>
-
-                {/* Custom */}
-                <button
-                  onClick={() => setSendFeeOption('custom')}
-                  style={{
-                    background: sendFeeOption === 'custom' ? '#f7931a' : 'rgba(255, 255, 255, 0.08)',
-                    border: sendFeeOption === 'custom' ? '1px solid #f7931a' : '1px solid rgba(255, 255, 255, 0.1)',
-                    borderRadius: '12px',
-                    padding: '0.75rem 0.5rem',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    transition: 'all 0.2s ease'
-                  }}
-                >
-                  <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#fff' }}>Custom</div>
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Next Button */}
-          <div style={{ padding: '1rem' }}>
-            <button
-              disabled={!sendAmount || parseFloat(sendAmount) === 0}
-              onClick={handleSendNext}
-              style={{
-                width: '100%',
-                padding: '1rem',
-                background: (!sendAmount || parseFloat(sendAmount) === 0) ? 'rgba(247, 147, 26, 0.5)' : 'linear-gradient(135deg, #f7931a 0%, #e67e00 100%)',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '50px',
-                fontSize: '1rem',
-                fontWeight: '700',
-                cursor: (!sendAmount || parseFloat(sendAmount) === 0) ? 'not-allowed' : 'pointer',
-                transition: 'all 0.3s ease',
-                opacity: (!sendAmount || parseFloat(sendAmount) === 0) ? 0.6 : 1
-              }}
+              className="btn-primary copy-btc-btn"
+              disabled={!sendReceiverAddress}
+              onClick={() => setView('send-amount')}
+              style={{ marginBottom: '30px' }}
             >
               Next
             </button>
           </div>
-        </div>
-      )}
+        )
+      }
+
+
+      {/* Send Amount Screen */}
+      {
+        view === 'send-amount' && (
+          <div style={{ minHeight: '100vh', maxWidth: '100vw', background: '#0a0a0a', display: 'flex', flexDirection: 'column', padding: '0', boxSizing: 'border-box', overflowX: 'hidden' }}>
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', position: 'relative' }}>
+              <button
+                onClick={() => setView('send')}
+                style={{ position: 'absolute', left: '1rem', background: 'transparent', border: 'none', color: '#fff', fontSize: '1.5rem', cursor: 'pointer', padding: '0.25rem' }}
+              >
+                ←
+              </button>
+              <h2 style={{ fontSize: '1.25rem', fontWeight: '700', color: '#fff', margin: 0 }}>Send BTC</h2>
+            </div>
+
+            {/* Content */}
+            <div style={{ flex: 1, padding: '0 1rem', display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%', boxSizing: 'border-box' }}>
+              {/* Card 1: Recipient + Amount */}
+              <div style={{ background: 'rgba(255, 255, 255, 0.05)', borderRadius: '16px', padding: '1.25rem', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                {/* Recipient */}
+                <div style={{ marginBottom: '1.25rem' }}>
+                  <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: '600', color: '#fff', marginBottom: '0.5rem' }}>Recipient</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '0.75rem 1rem', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                    <span style={{ flex: 1, color: 'rgba(255, 255, 255, 0.9)', fontSize: '0.85rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sendReceiverAddress}</span>
+                    <button
+                      onClick={() => navigator.clipboard.writeText(sendReceiverAddress)}
+                      style={{ background: 'transparent', border: 'none', color: 'rgba(255, 255, 255, 0.6)', fontSize: '1rem', cursor: 'pointer', padding: '0.25rem' }}
+                    >
+                      ⎘
+                    </button>
+                  </div>
+                </div>
+
+                {/* Amount */}
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                    <label style={{ fontSize: '0.9rem', fontWeight: '600', color: '#fff' }}>Amount</label>
+                    <span style={{ fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.6)' }}>Balance: {sendUserBalance} BTC</span>
+                  </div>
+                  <div style={{ position: 'relative', background: 'rgba(255, 255, 255, 0.08)', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                    <input
+                      type="text"
+                      placeholder="0.000000"
+                      value={sendAmount}
+                      onChange={(e) => setSendAmount(e.target.value)}
+                      style={{ width: '100%', padding: '1rem', paddingRight: '120px', background: 'transparent', border: 'none', color: '#fff', fontSize: '1.5rem', fontWeight: '700', outline: 'none' }}
+                    />
+                    <div style={{ position: 'absolute', right: '1rem', top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <span style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.9rem' }}>BTC</span>
+                      <button
+                        onClick={handleMaxAmount}
+                        style={{ background: '#f7931a', color: '#fff', border: 'none', padding: '0.4rem 0.8rem', borderRadius: '8px', fontSize: '0.8rem', fontWeight: '600', cursor: 'pointer' }}
+                      >
+                        Max
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 2: Fee Selection */}
+              <div style={{ background: 'rgba(255, 255, 255, 0.05)', borderRadius: '16px', padding: '1.25rem', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                  <label style={{ fontSize: '0.9rem', fontWeight: '600', color: '#fff' }}>
+                    Fee
+                    <button
+                      onClick={() => setSendEstimatedFees([2n, 3n, 5n])}
+                      style={{ marginLeft: '0.5rem', background: 'none', border: 'none', color: '#f7931a', fontSize: '0.7rem', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}
+                    >
+                      (use default [2,3,5])
+                    </button>
+                  </label>
+                  <button
+                    onClick={handleRefreshFees}
+                    disabled={sendLoadingFees}
+                    style={{ background: 'transparent', border: 'none', color: 'rgba(255, 255, 255, 0.6)', fontSize: '1.1rem', cursor: 'pointer', padding: '0.25rem' }}
+                  >
+                    {sendLoadingFees ? '...' : '⟳'}
+                  </button>
+                </div>
+
+                {/* Horizontal Fee Options */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem' }}>
+                  {/* Slow */}
+                  <button
+                    onClick={() => setSendFeeOption('slow')}
+                    style={{
+                      background: sendFeeOption === 'slow' ? '#f7931a' : 'rgba(255, 255, 255, 0.08)',
+                      border: sendFeeOption === 'slow' ? '1px solid #f7931a' : '1px solid rgba(255, 255, 255, 0.1)',
+                      borderRadius: '12px',
+                      padding: '0.75rem 0.5rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '0.25rem',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#fff' }}>Slow</div>
+                    <div style={{ fontSize: '0.75rem', fontWeight: '600', color: sendFeeOption === 'slow' ? 'rgba(255, 255, 255, 0.9)' : 'rgba(255, 255, 255, 0.7)' }}>{Number(sendEstimatedFees[0])} sat/VB</div>
+                    <div style={{ fontSize: '0.65rem', color: sendFeeOption === 'slow' ? 'rgba(255, 255, 255, 0.7)' : 'rgba(255, 255, 255, 0.5)' }}>~ 2 hours</div>
+                  </button>
+
+                  {/* Avg */}
+                  <button
+                    onClick={() => setSendFeeOption('avg')}
+                    style={{
+                      background: sendFeeOption === 'avg' ? '#f7931a' : 'rgba(255, 255, 255, 0.08)',
+                      border: sendFeeOption === 'avg' ? '1px solid #f7931a' : '1px solid rgba(255, 255, 255, 0.1)',
+                      borderRadius: '12px',
+                      padding: '0.75rem 0.5rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '0.25rem',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#fff' }}>Avg</div>
+                    <div style={{ fontSize: '0.75rem', fontWeight: '600', color: sendFeeOption === 'avg' ? 'rgba(255, 255, 255, 0.9)' : 'rgba(255, 255, 255, 0.7)' }}>{Number(sendEstimatedFees[1])} sat/VB</div>
+                    <div style={{ fontSize: '0.65rem', color: sendFeeOption === 'avg' ? 'rgba(255, 255, 255, 0.7)' : 'rgba(255, 255, 255, 0.5)' }}>~ 30 mins</div>
+                  </button>
+
+                  {/* Fast */}
+                  <button
+                    onClick={() => setSendFeeOption('fast')}
+                    style={{
+                      background: sendFeeOption === 'fast' ? '#f7931a' : 'rgba(255, 255, 255, 0.08)',
+                      border: sendFeeOption === 'fast' ? '1px solid #f7931a' : '1px solid rgba(255, 255, 255, 0.1)',
+                      borderRadius: '12px',
+                      padding: '0.75rem 0.5rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '0.25rem',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#fff' }}>Fast</div>
+                    <div style={{ fontSize: '0.75rem', fontWeight: '600', color: sendFeeOption === 'fast' ? 'rgba(255, 255, 255, 0.9)' : 'rgba(255, 255, 255, 0.7)' }}>{Number(sendEstimatedFees[2])} sat/VB</div>
+                    <div style={{ fontSize: '0.65rem', color: sendFeeOption === 'fast' ? 'rgba(255, 255, 255, 0.7)' : 'rgba(255, 255, 255, 0.5)' }}>~ 10 mins</div>
+                  </button>
+
+                  {/* Custom */}
+                  <button
+                    onClick={() => setSendFeeOption('custom')}
+                    style={{
+                      background: sendFeeOption === 'custom' ? '#f7931a' : 'rgba(255, 255, 255, 0.08)',
+                      border: sendFeeOption === 'custom' ? '1px solid #f7931a' : '1px solid rgba(255, 255, 255, 0.1)',
+                      borderRadius: '12px',
+                      padding: '0.75rem 0.5rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#fff' }}>Custom</div>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Next Button */}
+            <div style={{ padding: '1rem' }}>
+              <button
+                disabled={!sendAmount || parseFloat(sendAmount) === 0}
+                onClick={handleSendNext}
+                style={{
+                  width: '100%',
+                  padding: '1rem',
+                  background: (!sendAmount || parseFloat(sendAmount) === 0) ? 'rgba(247, 147, 26, 0.5)' : 'linear-gradient(135deg, #f7931a 0%, #e67e00 100%)',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '50px',
+                  fontSize: '1rem',
+                  fontWeight: '700',
+                  cursor: (!sendAmount || parseFloat(sendAmount) === 0) ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.3s ease',
+                  opacity: (!sendAmount || parseFloat(sendAmount) === 0) ? 0.6 : 1
+                }}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )
+      }
 
       {/* Send Confirm Screen */}
-      {view === 'send-confirm' && (
-        <div className="send-container">
-          <div className="send-header">
-            <button className="send-back" onClick={() => setView('send-amount')}>←</button>
-            <h2 className="send-title">Sign Transaction</h2>
-          </div>
+      {
+        view === 'send-confirm' && (
+          <div className="send-container">
+            <div className="send-header">
+              <button className="send-back" onClick={() => setView('send-amount')}>←</button>
+              <h2 className="send-title">Sign Transaction</h2>
+            </div>
 
-          <div className="send-content">
-            <div className="send-confirm-box" style={{ backgroundColor: '#1f2937', borderRadius: '12px', padding: '1.5rem', marginBottom: '1.5rem', border: '1px solid #374151' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginBottom: '0.5rem' }}>From</div>
-                  <div style={{ fontSize: '0.875rem', fontWeight: '500', color: '#f3f4f6' }}>{truncateAddress(walletAddress || btcAddress)}</div>
+            <div className="send-content">
+              <div className="send-confirm-box" style={{ backgroundColor: '#1f2937', borderRadius: '12px', padding: '1.5rem', marginBottom: '1.5rem', border: '1px solid #374151' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginBottom: '0.5rem' }}>From</div>
+                    <div style={{ fontSize: '0.875rem', fontWeight: '500', color: '#f3f4f6' }}>{truncateAddress(walletAddress || btcAddress)}</div>
+                  </div>
+                  <div style={{ padding: '0 1rem', fontSize: '1.25rem', color: '#6b7280' }}>→</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginBottom: '0.5rem' }}>Send to</div>
+                    <div style={{ fontSize: '0.875rem', fontWeight: '500', color: '#f3f4f6' }}>{truncateAddress(sendReceiverAddress)}</div>
+                  </div>
                 </div>
-                <div style={{ padding: '0 1rem', fontSize: '1.25rem', color: '#6b7280' }}>→</div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginBottom: '0.5rem' }}>Send to</div>
-                  <div style={{ fontSize: '0.875rem', fontWeight: '500', color: '#f3f4f6' }}>{truncateAddress(sendReceiverAddress)}</div>
+
+                <div style={{ borderTop: '1px solid #374151', paddingTop: '1rem' }}>
+                  <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginBottom: '0.5rem' }}>Send Amount</div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: '600', color: '#f3f4f6' }}>{sendAmount} BTC</div>
                 </div>
               </div>
 
-              <div style={{ borderTop: '1px solid #374151', paddingTop: '1rem' }}>
-                <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginBottom: '0.5rem' }}>Send Amount</div>
-                <div style={{ fontSize: '1.5rem', fontWeight: '600', color: '#f3f4f6' }}>{sendAmount} BTC</div>
+              <div className="send-input-group" style={{ marginTop: '-25px' }}>
+                <label className="send-label">Network Fee</label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem', backgroundColor: '#1f2937', borderRadius: '8px', border: '1px solid #374151' }}>
+                  <span style={{ fontSize: '1rem', fontWeight: '500', color: '#f3f4f6' }}>{sendNetworkFee}</span>
+                  <span style={{ fontSize: '0.875rem', color: '#9ca3af' }}>BTC</span>
+                </div>
               </div>
+
+              <div className="send-input-group" style={{ marginTop: '-10px' }}>
+                <label className="send-label">Network Fee Rate</label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem', backgroundColor: '#1f2937', borderRadius: '8px', border: '1px solid #374151' }}>
+                  <span style={{ fontSize: '1rem', fontWeight: '500', color: '#f3f4f6' }}>
+                    {sendFeeOption === 'slow' ? Number(sendEstimatedFees[0]) :
+                      sendFeeOption === 'avg' ? Number(sendEstimatedFees[1]) :
+                        Number(sendEstimatedFees[2])}
+                  </span>
+                  <span style={{ fontSize: '0.875rem', color: '#9ca3af' }}>sat/VB</span>
+                </div>
+              </div>
+
+              {sendError && (
+                <div style={{ marginTop: '1rem', padding: '0.75rem', backgroundColor: '#fee2e2', borderRadius: '8px' }}>
+                  <span style={{ color: '#ef4444', fontSize: '0.875rem' }}>{sendError}</span>
+                </div>
+              )}
+
+              <button
+                className="send-next-btn"
+                onClick={handleSendBitcoin}
+                disabled={sendProcessing}
+                style={{ marginTop: 'calc(2rem - 35px)', backgroundColor: '#ff6b2c' }}
+              >
+                {sendProcessing ? 'Sending...' : 'Sign & Pay'}
+              </button>
             </div>
-
-            <div className="send-input-group" style={{ marginTop: '-25px' }}>
-              <label className="send-label">Network Fee</label>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem', backgroundColor: '#1f2937', borderRadius: '8px', border: '1px solid #374151' }}>
-                <span style={{ fontSize: '1rem', fontWeight: '500', color: '#f3f4f6' }}>{sendNetworkFee}</span>
-                <span style={{ fontSize: '0.875rem', color: '#9ca3af' }}>BTC</span>
-              </div>
-            </div>
-
-            <div className="send-input-group" style={{ marginTop: '-10px' }}>
-              <label className="send-label">Network Fee Rate</label>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem', backgroundColor: '#1f2937', borderRadius: '8px', border: '1px solid #374151' }}>
-                <span style={{ fontSize: '1rem', fontWeight: '500', color: '#f3f4f6' }}>
-                  {sendFeeOption === 'slow' ? Number(sendEstimatedFees[0]) :
-                    sendFeeOption === 'avg' ? Number(sendEstimatedFees[1]) :
-                      Number(sendEstimatedFees[2])}
-                </span>
-                <span style={{ fontSize: '0.875rem', color: '#9ca3af' }}>sat/VB</span>
-              </div>
-            </div>
-
-            {sendError && (
-              <div style={{ marginTop: '1rem', padding: '0.75rem', backgroundColor: '#fee2e2', borderRadius: '8px' }}>
-                <span style={{ color: '#ef4444', fontSize: '0.875rem' }}>{sendError}</span>
-              </div>
-            )}
-
-            <button
-              className="send-next-btn"
-              onClick={handleSendBitcoin}
-              disabled={sendProcessing}
-              style={{ marginTop: 'calc(2rem - 35px)', backgroundColor: '#ff6b2c' }}
-            >
-              {sendProcessing ? 'Sending...' : 'Sign & Pay'}
-            </button>
           </div>
-        </div>
-      )}
+        )
+      }
 
       {/* Send Success Screen */}
-      {view === 'send-success' && (
-        <div className="send-container">
-          <div className="send-header">
-            <h2 className="send-title">Sign Transaction</h2>
-          </div>
-
-          <div className="send-content" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', paddingTop: '3rem' }}>
-            <div style={{ width: '80px', height: '80px', borderRadius: '50%', backgroundColor: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1.5rem' }}>
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="20 6 9 17 4 12"></polyline>
-              </svg>
+      {
+        view === 'send-success' && (
+          <div className="send-container">
+            <div className="send-header">
+              <h2 className="send-title">Sign Transaction</h2>
             </div>
 
-            <p style={{ fontSize: '1rem', color: '#111827', textAlign: 'center', marginBottom: '2rem', maxWidth: '300px', fontWeight: '500' }}>
-              Payment of {sendAmount} BTC successfully!
-            </p>
-
-            {sendTxId && (
-              <div style={{ backgroundColor: '#f3f4f6', borderRadius: '8px', padding: '1rem', marginBottom: '2rem', maxWidth: '320px' }}>
-                <p style={{ fontSize: '0.7rem', color: '#6b7280', marginBottom: '0.5rem' }}>Transaction ID:</p>
-                <p style={{ fontSize: '0.75rem', color: '#111827', wordBreak: 'break-all', fontFamily: 'monospace' }}>
-                  {sendTxId}
-                </p>
+            <div className="send-content" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', paddingTop: '3rem' }}>
+              <div style={{ width: '80px', height: '80px', borderRadius: '50%', backgroundColor: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1.5rem' }}>
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
               </div>
-            )}
 
-            <button
-              className="send-next-btn"
-              onClick={() => {
-                setView('dashboard')
-                setSendReceiverAddress('')
-                setSendAmount('')
-                setSendTxId('')
-                setSendError('')
-              }}
-            >
-              Close
-            </button>
+              <p style={{ fontSize: '1rem', color: '#111827', textAlign: 'center', marginBottom: '2rem', maxWidth: '300px', fontWeight: '500' }}>
+                Payment of {sendAmount} BTC successfully!
+              </p>
+
+              {sendTxId && (
+                <div style={{ backgroundColor: '#f3f4f6', borderRadius: '8px', padding: '1rem', marginBottom: '2rem', maxWidth: '320px' }}>
+                  <p style={{ fontSize: '0.7rem', color: '#6b7280', marginBottom: '0.5rem' }}>Transaction ID:</p>
+                  <p style={{ fontSize: '0.75rem', color: '#111827', wordBreak: 'break-all', fontFamily: 'monospace' }}>
+                    {sendTxId}
+                  </p>
+                </div>
+              )}
+
+              <button
+                className="send-next-btn"
+                onClick={() => {
+                  setView('dashboard')
+                  setSendReceiverAddress('')
+                  setSendAmount('')
+                  setSendTxId('')
+                  setSendError('')
+                }}
+              >
+                Close
+              </button>
+            </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
       {/* Click outside to close menu */}
       {showMenu && <div className="menu-overlay" onClick={() => setShowMenu(false)}></div>}
 
       {/* Notice Modal */}
-      {showNoticeModal && (
-        <div className="modal-overlay">
-          <div className="modal-content">
-            <h3 className="modal-title">Notice</h3>
-            <p className="modal-text">
-              The Photon wallet currently does not support assets such as runes and inscriptions. Importing these assets may result in them not being displayed or functioning properly within the wallet.
-            </p>
-            <button className="btn-primary modal-confirm" onClick={handleConfirmNotice}>
-              Confirm
-            </button>
+      {
+        showNoticeModal && (
+          <div className="modal-overlay">
+            <div className="modal-content">
+              <h3 className="modal-title">Notice</h3>
+              <p className="modal-text">
+                The Photon wallet currently does not support assets such as runes and inscriptions. Importing these assets may result in them not being displayed or functioning properly within the wallet.
+              </p>
+              <button className="btn-primary modal-confirm" onClick={handleConfirmNotice}>
+                Confirm
+              </button>
+            </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
       {/* Network Switch Modal */}
-      {showNetworkModal && (
-        <div className="modal-overlay" onClick={() => setShowNetworkModal(false)}>
-          <div className="network-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="network-modal-header">
-              <h3 className="network-modal-title">Switch Network</h3>
-              <button className="network-close-btn" onClick={() => setShowNetworkModal(false)}>×</button>
-            </div>
-            <div className="network-list">
-              {networks.map((network) => (
-                <button
-                  key={network.id}
-                  className={`network-item ${selectedNetwork === network.id ? 'selected' : ''} ${!network.enabled ? 'disabled' : ''}`}
-                  onClick={() => {
-                    if (network.enabled) {
-                      handleNetworkSwitch(network.id)
-                    }
-                  }}
-                  disabled={!network.enabled}
-                >
-                  <span className="network-item-icon" style={{ background: network.color }}>₿</span>
-                  <span className="network-item-name">{network.name}</span>
-                  {selectedNetwork === network.id && <span className="network-check">✓</span>}
-                </button>
-              ))}
+      {
+        showNetworkModal && (
+          <div className="modal-overlay" onClick={() => setShowNetworkModal(false)}>
+            <div className="network-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="network-modal-header">
+                <h3 className="network-modal-title">Switch Network</h3>
+                <button className="network-close-btn" onClick={() => setShowNetworkModal(false)}>×</button>
+              </div>
+              <div className="network-list">
+                {networks.map((network) => (
+                  <button
+                    key={network.id}
+                    className={`network-item ${selectedNetwork === network.id ? 'selected' : ''} ${!network.enabled ? 'disabled' : ''}`}
+                    onClick={() => {
+                      if (network.enabled) {
+                        handleNetworkSwitch(network.id)
+                      }
+                    }}
+                    disabled={!network.enabled}
+                  >
+                    <span className="network-item-icon" style={{ background: network.color }}>₿</span>
+                    <span className="network-item-name">{network.name}</span>
+                    {selectedNetwork === network.id && <span className="network-check">✓</span>}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
       {/* UTXOs View */}
-      {view === 'utxos' && (
-        <div className="wallet-container" style={{ padding: '1rem' }}>
-          <div className="wallet-header">
-            <button className="icon-btn" onClick={() => setView('dashboard')}>←</button>
-            <h2 style={{ flex: 1, textAlign: 'center', margin: 0 }}>UTXOs</h2>
-            <button className="icon-btn" style={{ visibility: 'hidden' }}>⋮</button>
-          </div>
+      {
+        view === 'utxos' && (
+          <div className="wallet-container" style={{ padding: '1rem' }}>
+            <div className="wallet-header">
+              <button className="icon-btn" onClick={() => setView('dashboard')}>←</button>
+              <h2 style={{ flex: 1, textAlign: 'center', margin: 0 }}>RGB UTXOs</h2>
+              <button
+                onClick={() => setView('create-rgb-utxo')}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  borderRadius: '6px',
+                  padding: '0.4rem 0.8rem',
+                  color: '#fff',
+                  fontSize: '0.85rem',
+                  cursor: 'pointer',
+                  fontWeight: 500
+                }}
+              >
+                Create UTXO
+              </button>
+            </div>
 
-          <div className="utxos-tabs" style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', borderBottom: '1px solid rgba(255, 255, 255, 0.1)', paddingBottom: '0.5rem' }}>
-            <button onClick={() => setUtxoTab('unoccupied')} style={{ background: utxoTab === 'unoccupied' ? 'rgba(247, 147, 26, 0.2)' : 'transparent', color: utxoTab === 'unoccupied' ? '#f7931a' : 'rgba(255, 255, 255, 0.6)', border: 'none', padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem', transition: 'all 0.2s ease' }}>Unoccupied</button>
-            <button onClick={() => setUtxoTab('occupied')} style={{ background: utxoTab === 'occupied' ? 'rgba(247, 147, 26, 0.2)' : 'transparent', color: utxoTab === 'occupied' ? '#f7931a' : 'rgba(255, 255, 255, 0.6)', border: 'none', padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem', transition: 'all 0.2s ease' }}>Occupied</button>
-            <button onClick={() => setUtxoTab('unlockable')} style={{ background: utxoTab === 'unlockable' ? 'rgba(247, 147, 26, 0.2)' : 'transparent', color: utxoTab === 'unlockable' ? '#f7931a' : 'rgba(255, 255, 255, 0.6)', border: 'none', padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem', transition: 'all 0.2s ease' }}>Unlockable</button>
-          </div>
+            <div className="utxos-tabs" style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', borderBottom: '1px solid rgba(255, 255, 255, 0.1)', paddingBottom: '0.5rem' }}>
+              <button onClick={() => setUtxoTab('unoccupied')} style={{ background: utxoTab === 'unoccupied' ? 'rgba(247, 147, 26, 0.2)' : 'transparent', color: utxoTab === 'unoccupied' ? '#f7931a' : 'rgba(255, 255, 255, 0.6)', border: 'none', padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem', transition: 'all 0.2s ease' }}>Unoccupied</button>
+              <button onClick={() => setUtxoTab('occupied')} style={{ background: utxoTab === 'occupied' ? 'rgba(247, 147, 26, 0.2)' : 'transparent', color: utxoTab === 'occupied' ? '#f7931a' : 'rgba(255, 255, 255, 0.6)', border: 'none', padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem', transition: 'all 0.2s ease' }}>Occupied</button>
+              <button onClick={() => setUtxoTab('unlockable')} style={{ background: utxoTab === 'unlockable' ? 'rgba(247, 147, 26, 0.2)' : 'transparent', color: utxoTab === 'unlockable' ? '#f7931a' : 'rgba(255, 255, 255, 0.6)', border: 'none', padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem', transition: 'all 0.2s ease' }}>Unlockable</button>
+            </div>
 
-          <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
-            {loadingUtxos ? (
-              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '3rem', color: 'rgba(255, 255, 255, 0.5)' }}>Loading RGB UTXOs...</div>
-            ) : (
-              <>
-                {utxoTab === 'unoccupied' && (
-                  <>
-                    {bitcoinUtxos.length === 0 ? (
-                      <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'rgba(255, 255, 255, 0.4)' }}>
-                        <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📦</div>
-                        <p style={{ fontWeight: 600, marginBottom: '0.5rem' }}>No Unoccupied UTXOs</p>
-                        <p style={{ fontSize: '0.85rem', marginTop: '0.5rem', color: 'rgba(255, 255, 255, 0.3)' }}>Bitcoin UTXOs available for RGB asset binding will appear here</p>
-                      </div>
-                    ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                        <div style={{ padding: '0.75rem 1rem', background: 'rgba(59, 130, 246, 0.1)', borderRadius: '8px', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
-                          <div style={{ fontSize: '0.85rem', color: 'rgba(59, 130, 246, 0.9)' }}>💡 These Bitcoin UTXOs are available for RGB asset binding</div>
-                        </div>
-                        {bitcoinUtxos.map((utxo) => (
-                          <div key={`${utxo.txid}:${utxo.vout}`} style={{ background: 'rgba(255, 255, 255, 0.04)', borderRadius: '12px', padding: '1rem', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
-                            <div style={{ marginBottom: '0.75rem' }}>
-                              <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.85rem' }}>Output</span>
-                              <div style={{ color: '#fff', fontSize: '0.95rem', marginTop: '0.25rem', fontFamily: 'monospace' }}>{utxo.txid.slice(0, 12)}...{utxo.txid.slice(-8)}:{utxo.vout}</div>
-                            </div>
-                            <div>
-                              <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.85rem' }}>Available for RGB Binding</span>
-                              <div style={{ color: '#fff', fontSize: '0.95rem', marginTop: '0.25rem', fontWeight: 600 }}>{(Number(utxo.value) / 100000000).toFixed(8)} BTC</div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {utxoTab === 'occupied' && (
-                  <>
-                    {rgbUtxos.length === 0 ? (
-                      <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'rgba(255, 255, 255, 0.4)' }}>
-                        <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🎨</div>
-                        <p style={{ fontWeight: 600, marginBottom: '0.5rem' }}>No Occupied UTXOs</p>
-                        <p style={{ fontSize: '0.85rem', marginTop: '0.5rem', color: 'rgba(255, 255, 255, 0.3)' }}>UTXOs with RGB assets bound to them will appear here</p>
-                      </div>
-                    ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                        <div style={{ padding: '0.75rem 1rem', background: 'rgba(168, 85, 247, 0.1)', borderRadius: '8px', border: '1px solid rgba(168, 85, 247, 0.2)' }}>
-                          <div style={{ fontSize: '0.85rem', color: 'rgba(168, 85, 247, 0.9)' }}>🎨 These UTXOs have RGB assets bound to them</div>
-                        </div>
-                        {rgbUtxos.map((_, index) => (
-                          <div key={index} style={{ background: 'rgba(255, 255, 255, 0.04)', borderRadius: '12px', padding: '1rem', border: '1px solid rgba(168, 85, 247, 0.2)' }}>
-                            <div style={{ marginBottom: '0.75rem' }}>
-                              <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.85rem' }}>RGB UTXO</span>
-                              <div style={{ color: '#fff', fontSize: '0.95rem', marginTop: '0.25rem', fontFamily: 'monospace' }}>Output #{index + 1}</div>
-                            </div>
-                            <div>
-                              <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.85rem' }}>Status</span>
-                              <div style={{ color: 'rgba(168, 85, 247, 0.9)', fontSize: '0.95rem', marginTop: '0.25rem', fontWeight: 600 }}>Occupied with RGB Assets</div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {utxoTab === 'unlockable' && (
-                  <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'rgba(255, 255, 255, 0.4)' }}>
-                    <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔓</div>
-                    <p style={{ fontWeight: 600, marginBottom: '0.5rem' }}>No Unlockable UTXOs</p>
-                    <p style={{ fontSize: '0.85rem', marginTop: '0.5rem', color: 'rgba(255, 255, 255, 0.3)' }}>UTXOs that can be unlocked for spending will appear here</p>
-                  </div>
-                )}
-              </>
+            {/* RGB Classification Error Warning */}
+            {rgbClassificationError && (
+              <div style={{ padding: '0.75rem 1rem', background: 'rgba(239, 68, 68, 0.1)', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.3)', marginBottom: '1rem' }}>
+                <div style={{ fontSize: '0.85rem', color: 'rgba(239, 68, 68, 0.9)' }}>⚠️ {rgbClassificationError}</div>
+              </div>
             )}
+
+            <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
+              {loadingUtxos ? (
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '3rem', color: 'rgba(255, 255, 255, 0.5)' }}>Classifying UTXOs with RGB proxy...</div>
+              ) : (
+                <>
+                  {utxoTab === 'unoccupied' && (
+                    <>
+                      {bitcoinUtxos.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'rgba(255, 255, 255, 0.4)' }}>
+                          <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📦</div>
+                          <p style={{ fontWeight: 600, marginBottom: '0.5rem' }}>No Unoccupied UTXOs</p>
+                          <p style={{ fontSize: '0.85rem', marginTop: '0.5rem', color: 'rgba(255, 255, 255, 0.3)' }}>Bitcoin UTXOs available for RGB asset binding will appear here</p>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                          <div style={{ padding: '0.75rem 1rem', background: 'rgba(59, 130, 246, 0.1)', borderRadius: '8px', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+                            <div style={{ fontSize: '0.85rem', color: 'rgba(59, 130, 246, 0.9)' }}>💡 These Bitcoin UTXOs are available for RGB asset binding</div>
+                          </div>
+                          {bitcoinUtxos.map((utxo) => (
+                            <div key={`${utxo.txid}:${utxo.vout}`} style={{ background: 'rgba(255, 255, 255, 0.04)', borderRadius: '12px', padding: '1rem', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                              <div style={{ marginBottom: '0.75rem' }}>
+                                <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.85rem' }}>Output</span>
+                                <div style={{ color: '#fff', fontSize: '0.95rem', marginTop: '0.25rem', fontFamily: 'monospace' }}>{utxo.txid.slice(0, 12)}...{utxo.txid.slice(-8)}:{utxo.vout}</div>
+                              </div>
+                              <div>
+                                <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.85rem' }}>Available for RGB Binding</span>
+                                <div style={{ color: '#fff', fontSize: '0.95rem', marginTop: '0.25rem', fontWeight: 600 }}>{(Number(utxo.value) / 100000000).toFixed(8)} BTC</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {utxoTab === 'occupied' && (
+                    <>
+                      {rgbUtxos.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'rgba(255, 255, 255, 0.4)' }}>
+                          <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🎨</div>
+                          <p style={{ fontWeight: 600, marginBottom: '0.5rem' }}>No Occupied UTXOs</p>
+                          <p style={{ fontSize: '0.85rem', marginTop: '0.5rem', color: 'rgba(255, 255, 255, 0.3)' }}>UTXOs with RGB assets bound to them will appear here</p>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                          <div style={{ padding: '0.75rem 1rem', background: 'rgba(168, 85, 247, 0.1)', borderRadius: '8px', border: '1px solid rgba(168, 85, 247, 0.2)' }}>
+                            <div style={{ fontSize: '0.85rem', color: 'rgba(168, 85, 247, 0.9)' }}>🎨 These UTXOs have RGB assets bound to them</div>
+                          </div>
+                          {rgbUtxos.map((utxo) => (
+                            <div key={`${utxo.txid}:${utxo.vout}`} style={{ background: 'rgba(255, 255, 255, 0.04)', borderRadius: '12px', padding: '1rem', border: '1px solid rgba(168, 85, 247, 0.2)' }}>
+                              <div style={{ marginBottom: '0.75rem' }}>
+                                <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.85rem' }}>Output</span>
+                                <div style={{ color: '#fff', fontSize: '0.95rem', marginTop: '0.25rem', fontFamily: 'monospace' }}>{utxo.txid.slice(0, 12)}...{utxo.txid.slice(-8)}:{utxo.vout}</div>
+                              </div>
+                              <div style={{ marginBottom: '0.75rem' }}>
+                                <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.85rem' }}>Bitcoin Value</span>
+                                <div style={{ color: '#fff', fontSize: '0.95rem', marginTop: '0.25rem', fontWeight: 600 }}>{(Number(utxo.value) / 100000000).toFixed(8)} BTC</div>
+                              </div>
+                              {utxo.rgbAllocations && utxo.rgbAllocations.length > 0 && (
+                                <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.1)', paddingTop: '0.75rem' }}>
+                                  <span style={{ color: 'rgba(168, 85, 247, 0.7)', fontSize: '0.85rem', fontWeight: 600 }}>RGB Assets ({utxo.rgbAllocations.length})</span>
+                                  {utxo.rgbAllocations.map((allocation, idx) => (
+                                    <div key={idx} style={{ marginTop: '0.5rem', padding: '0.5rem', background: 'rgba(168, 85, 247, 0.05)', borderRadius: '6px' }}>
+                                      <div style={{ fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.5)', marginBottom: '0.25rem' }}>
+                                        {allocation.ticker || allocation.assetName || 'RGB Asset'}
+                                      </div>
+                                      <div style={{ color: 'rgba(168, 85, 247, 0.9)', fontSize: '0.9rem', fontWeight: 600 }}>
+                                        {allocation.amount.toString()} units
+                                      </div>
+                                      <div style={{ fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.4)', marginTop: '0.25rem', fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                                        ID: {allocation.assetId.slice(0, 16)}...
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {utxoTab === 'unlockable' && (
+                    <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'rgba(255, 255, 255, 0.4)' }}>
+                      <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔓</div>
+                      <p style={{ fontWeight: 600, marginBottom: '0.5rem' }}>No Unlockable UTXOs</p>
+                      <p style={{ fontSize: '0.85rem', marginTop: '0.5rem', color: 'rgba(255, 255, 255, 0.3)' }}>UTXOs that can be unlocked for spending will appear here</p>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )
+      }
+
+      {/* Create RGB UTXO View */}
+      {
+        view === 'create-rgb-utxo' && (
+          <div className="wallet-container" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', height: '100%' }}>
+            <div className="wallet-header">
+              <button className="icon-btn" onClick={() => setView('utxos')}>←</button>
+              <h2 style={{ flex: 1, textAlign: 'center', margin: 0 }}>Create RGB UTXO</h2>
+              <button className="icon-btn" style={{ visibility: 'hidden' }}>⋮</button>
+            </div>
+
+            <div style={{ flex: 1, overflow: 'auto', paddingBottom: '1rem' }}>
+              {/* Mode Tabs */}
+              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem', marginBottom: '1rem' }}>
+                <button onClick={() => setCreateUtxoMode('default')} style={{ flex: 1, background: createUtxoMode === 'default' ? 'rgba(255, 255, 255, 0.1)' : 'transparent', border: `1px solid ${createUtxoMode === 'default' ? 'rgba(255, 255, 255, 0.3)' : 'rgba(255, 255, 255, 0.1)'}`, borderRadius: '8px', padding: '0.75rem', color: createUtxoMode === 'default' ? '#fff' : 'rgba(255, 255, 255, 0.5)', cursor: 'pointer', fontWeight: 600, fontSize: '0.95rem' }}>Default</button>
+                <button onClick={() => setCreateUtxoMode('custom')} style={{ flex: 1, background: createUtxoMode === 'custom' ? 'rgba(255, 255, 255, 0.1)' : 'transparent', border: `1px solid ${createUtxoMode === 'custom' ? 'rgba(255, 255, 255, 0.3)' : 'rgba(255, 255, 255, 0.1)'}`, borderRadius: '8px', padding: '0.75rem', color: createUtxoMode === 'custom' ? '#fff' : 'rgba(255, 255, 255, 0.5)', cursor: 'pointer', fontWeight: 600, fontSize: '0.95rem' }}>Custom</button>
+              </div>
+
+              {/* Info Text */}
+              <div style={{ padding: '1rem', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '8px', marginBottom: '1.5rem' }}>
+                <p style={{ margin: 0, fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)', lineHeight: 1.5 }}>Move BTC to pre-fund UTXO for RGB20 transaction fees.</p>
+              </div>
+
+              {/* Default Mode */}
+              {createUtxoMode === 'default' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div>
+                    <div style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)', marginBottom: '0.5rem' }}>The UTXO creation amount</div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '1.2rem', fontWeight: 600, color: '#fff' }}>0.0003 BTC</span>
+                      <span style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.5)' }}>Balance: {btcBalance} BTC</span>
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)', marginBottom: '0.5rem' }}>Fee</div>
+                    <div style={{ fontSize: '1.1rem', fontWeight: 600, color: '#fff' }}>2 sat/VB</div>
+                  </div>
+                </div>
+              )}
+
+              {/* Custom Mode */}
+              {createUtxoMode === 'custom' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                  <div>
+                    <div style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)', marginBottom: '0.5rem' }}>Available BTC</div>
+                    <div style={{ fontSize: '0.95rem', color: 'rgba(255, 255,  255, 0.6)' }}>Balance: {btcBalance} BTC</div>
+                  </div>
+                  <div>
+                    <input type="text" placeholder="Enter BTC amount for creating UTXO" value={createUtxoAmount} onChange={(e) => setCreateUtxoAmount(e.target.value)} style={{ width: '100%', padding: '0.9rem 1rem', background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: '#fff', fontSize: '0.95rem', outline: 'none' }} />
+                    <div style={{ textAlign: 'right', marginTop: '0.5rem' }}><span style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.6)' }}>BTC</span></div>
+                  </div>
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                      <span style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)' }}>Fee</span>
+                      <button style={{ background: 'none', border: 'none', color: 'rgba(255, 255, 255, 0.5)', cursor: 'pointer' }}>⟳</button>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem' }}>
+                      <button onClick={() => setCreateUtxoFeeOption('slow')} style={{ padding: '0.75rem 0.5rem', background: createUtxoFeeOption === 'slow' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: createUtxoFeeOption === 'slow' ? '#fff' : 'rgba(255, 255, 255, 0.6)', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem' }}><div style={{ fontWeight: 600 }}>Slow</div><div>2 sat/VB</div><div style={{ fontSize: '0.75rem', opacity: 0.7 }}>≈ 1 hours</div></button>
+                      <button onClick={() => setCreateUtxoFeeOption('avg')} style={{ padding: '0.75rem 0.5rem', background: createUtxoFeeOption === 'avg' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: createUtxoFeeOption === 'avg' ? '#fff' : 'rgba(255, 255, 255, 0.6)', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem' }}><div style={{ fontWeight: 600 }}>Avg</div><div>2 sat/VB</div><div style={{ fontSize: '0.75rem', opacity: 0.7 }}>≈ 30 mins</div></button>
+                      <button onClick={() => setCreateUtxoFeeOption('fast')} style={{ padding: '0.75rem 0.5rem', background: createUtxoFeeOption === 'fast' ? '#f7931a' : 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: '#fff', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem', fontWeight: createUtxoFeeOption === 'fast' ? 600 : 400 }}><div style={{ fontWeight: 600 }}>Fast</div><div>2 sat/VB</div><div style={{ fontSize: '0.75rem', opacity: 0.9 }}>≈ 10 mins</div></button>
+                      <button onClick={() => setCreateUtxoFeeOption('custom')} style={{ padding: '0.75rem 0.5rem', background: createUtxoFeeOption === 'custom' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: createUtxoFeeOption === 'custom' ? '#fff' : 'rgba(255, 255, 255, 0.6)', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontWeight: 600 }}>Custom</button>
+                    </div>
+                    {createUtxoFeeOption === 'custom' && (
+                      <input type="number" placeholder="Enter custom fee rate" value={createUtxoCustomFee} onChange={(e) => setCreateUtxoCustomFee(e.target.value)} style={{ width: '100%', padding: '0.75rem 1rem', background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: '#fff', fontSize: '0.9rem', marginTop: '0.75rem', outline: 'none' }} />
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Next Button */}
+              <button className="btn-primary" onClick={() => setView('create-utxo-confirm')} style={{ width: '100%', marginTop: '2rem', background: '#f7931a', padding: '1rem', fontSize: '1rem', fontWeight: 600 }}>Next</button>
+            </div>
+          </div>
+        )
+      }
+
+      {/* Create UTXO Confirmation - Sign Transaction */}
+      {
+        view === 'create-utxo-confirm' && (
+          <div className="wallet-container" style={{ padding: '1rem' }}>
+            <div className="wallet-header">
+              <button className="icon-btn" onClick={() => setView('create-rgb-utxo')}>←</button>
+              <h2 style={{ flex: 1, textAlign: 'center', margin: 0 }}>Sign Transaction</h2>
+              <button className="icon-btn" style={{ visibility: 'hidden' }}>⋮</button>
+            </div>
+
+            <div style={{ marginTop: '2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+              {/* From/To Addresses Box */}
+              <div style={{ background: 'rgba(255, 255, 255, 0.05)', borderRadius: '12px', padding: '1.25rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.5)', marginBottom: '0.35rem' }}>From</div>
+                    <div style={{ fontSize: '0.9rem', color: '#fff', fontFamily: 'monospace' }}>
+                      {mainBalanceAddress ? `${mainBalanceAddress.slice(0, 7)}...${mainBalanceAddress.slice(-4)}` : walletAddress ? `${walletAddress.slice(0, 7)}...${walletAddress.slice(-4)}` : 'tb1p...'}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: '1.5rem', color: 'rgba(255, 255, 255, 0.3)', margin: '0 1rem' }}>→</div>
+                  <div style={{ flex: 1, textAlign: 'right' }}>
+                    <div style={{ fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.5)', marginBottom: '0.35rem' }}>Send to</div>
+                    <div style={{ fontSize: '0.9rem', color: '#fff', fontFamily: 'monospace' }}>
+                      {utxoHolderAddress ? `${utxoHolderAddress.slice(0, 7)}...${utxoHolderAddress.slice(-4)}` : 'tb1p...pxak'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Send Amount */}
+                <div style={{ marginTop: '1.5rem', paddingTop: '1.25rem', borderTop: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                  <div style={{ fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.5)', marginBottom: '0.5rem' }}>Send Amount</div>
+                  <div style={{ fontSize: '2rem', fontWeight: 600, color: '#fff' }}>
+                    {createUtxoMode === 'default' ? '0.0003' : createUtxoAmount || '0.0003'} BTC
+                  </div>
+                </div>
+              </div>
+
+              {/* Network Fee */}
+              <div>
+                <div style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)', marginBottom: '0.75rem' }}>Network Fee</div>
+                <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', padding: '0.9rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.95rem', color: '#fff' }}>0.00000425</span>
+                  <span style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.5)' }}>BTC</span>
+                </div>
+              </div>
+
+              {/* Network Fee Rate */}
+              <div>
+                <div style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)', marginBottom: '0.75rem' }}>Network Fee Rate</div>
+                <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', padding: '0.9rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.95rem', color: '#fff' }}>
+                    {createUtxoFeeOption === 'custom' ? createUtxoCustomFee : '2'}
+                  </span>
+                  <span style={{ fontSize: '0.85rem', color: 'rgba(59, 130, 246, 0.7)' }}>sat/VB</span>
+                </div>
+              </div>
+
+              {/* Sign & Pay Button */}
+              <button
+                className="btn-primary"
+                onClick={() => {
+                  // TODO: Implement actual transaction signing and broadcasting
+                  console.log('Signing and broadcasting transaction to UTXO Holder address...');
+                  setView('utxos');
+                }}
+                style={{
+                  width: '100%',
+                  marginTop: '1rem',
+                  background: '#f7931a',
+                  padding: '1rem',
+                  fontSize: '1rem',
+                  fontWeight: 600
+                }}
+              >
+                Sign & Pay
+              </button>
+            </div>
+          </div>
+        )
+      }
     </>
   )
 }

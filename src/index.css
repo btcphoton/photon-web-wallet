@@ -441,6 +441,123 @@ body {
   color: rgba(255, 255, 255, 0.4);
 }
 
+/* Activities List */
+.activities-list {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 0.25rem;
+  min-height: 0;
+}
+
+.activities-loading {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+}
+
+.activity-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(10px);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  transition: all 0.2s ease;
+}
+
+.activity-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.activity-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.activity-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.activity-icon.receive {
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+}
+
+.activity-icon.send {
+  background: linear-gradient(135deg, #f7931a, #e67e00);
+}
+
+.activity-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.activity-type {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: #fff;
+}
+
+.activity-date {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.activity-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.25rem;
+}
+
+.activity-amount {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.activity-amount.receive {
+  color: #22c55e;
+}
+
+.activity-amount.send {
+  color: #f7931a;
+}
+
+.activity-status {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+.activity-status.confirmed {
+  background: rgba(34, 197, 94, 0.2);
+  color: #22c55e;
+}
+
+.activity-status.pending {
+  background: rgba(251, 191, 36, 0.2);
+  color: #fbbf24;
+}
+
+
 /* Welcome Screen */
 .welcome-container {
   display: flex;
@@ -953,6 +1070,64 @@ textarea:focus {
   right: 0;
   bottom: 0;
   z-index: 50;
+}
+
+/* Faucet Items */
+.faucet-item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.25rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-bottom: 0.75rem;
+}
+
+.faucet-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-2px);
+}
+
+.faucet-icon {
+  font-size: 1.75rem;
+  min-width: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.faucet-details {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.faucet-name {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #fff;
+}
+
+.faucet-url {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.6);
+  font-family: monospace;
+}
+
+.faucet-arrow {
+  font-size: 1.25rem;
+  color: rgba(255, 255, 255, 0.5);
+  transition: transform 0.2s ease;
+}
+
+.faucet-item:hover .faucet-arrow {
+  transform: translate(2px, -2px);
+  color: #f7931a;
 }
 
 /* Lock Screen & Unlock Screen Updates */

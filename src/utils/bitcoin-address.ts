@@ -9,6 +9,7 @@ import * as ecc from 'tiny-secp256k1';
  * @param mnemonic - BIP39 mnemonic phrase
  * @param network - Bitcoin network ('mainnet', 'testnet3', 'testnet4', 'regtest')
  * @param accountIndex - Account index (default: 0)
+ * @param chainIndex - Chain index (default: 0, can be 0/100/999 for different purposes)
  * @param addressIndex - Address index (default: 0)
  * @returns Bitcoin address (Taproot - bc1p... for mainnet, 62 characters)
  */
@@ -16,6 +17,7 @@ export const deriveBitcoinAddress = async (
     mnemonic: string,
     network: 'mainnet' | 'testnet3' | 'testnet4' | 'regtest' = 'mainnet',
     accountIndex: number = 0,
+    chainIndex: number = 0,
     addressIndex: number = 0
 ): Promise<string> => {
     // Validate mnemonic
@@ -39,13 +41,13 @@ export const deriveBitcoinAddress = async (
         coinType = 1; // BIP44 coin type for Bitcoin testnet
     }
 
-    // BIP86 derivation path: m/86'/coin_type'/account'/0/address_index
+    // BIP86 derivation path: m/86'/coin_type'/account'/chain/address_index
     // 86' = Purpose (Taproot)
     // coin_type' = 0 for mainnet, 1 for testnet
     // account' = Account index
-    // 0 = External chain (receiving addresses)
+    // chain = Chain index (0 = main, 100 = UTXO holder, 999 = dust holder)
     // address_index = Address index
-    const path = `m/86'/${coinType}'/${accountIndex}'/0/${addressIndex}`;
+    const path = `m/86'/${coinType}'/${accountIndex}'/${chainIndex}/${addressIndex}`;
 
     // Initialize BIP32 with tiny-secp256k1 (lazy initialization to avoid WASM issues)
     const bip32 = BIP32Factory(ecc);
