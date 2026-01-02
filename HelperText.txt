@@ -1,3 +1,5 @@
+/home/waheed/gcloudserver.sh
+
 https://htlc.me/
 cab1c9c6-319e-4e0f-ae58-e0b10006397e
 

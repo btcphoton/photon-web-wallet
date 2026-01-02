@@ -173,6 +173,9 @@ function App() {
   const [utxoTab, setUtxoTab] = useState<'unoccupied' | 'occupied' | 'unlockable'>('unoccupied')
   const [rgbClassificationError, setRgbClassificationError] = useState<string>('')
 
+  // Scroll container ref for scroll-based UX
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+
   // Create RGB UTXO states
   const [createUtxoMode, setCreateUtxoMode] = useState<'default' | 'custom'>('default')
   const [createUtxoAmount, setCreateUtxoAmount] = useState<string>('')
@@ -697,6 +700,16 @@ function App() {
       setLoadingActivities(false)
     }
   }
+
+  // Auto-load activities when dashboard is shown and set Activities as default tab
+  useEffect(() => {
+    if (view === 'dashboard' && walletAddress) {
+      // Set Activities as the active tab on dashboard load
+      setActiveTab('activities')
+      // Load activities data
+      loadActivities()
+    }
+  }, [view, walletAddress, selectedNetwork])
 
 
   // Handle network switch
@@ -2086,8 +2099,8 @@ function App() {
       )}
 
       {view === 'dashboard' && (
-        <div className="wallet-container" onDoubleClick={() => balanceError && setBalanceError('')}>
-          {/* Header */}
+        <div className="wallet-wrapper" onDoubleClick={() => balanceError && setBalanceError('')}>
+          {/* Header - Fixed at top */}
           <div className="wallet-header">
             <div className="brand">
               <span className="brand-icon">⚡</span>
@@ -2172,236 +2185,236 @@ function App() {
             </div>
           )}
 
-          {/* Balance Section */}
-          <div className="balance-section">
-            <div className="network-label">{networks.find(n => n.id === selectedNetwork)?.name.replace('Bitcoin ', '') || 'Mainnet'}</div>
-            <div className="balance-row">
-              {loadingBalance ? (
-                <div className="skeleton-loader"></div>
-              ) : (
-                <span className="balance-amount">{btcBalance}</span>
+          {/* Scrollable Content Container - Everything scrolls together */}
+          <div className="wallet-scroll-container" ref={scrollContainerRef}>
+            {/* Balance Section */}
+            <div className="balance-section">
+              <div className="network-label">{networks.find(n => n.id === selectedNetwork)?.name.replace('Bitcoin ', '') || 'Mainnet'}</div>
+              <div className="balance-row">
+                {loadingBalance ? (
+                  <div className="skeleton-loader"></div>
+                ) : (
+                  <span className="balance-amount">{btcBalance}</span>
+                )}
+                <span className="balance-currency">BTC</span>
+                <button className="info-btn" onClick={() => setShowBalanceInfo(!showBalanceInfo)}>ⓘ</button>
+              </div>
+
+              {/* Balance Error Display */}
+              {balanceError && (
+                <div className="balance-error">
+                  <span className="error-icon">⚠️</span>
+                  <span className="error-text">{balanceError}</span>
+                </div>
               )}
-              <span className="balance-currency">BTC</span>
-              <button className="info-btn" onClick={() => setShowBalanceInfo(!showBalanceInfo)}>ⓘ</button>
+
+              {/* Balance Info Popup */}
+              {showBalanceInfo && (
+                <>
+                  <div className="balance-popup-overlay" onClick={() => setShowBalanceInfo(false)}></div>
+                  <div className="balance-popup" onClick={() => setShowBalanceInfo(false)}>
+                    <div className="balance-popup-row">
+                      <span className="balance-popup-label">Available</span>
+                      <div className="balance-popup-value">
+                        <span className="balance-popup-btc">0 BTC</span>
+                        <span className="balance-popup-sats">0 sats</span>
+                      </div>
+                    </div>
+                    <div className="balance-popup-row">
+                      <span className="balance-popup-label">Unconfirmed</span>
+                      <div className="balance-popup-value">
+                        <span className="balance-popup-btc">0 BTC</span>
+                        <span className="balance-popup-sats">0 sats</span>
+                      </div>
+                    </div>
+                    <div className="balance-popup-row">
+                      <span className="balance-popup-label">UTXO Locked</span>
+                      <div className="balance-popup-value">
+                        <span className="balance-popup-btc">0 BTC</span>
+                        <span className="balance-popup-sats">0 sats</span>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+              <div className="address-row">
+                <span className="address-badge">BTC</span>
+                {loadingAddress ? (
+                  <span className="address-text">Loading...</span>
+                ) : loadingExpand ? (
+                  <div className="wave-loader">
+                    <div className="wave-dot"></div>
+                    <div className="wave-dot"></div>
+                    <div className="wave-dot"></div>
+                  </div>
+                ) : (
+                  <span className="address-text" title={walletAddress || btcAddress}>
+                    {truncateAddress(walletAddress || btcAddress) || 'No address'}
+                  </span>
+                )}
+                <button
+                  className="icon-btn-sm"
+                  onClick={() => {
+                    navigator.clipboard.writeText(walletAddress || btcAddress)
+                    setCopied(true)
+                    setTimeout(() => setCopied(false), 2000)
+                  }}
+                  title={copied ? 'Copied!' : 'Copy address'}
+                >
+                  {copied ? '✓' : '⧉'}
+                </button>
+                <button
+                  className="icon-btn-sm"
+                  onClick={handleExpandAddress}
+                  title={addressGenerationMethod === 'bitcoin' ? 'Expand disabled in Bitcoin mode' : 'Expand - Fetch from canister'}
+                  disabled={addressGenerationMethod === 'bitcoin'}
+                  style={{
+                    opacity: addressGenerationMethod === 'bitcoin' ? 0.5 : 1,
+                    cursor: addressGenerationMethod === 'bitcoin' ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  ⊡
+                </button>
+              </div>
+              {/* Principal ID Row */}
+              <div className="address-row principal-row">
+                <span className="address-badge principal-badge">ICP</span>
+                <span className="address-text" title={principalId}>
+                  {truncateAddress(principalId) || 'No Principal'}
+                </span>
+                <button
+                  className="icon-btn-sm"
+                  onClick={copyPrincipal}
+                  title={copiedPrincipal ? 'Copied!' : 'Copy Principal ID'}
+                >
+                  {copiedPrincipal ? '✓' : '⧉'}
+                </button>
+              </div>
             </div>
 
-            {/* Balance Error Display */}
-            {balanceError && (
-              <div className="balance-error">
-                <span className="error-icon">⚠️</span>
-                <span className="error-text">{balanceError}</span>
+            {/* Action Buttons */}
+            <div className="action-buttons">
+              <button className="action-btn" onClick={() => setView('receive')}>
+                <div className="action-icon receive">↓</div>
+                <span className="action-label">Receive</span>
+              </button>
+              <button className="action-btn" onClick={() => setView('send')}>
+                <div className="action-icon send">↗</div>
+                <span className="action-label">Send</span>
+              </button>
+              <button className="action-btn" onClick={handleViewUtxos}>
+                <div className="action-icon utxos">▤</div>
+                <span className="action-label">UTXOs</span>
+              </button>
+            </div>
+
+            {/* Tabs */}
+            <div className="tabs-container">
+              <button
+                className={`tab-btn ${activeTab === 'assets' ? 'active' : ''}`}
+                onClick={() => setActiveTab('assets')}
+              >
+                Assets
+              </button>
+              <button
+                className={`tab-btn ${activeTab === 'activities' ? 'active' : ''}`}
+                onClick={() => setActiveTab('activities')}
+              >
+                Activities
+              </button>
+            </div>
+
+            {/* Asset List */}
+            {activeTab === 'assets' && (
+              <div className="asset-list">
+                {assets.length === 0 ? (
+                  <div className="assets-empty">
+                    <div className="empty-icon">📦</div>
+                    <p className="empty-text">No Asset</p>
+                    <button className="add-assets-btn" onClick={() => setView('add-assets')}>
+                      + Add Assets
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    {assets.map((asset) => (
+                      <div key={asset.id} className="asset-item">
+                        <div className="asset-left">
+                          <div
+                            className="asset-icon"
+                            style={{ background: asset.color }}
+                          >
+                            {asset.name[0]}
+                          </div>
+                          <div className="asset-info">
+                            <span className="asset-name">{asset.name}</span>
+                            <span className="asset-amount">
+                              {asset.amount} {asset.unit}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="asset-arrow">›</div>
+                      </div>
+                    ))}
+                    <button className="add-assets-btn" onClick={() => setView('add-assets')}>
+                      + Add Assets
+                    </button>
+                  </>
+                )}
               </div>
             )}
 
-            {/* Balance Info Popup */}
-            {showBalanceInfo && (
-              <>
-                <div className="balance-popup-overlay" onClick={() => setShowBalanceInfo(false)}></div>
-                <div className="balance-popup" onClick={() => setShowBalanceInfo(false)}>
-                  <div className="balance-popup-row">
-                    <span className="balance-popup-label">Available</span>
-                    <div className="balance-popup-value">
-                      <span className="balance-popup-btc">0 BTC</span>
-                      <span className="balance-popup-sats">0 sats</span>
-                    </div>
+            {activeTab === 'activities' && (
+              <div className="activities-list">
+                {loadingActivities ? (
+                  <div className="activities-loading">
+                    <div className="skeleton-loader"></div>
+                    <div className="skeleton-loader"></div>
+                    <div className="skeleton-loader"></div>
                   </div>
-                  <div className="balance-popup-row">
-                    <span className="balance-popup-label">Unconfirmed</span>
-                    <div className="balance-popup-value">
-                      <span className="balance-popup-btc">0 BTC</span>
-                      <span className="balance-popup-sats">0 sats</span>
-                    </div>
+                ) : activities.length === 0 ? (
+                  <div className="activities-empty">
+                    <div className="empty-icon">📋</div>
+                    <p className="empty-text">No activities yet</p>
                   </div>
-                  <div className="balance-popup-row">
-                    <span className="balance-popup-label">UTXO Locked</span>
-                    <div className="balance-popup-value">
-                      <span className="balance-popup-btc">0 BTC</span>
-                      <span className="balance-popup-sats">0 sats</span>
-                    </div>
-                  </div>
-                </div>
-              </>
-            )}
-            <div className="address-row">
-              <span className="address-badge">BTC</span>
-              {loadingAddress ? (
-                <span className="address-text">Loading...</span>
-              ) : loadingExpand ? (
-                <div className="wave-loader">
-                  <div className="wave-dot"></div>
-                  <div className="wave-dot"></div>
-                  <div className="wave-dot"></div>
-                </div>
-              ) : (
-                <span className="address-text" title={walletAddress || btcAddress}>
-                  {truncateAddress(walletAddress || btcAddress) || 'No address'}
-                </span>
-              )}
-              <button
-                className="icon-btn-sm"
-                onClick={() => {
-                  navigator.clipboard.writeText(walletAddress || btcAddress)
-                  setCopied(true)
-                  setTimeout(() => setCopied(false), 2000)
-                }}
-                title={copied ? 'Copied!' : 'Copy address'}
-              >
-                {copied ? '✓' : '⧉'}
-              </button>
-              <button
-                className="icon-btn-sm"
-                onClick={handleExpandAddress}
-                title={addressGenerationMethod === 'bitcoin' ? 'Expand disabled in Bitcoin mode' : 'Expand - Fetch from canister'}
-                disabled={addressGenerationMethod === 'bitcoin'}
-                style={{
-                  opacity: addressGenerationMethod === 'bitcoin' ? 0.5 : 1,
-                  cursor: addressGenerationMethod === 'bitcoin' ? 'not-allowed' : 'pointer'
-                }}
-              >
-                ⊡
-              </button>
-            </div>
-            {/* Principal ID Row */}
-            <div className="address-row principal-row">
-              <span className="address-badge principal-badge">ICP</span>
-              <span className="address-text" title={principalId}>
-                {truncateAddress(principalId) || 'No Principal'}
-              </span>
-              <button
-                className="icon-btn-sm"
-                onClick={copyPrincipal}
-                title={copiedPrincipal ? 'Copied!' : 'Copy Principal ID'}
-              >
-                {copiedPrincipal ? '✓' : '⧉'}
-              </button>
-            </div>
-          </div>
+                ) : (
+                  activities.map((activity) => {
+                    // Build Blockstream URL based on network
+                    const explorerUrl = selectedNetwork === 'mainnet'
+                      ? `https://blockstream.info/tx/${activity.txid}`
+                      : `https://blockstream.info/testnet/tx/${activity.txid}`;
 
-          {/* Action Buttons */}
-          <div className="action-buttons">
-            <button className="action-btn" onClick={() => setView('receive')}>
-              <div className="action-icon receive">↓</div>
-              <span className="action-label">Receive</span>
-            </button>
-            <button className="action-btn" onClick={() => setView('send')}>
-              <div className="action-icon send">↗</div>
-              <span className="action-label">Send</span>
-            </button>
-            <button className="action-btn" onClick={handleViewUtxos}>
-              <div className="action-icon utxos">▤</div>
-              <span className="action-label">UTXOs</span>
-            </button>
-          </div>
-
-          {/* Tabs */}
-          <div className="tabs-container">
-            <button
-              className={`tab-btn ${activeTab === 'assets' ? 'active' : ''}`}
-              onClick={() => setActiveTab('assets')}
-            >
-              Assets
-            </button>
-            <button
-              className={`tab-btn ${activeTab === 'activities' ? 'active' : ''}`}
-              onClick={() => {
-                setActiveTab('activities')
-                loadActivities() // Load activities when tab is clicked
-              }}
-            >
-              Activities
-            </button>
-          </div>
-
-          {/* Asset List */}
-          {activeTab === 'assets' && (
-            <div className="asset-list">
-              {assets.length === 0 ? (
-                <div className="assets-empty">
-                  <div className="empty-icon">📦</div>
-                  <p className="empty-text">No Asset</p>
-                  <button className="add-assets-btn" onClick={() => setView('add-assets')}>
-                    + Add Assets
-                  </button>
-                </div>
-              ) : (
-                <>
-                  {assets.map((asset) => (
-                    <div key={asset.id} className="asset-item">
-                      <div className="asset-left">
-                        <div
-                          className="asset-icon"
-                          style={{ background: asset.color }}
-                        >
-                          {asset.name[0]}
+                    return (
+                      <div
+                        key={activity.txid}
+                        className="activity-item"
+                        onClick={() => window.open(explorerUrl, '_blank')}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <div className="activity-left">
+                          <div className={`activity-icon ${activity.type.toLowerCase()}`}>
+                            {activity.type === 'Receive' ? '↓' : '↗'}
+                          </div>
+                          <div className="activity-info">
+                            <span className="activity-type">{activity.type} Bitcoin</span>
+                            <span className="activity-date">{activity.date}</span>
+                          </div>
                         </div>
-                        <div className="asset-info">
-                          <span className="asset-name">{asset.name}</span>
-                          <span className="asset-amount">
-                            {asset.amount} {asset.unit}
+                        <div className="activity-right">
+                          <span className={`activity-amount ${activity.type.toLowerCase()}`}>
+                            {activity.type === 'Receive' ? '+' : '-'}{activity.amount.toFixed(8)} BTC
+                          </span>
+                          <span className={`activity-status ${activity.status.toLowerCase()}`}>
+                            {activity.status}
                           </span>
                         </div>
                       </div>
-                      <div className="asset-arrow">›</div>
-                    </div>
-                  ))}
-                  <button className="add-assets-btn" onClick={() => setView('add-assets')}>
-                    + Add Assets
-                  </button>
-                </>
-              )}
-            </div>
-          )}
-
-          {activeTab === 'activities' && (
-            <div className="activities-list">
-              {loadingActivities ? (
-                <div className="activities-loading">
-                  <div className="skeleton-loader"></div>
-                  <div className="skeleton-loader"></div>
-                  <div className="skeleton-loader"></div>
-                </div>
-              ) : activities.length === 0 ? (
-                <div className="activities-empty">
-                  <div className="empty-icon">📋</div>
-                  <p className="empty-text">No activities yet</p>
-                </div>
-              ) : (
-                activities.map((activity) => {
-                  // Build Blockstream URL based on network
-                  const explorerUrl = selectedNetwork === 'mainnet'
-                    ? `https://blockstream.info/tx/${activity.txid}`
-                    : `https://blockstream.info/testnet/tx/${activity.txid}`;
-
-                  return (
-                    <div
-                      key={activity.txid}
-                      className="activity-item"
-                      onClick={() => window.open(explorerUrl, '_blank')}
-                      style={{ cursor: 'pointer' }}
-                    >
-                      <div className="activity-left">
-                        <div className={`activity-icon ${activity.type.toLowerCase()}`}>
-                          {activity.type === 'Receive' ? '↓' : '↗'}
-                        </div>
-                        <div className="activity-info">
-                          <span className="activity-type">{activity.type} Bitcoin</span>
-                          <span className="activity-date">{activity.date}</span>
-                        </div>
-                      </div>
-                      <div className="activity-right">
-                        <span className={`activity-amount ${activity.type.toLowerCase()}`}>
-                          {activity.type === 'Receive' ? '+' : '-'}{activity.amount.toFixed(8)} BTC
-                        </span>
-                        <span className={`activity-status ${activity.status.toLowerCase()}`}>
-                          {activity.status}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          )}
+                    );
+                  })
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
 

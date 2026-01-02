@@ -37,7 +37,16 @@ body {
   overflow-x: hidden;
 }
 
-/* Wallet Container */
+/* Wallet Container - Wrapper for scroll-based UX */
+.wallet-wrapper {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+/* Original wallet-container kept for compatibility */
 .wallet-container {
   display: flex;
   flex-direction: column;
@@ -48,12 +57,37 @@ body {
   overflow-y: hidden;
 }
 
-/* Header */
+/* Scroll Container for Full-Page Scroll - includes balance, buttons, tabs, content */
+.wallet-scroll-container {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  padding: 0;
+  margin: 0;
+  /* Hide scrollbar while keeping scroll functionality */
+  scrollbar-width: none;
+  /* Firefox */
+  -ms-overflow-style: none;
+  /* IE and Edge */
+}
+
+/* Hide scrollbar for Chrome, Safari and Opera */
+.wallet-scroll-container::-webkit-scrollbar {
+  display: none;
+}
+
+/* Header - Fixed at top */
 .wallet-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.5rem 0;
+  padding: 1rem 1rem 0.5rem 1rem;
+  background: linear-gradient(180deg, #0a0a0a 0%, #131313 100%);
+  position: sticky;
+  top: 0;
+  z-index: 100;
 }
 
 .brand {
@@ -118,10 +152,10 @@ body {
   opacity: 0.6;
 }
 
-/* Balance Section */
+/* Balance Section - Inside scroll container */
 .balance-section {
   text-align: center;
-  margin-bottom: 2rem;
+  margin: 1rem;
   padding: 1.5rem;
   background: rgba(255, 255, 255, 0.03);
   border-radius: 20px;
@@ -268,12 +302,12 @@ body {
   color: #fff;
 }
 
-/* Action Buttons */
+/* Action Buttons - Inside scroll container */
 .action-buttons {
   display: flex;
   justify-content: center;
   gap: 2rem;
-  padding: 1rem 0;
+  padding: 0 1rem 1.5rem 1rem;
 }
 
 .action-btn {
@@ -327,12 +361,13 @@ body {
   color: rgba(255, 255, 255, 0.7);
 }
 
-/* Tabs */
+/* Tabs - Inside scroll container */
 .tabs-container {
   display: flex;
   gap: 0.5rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  padding-bottom: 0.5rem;
+  padding: 0 1rem 0.5rem 1rem;
+  margin-bottom: 1rem;
 }
 
 .tab-btn {
@@ -362,16 +397,17 @@ body {
   border-radius: 2px;
 }
 
-/* Asset List */
+/* Asset List - Inside scroll container */
 .asset-list {
   flex: 1;
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  overflow-y: auto;
+  overflow-y: visible;
   overflow-x: hidden;
-  padding-right: 0.25rem;
+  padding: 0 1rem;
   min-height: 0;
+  padding-bottom: 2rem;
 }
 
 
@@ -441,16 +477,17 @@ body {
   color: rgba(255, 255, 255, 0.4);
 }
 
-/* Activities List */
+/* Activities List - Inside scroll container */
 .activities-list {
   flex: 1;
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  overflow-y: auto;
+  overflow-y: visible;
   overflow-x: hidden;
-  padding-right: 0.25rem;
+  padding: 0 1rem;
   min-height: 0;
+  padding-bottom: 2rem;
 }
 
 .activities-loading {
