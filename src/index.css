@@ -552,9 +552,17 @@ body {
   color: #fff;
 }
 
+.activity-txid {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 0.25rem;
+  font-family: monospace;
+}
+
 .activity-date {
   font-size: 0.8rem;
   color: rgba(255, 255, 255, 0.5);
+  margin-top: 0.25rem;
 }
 
 .activity-right {
@@ -590,8 +598,8 @@ body {
 }
 
 .activity-status.pending {
-  background: rgba(251, 191, 36, 0.2);
-  color: #fbbf24;
+  background: rgba(255, 149, 0, 0.15);
+  color: #ff9500;
 }
 
 

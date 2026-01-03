@@ -121,6 +121,7 @@ function App() {
 
   // Balance states for two-address system
   const [btcBalance, setBtcBalance] = useState<string>('0.00000000') // Wallet balance (main)
+  const [pendingBalance, setPendingBalance] = useState<number>(0) // Pending incoming transactions
   // const [lightningBalance, setLightningBalance] = useState<string>('0.00000000') // Lightning balance - for future asset display
   const [loadingBalance, setLoadingBalance] = useState<boolean>(false)
   // const [loadingLightningBalance, setLoadingLightningBalance] = useState<boolean>(false) // For future Lightning asset
@@ -711,6 +712,19 @@ function App() {
     }
   }, [view, walletAddress, selectedNetwork])
 
+  // Calculate pending balance from activities
+  useEffect(() => {
+    if (activities.length > 0) {
+      const pendingReceives = activities
+        .filter(activity => activity.status === 'Pending' && activity.type === 'Receive')
+        .reduce((sum, activity) => sum + activity.amount, 0)
+
+      setPendingBalance(pendingReceives)
+    } else {
+      setPendingBalance(0)
+    }
+  }, [activities])
+
 
   // Handle network switch
   const handleNetworkSwitch = async (network: Network) => {
@@ -850,69 +864,7 @@ function App() {
     setLoadingBalance(true)
     setBalanceError('') // Clear previous error
     try {
-      // Try to get balance from wallet canister first
-      try {
-        const canisterNetwork = mapNetworkToCanister(networkId)
-        const balanceNat64 = await getWalletBalance(currentMnemonic, canisterNetwork)
-        const balanceBtc = (Number(balanceNat64) / 100000000).toFixed(8)
-
-        // If canister returns zero, immediately fetch from Blockstream API
-        if (balanceBtc === '0.00000000') {
-          console.log('Canister returned zero balance, checking Blockstream API...')
-          const apiUrl = networkId === 'mainnet'
-            ? `https://blockstream.info/api/address/${currentAddress.trim()}`
-            : `https://blockstream.info/testnet/api/address/${currentAddress.trim()}`
-
-          const response = await fetch(apiUrl)
-          if (response.ok) {
-            const data = await response.json()
-            const balanceFromAPI = (data.chain_stats?.funded_txo_sum || 0) - (data.chain_stats?.spent_txo_sum || 0)
-            const apiBalanceBtc = (balanceFromAPI / 100000000).toFixed(8)
-
-            // Store in Chrome storage (both old and new keys for compatibility)
-            await setStorageData({
-              user_bitcoin_balance: apiBalanceBtc,
-              walletBalance: apiBalanceBtc
-            })
-            setBtcBalance(apiBalanceBtc)
-            setBalanceError('')
-            console.log('Balance from Blockstream API (canister was zero):', apiBalanceBtc)
-
-            // Also fetch LBTC balance
-            try {
-              const ckBTCBalance = await getCkBTCBalance(currentMnemonic, canisterNetwork)
-              await setStorageData({ user_lbtc_balance: ckBTCBalance })
-              console.log('LBTC balance fetched:', ckBTCBalance)
-            } catch (lbtcError) {
-              console.error('Error fetching LBTC balance:', lbtcError)
-            }
-            return
-          }
-        }
-
-        // Store in Chrome storage (both keys for compatibility)
-        await setStorageData({
-          user_bitcoin_balance: balanceBtc,
-          walletBalance: balanceBtc
-        })
-        setBtcBalance(balanceBtc)
-        setBalanceError('')
-        console.log('Balance from wallet canister:', balanceBtc)
-
-        // Also fetch LBTC balance
-        try {
-          const ckBTCBalance = await getCkBTCBalance(currentMnemonic, canisterNetwork)
-          await setStorageData({ user_lbtc_balance: ckBTCBalance })
-          console.log('LBTC balance fetched:', ckBTCBalance)
-        } catch (lbtcError) {
-          console.error('Error fetching LBTC balance:', lbtcError)
-        }
-        return
-      } catch (canisterError) {
-        console.log('Wallet canister balance fetch failed, falling back to Blockstream API:', canisterError)
-      }
-
-      // Fallback to Blockstream API
+      // Primary source: Blockstream API
       const apiUrl = networkId === 'mainnet'
         ? `https://blockstream.info/api/address/${currentAddress.trim()}`
         : `https://blockstream.info/testnet/api/address/${currentAddress.trim()}`
@@ -925,12 +877,11 @@ function App() {
         } else if (response.status === 404) {
           throw new Error('Address not found')
         } else {
-          throw new Error('Failed to fetch balance')
+          throw new Error('Failed to fetch balance from Blockstream API')
         }
       }
 
       const data = await response.json()
-      // Blockstream API returns chain_stats.funded_txo_sum - chain_stats.spent_txo_sum
       const balanceFromAPI = (data.chain_stats?.funded_txo_sum || 0) - (data.chain_stats?.spent_txo_sum || 0)
       const balanceBtc = (balanceFromAPI / 100000000).toFixed(8)
 
@@ -941,9 +892,9 @@ function App() {
       })
       setBtcBalance(balanceBtc)
       setBalanceError('')
-      console.log('Balance from Blockstream API:', balanceBtc)
+      console.log('Balance from Blockstream API (primary):', balanceBtc)
 
-      // Also fetch LBTC balance
+      // Also fetch LBTC balance from canister
       try {
         const canisterNetwork = mapNetworkToCanister(networkId)
         const ckBTCBalance = await getCkBTCBalance(currentMnemonic, canisterNetwork)
@@ -952,11 +903,39 @@ function App() {
       } catch (lbtcError) {
         console.error('Error fetching LBTC balance:', lbtcError)
       }
-    } catch (e) {
-      console.error('Error fetching balance:', e)
-      // Show simple user-friendly error and prompt to refresh
-      setBalanceError('Error fetching balance. Click refresh to try again.')
+    } catch (error: any) {
+      console.error('Error fetching Bitcoin balance from Blockstream:', error)
+      setBalanceError(error.message || 'Error fetching balance')
       setBtcBalance('0.00000000')
+
+      // Fallback to wallet canister if Blockstream API fails
+      try {
+        console.log('Blockstream API failed, falling back to wallet canister...')
+        const canisterNetwork = mapNetworkToCanister(networkId)
+        const balanceNat64 = await getWalletBalance(currentMnemonic, canisterNetwork)
+        const balanceBtc = (Number(balanceNat64) / 100000000).toFixed(8)
+
+        await setStorageData({
+          user_bitcoin_balance: balanceBtc,
+          walletBalance: balanceBtc
+        })
+        setBtcBalance(balanceBtc)
+        setBalanceError('')
+        console.log('Balance from wallet canister (fallback):', balanceBtc)
+
+        // Also fetch LBTC balance
+        try {
+          const ckBTCBalance = await getCkBTCBalance(currentMnemonic, canisterNetwork)
+          await setStorageData({ user_lbtc_balance: ckBTCBalance })
+          console.log('LBTC balance fetched:', ckBTCBalance)
+        } catch (lbtcError) {
+          console.error('Error fetching LBTC balance:', lbtcError)
+        }
+      } catch (canisterError: any) {
+        console.error('Error fetching Bitcoin balance from canister (fallback):', canisterError)
+        setBalanceError(canisterError.message || 'Error fetching balance from both sources.')
+        setBtcBalance('0.00000000')
+      }
     } finally {
       setLoadingBalance(false)
     }
@@ -2194,7 +2173,9 @@ function App() {
                 {loadingBalance ? (
                   <div className="skeleton-loader"></div>
                 ) : (
-                  <span className="balance-amount">{btcBalance}</span>
+                  <span className="balance-amount">
+                    {(parseFloat(btcBalance) + pendingBalance).toFixed(8)}
+                  </span>
                 )}
                 <span className="balance-currency">BTC</span>
                 <button className="info-btn" onClick={() => setShowBalanceInfo(!showBalanceInfo)}>ⓘ</button>
@@ -2384,6 +2365,9 @@ function App() {
                       ? `https://blockstream.info/tx/${activity.txid}`
                       : `https://blockstream.info/testnet/tx/${activity.txid}`;
 
+                    // Shorten txid for display
+                    const shortTxid = activity.txid ? `${activity.txid.slice(0, 8)}...${activity.txid.slice(-4)}` : 'unknown';
+
                     return (
                       <div
                         key={activity.txid}
@@ -2396,13 +2380,13 @@ function App() {
                             {activity.type === 'Receive' ? '↓' : '↗'}
                           </div>
                           <div className="activity-info">
-                            <span className="activity-type">{activity.type} Bitcoin</span>
-                            <span className="activity-date">{activity.date}</span>
+                            <span className="activity-type">{activity.type}</span>
+                            <span className="activity-txid">tx: {shortTxid}</span>
                           </div>
                         </div>
                         <div className="activity-right">
                           <span className={`activity-amount ${activity.type.toLowerCase()}`}>
-                            {activity.type === 'Receive' ? '+' : '-'}{activity.amount.toFixed(8)} BTC
+                            {activity.amount.toFixed(8)} BTC
                           </span>
                           <span className={`activity-status ${activity.status.toLowerCase()}`}>
                             {activity.status}
@@ -3794,7 +3778,8 @@ function App() {
       {/* UTXOs View */}
       {
         view === 'utxos' && (
-          <div className="wallet-container" style={{ padding: '1rem' }}>
+          <div className="wallet-wrapper" style={{ padding: '0' }}>
+            {/* Header - Fixed at top */}
             <div className="wallet-header">
               <button className="icon-btn" onClick={() => setView('dashboard')}>←</button>
               <h2 style={{ flex: 1, textAlign: 'center', margin: 0 }}>RGB UTXOs</h2>
@@ -3815,111 +3800,116 @@ function App() {
               </button>
             </div>
 
-            <div className="utxos-tabs" style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', borderBottom: '1px solid rgba(255, 255, 255, 0.1)', paddingBottom: '0.5rem' }}>
-              <button onClick={() => setUtxoTab('unoccupied')} style={{ background: utxoTab === 'unoccupied' ? 'rgba(247, 147, 26, 0.2)' : 'transparent', color: utxoTab === 'unoccupied' ? '#f7931a' : 'rgba(255, 255, 255, 0.6)', border: 'none', padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem', transition: 'all 0.2s ease' }}>Unoccupied</button>
-              <button onClick={() => setUtxoTab('occupied')} style={{ background: utxoTab === 'occupied' ? 'rgba(247, 147, 26, 0.2)' : 'transparent', color: utxoTab === 'occupied' ? '#f7931a' : 'rgba(255, 255, 255, 0.6)', border: 'none', padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem', transition: 'all 0.2s ease' }}>Occupied</button>
-              <button onClick={() => setUtxoTab('unlockable')} style={{ background: utxoTab === 'unlockable' ? 'rgba(247, 147, 26, 0.2)' : 'transparent', color: utxoTab === 'unlockable' ? '#f7931a' : 'rgba(255, 255, 255, 0.6)', border: 'none', padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem', transition: 'all 0.2s ease' }}>Unlockable</button>
-            </div>
-
-            {/* RGB Classification Error Warning */}
-            {rgbClassificationError && (
-              <div style={{ padding: '0.75rem 1rem', background: 'rgba(239, 68, 68, 0.1)', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.3)', marginBottom: '1rem' }}>
-                <div style={{ fontSize: '0.85rem', color: 'rgba(239, 68, 68, 0.9)' }}>⚠️ {rgbClassificationError}</div>
+            {/* Scrollable Content Container */}
+            <div className="wallet-scroll-container">
+              {/* Tabs */}
+              <div className="utxos-tabs" style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', borderBottom: '1px solid rgba(255, 255, 255, 0.1)', paddingBottom: '0.5rem', padding: '0 1rem 0.5rem 1rem' }}>
+                <button onClick={() => setUtxoTab('unoccupied')} style={{ background: utxoTab === 'unoccupied' ? 'rgba(247, 147, 26, 0.2)' : 'transparent', color: utxoTab === 'unoccupied' ? '#f7931a' : 'rgba(255, 255, 255, 0.6)', border: 'none', padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem', transition: 'all 0.2s ease' }}>Unoccupied</button>
+                <button onClick={() => setUtxoTab('occupied')} style={{ background: utxoTab === 'occupied' ? 'rgba(247, 147, 26, 0.2)' : 'transparent', color: utxoTab === 'occupied' ? '#f7931a' : 'rgba(255, 255, 255, 0.6)', border: 'none', padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem', transition: 'all 0.2s ease' }}>Occupied</button>
+                <button onClick={() => setUtxoTab('unlockable')} style={{ background: utxoTab === 'unlockable' ? 'rgba(247, 147, 26, 0.2)' : 'transparent', color: utxoTab === 'unlockable' ? '#f7931a' : 'rgba(255, 255, 255, 0.6)', border: 'none', padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem', transition: 'all 0.2s ease' }}>Unlockable</button>
               </div>
-            )}
 
-            <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
-              {loadingUtxos ? (
-                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '3rem', color: 'rgba(255, 255, 255, 0.5)' }}>Classifying UTXOs with RGB proxy...</div>
-              ) : (
-                <>
-                  {utxoTab === 'unoccupied' && (
-                    <>
-                      {bitcoinUtxos.length === 0 ? (
-                        <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'rgba(255, 255, 255, 0.4)' }}>
-                          <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📦</div>
-                          <p style={{ fontWeight: 600, marginBottom: '0.5rem' }}>No Unoccupied UTXOs</p>
-                          <p style={{ fontSize: '0.85rem', marginTop: '0.5rem', color: 'rgba(255, 255, 255, 0.3)' }}>Bitcoin UTXOs available for RGB asset binding will appear here</p>
-                        </div>
-                      ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                          <div style={{ padding: '0.75rem 1rem', background: 'rgba(59, 130, 246, 0.1)', borderRadius: '8px', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
-                            <div style={{ fontSize: '0.85rem', color: 'rgba(59, 130, 246, 0.9)' }}>💡 These Bitcoin UTXOs are available for RGB asset binding</div>
-                          </div>
-                          {bitcoinUtxos.map((utxo) => (
-                            <div key={`${utxo.txid}:${utxo.vout}`} style={{ background: 'rgba(255, 255, 255, 0.04)', borderRadius: '12px', padding: '1rem', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
-                              <div style={{ marginBottom: '0.75rem' }}>
-                                <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.85rem' }}>Output</span>
-                                <div style={{ color: '#fff', fontSize: '0.95rem', marginTop: '0.25rem', fontFamily: 'monospace' }}>{utxo.txid.slice(0, 12)}...{utxo.txid.slice(-8)}:{utxo.vout}</div>
-                              </div>
-                              <div>
-                                <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.85rem' }}>Available for RGB Binding</span>
-                                <div style={{ color: '#fff', fontSize: '0.95rem', marginTop: '0.25rem', fontWeight: 600 }}>{(Number(utxo.value) / 100000000).toFixed(8)} BTC</div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </>
-                  )}
-
-                  {utxoTab === 'occupied' && (
-                    <>
-                      {rgbUtxos.length === 0 ? (
-                        <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'rgba(255, 255, 255, 0.4)' }}>
-                          <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🎨</div>
-                          <p style={{ fontWeight: 600, marginBottom: '0.5rem' }}>No Occupied UTXOs</p>
-                          <p style={{ fontSize: '0.85rem', marginTop: '0.5rem', color: 'rgba(255, 255, 255, 0.3)' }}>UTXOs with RGB assets bound to them will appear here</p>
-                        </div>
-                      ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                          <div style={{ padding: '0.75rem 1rem', background: 'rgba(168, 85, 247, 0.1)', borderRadius: '8px', border: '1px solid rgba(168, 85, 247, 0.2)' }}>
-                            <div style={{ fontSize: '0.85rem', color: 'rgba(168, 85, 247, 0.9)' }}>🎨 These UTXOs have RGB assets bound to them</div>
-                          </div>
-                          {rgbUtxos.map((utxo) => (
-                            <div key={`${utxo.txid}:${utxo.vout}`} style={{ background: 'rgba(255, 255, 255, 0.04)', borderRadius: '12px', padding: '1rem', border: '1px solid rgba(168, 85, 247, 0.2)' }}>
-                              <div style={{ marginBottom: '0.75rem' }}>
-                                <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.85rem' }}>Output</span>
-                                <div style={{ color: '#fff', fontSize: '0.95rem', marginTop: '0.25rem', fontFamily: 'monospace' }}>{utxo.txid.slice(0, 12)}...{utxo.txid.slice(-8)}:{utxo.vout}</div>
-                              </div>
-                              <div style={{ marginBottom: '0.75rem' }}>
-                                <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.85rem' }}>Bitcoin Value</span>
-                                <div style={{ color: '#fff', fontSize: '0.95rem', marginTop: '0.25rem', fontWeight: 600 }}>{(Number(utxo.value) / 100000000).toFixed(8)} BTC</div>
-                              </div>
-                              {utxo.rgbAllocations && utxo.rgbAllocations.length > 0 && (
-                                <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.1)', paddingTop: '0.75rem' }}>
-                                  <span style={{ color: 'rgba(168, 85, 247, 0.7)', fontSize: '0.85rem', fontWeight: 600 }}>RGB Assets ({utxo.rgbAllocations.length})</span>
-                                  {utxo.rgbAllocations.map((allocation, idx) => (
-                                    <div key={idx} style={{ marginTop: '0.5rem', padding: '0.5rem', background: 'rgba(168, 85, 247, 0.05)', borderRadius: '6px' }}>
-                                      <div style={{ fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.5)', marginBottom: '0.25rem' }}>
-                                        {allocation.ticker || allocation.assetName || 'RGB Asset'}
-                                      </div>
-                                      <div style={{ color: 'rgba(168, 85, 247, 0.9)', fontSize: '0.9rem', fontWeight: 600 }}>
-                                        {allocation.amount.toString()} units
-                                      </div>
-                                      <div style={{ fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.4)', marginTop: '0.25rem', fontFamily: 'monospace', wordBreak: 'break-all' }}>
-                                        ID: {allocation.assetId.slice(0, 16)}...
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </>
-                  )}
-
-                  {utxoTab === 'unlockable' && (
-                    <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'rgba(255, 255, 255, 0.4)' }}>
-                      <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔓</div>
-                      <p style={{ fontWeight: 600, marginBottom: '0.5rem' }}>No Unlockable UTXOs</p>
-                      <p style={{ fontSize: '0.85rem', marginTop: '0.5rem', color: 'rgba(255, 255, 255, 0.3)' }}>UTXOs that can be unlocked for spending will appear here</p>
-                    </div>
-                  )}
-                </>
+              {/* RGB Classification Error Warning */}
+              {rgbClassificationError && (
+                <div style={{ padding: '0.75rem 1rem', background: 'rgba(239, 68, 68, 0.1)', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.3)', margin: '0 1rem 1rem 1rem' }}>
+                  <div style={{ fontSize: '0.85rem', color: 'rgba(239, 68, 68, 0.9)' }}>⚠️ {rgbClassificationError}</div>
+                </div>
               )}
+
+              {/* UTXO Content */}
+              <div style={{ padding: '0 1rem 2rem 1rem' }}>
+                {loadingUtxos ? (
+                  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '3rem', color: 'rgba(255, 255, 255, 0.5)' }}>Classifying UTXOs with RGB proxy...</div>
+                ) : (
+                  <>
+                    {utxoTab === 'unoccupied' && (
+                      <>
+                        {bitcoinUtxos.length === 0 ? (
+                          <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'rgba(255, 255, 255, 0.4)' }}>
+                            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📦</div>
+                            <p style={{ fontWeight: 600, marginBottom: '0.5rem' }}>No Unoccupied UTXOs</p>
+                            <p style={{ fontSize: '0.85rem', marginTop: '0.5rem', color: 'rgba(255, 255, 255, 0.3)' }}>Bitcoin UTXOs available for RGB asset binding will appear here</p>
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            <div style={{ padding: '0.75rem 1rem', background: 'rgba(59, 130, 246, 0.1)', borderRadius: '8px', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+                              <div style={{ fontSize: '0.85rem', color: 'rgba(59, 130, 246, 0.9)' }}>💡 These Bitcoin UTXOs are available for RGB asset binding</div>
+                            </div>
+                            {bitcoinUtxos.map((utxo) => (
+                              <div key={`${utxo.txid}:${utxo.vout}`} style={{ background: 'rgba(255, 255, 255, 0.04)', borderRadius: '12px', padding: '1rem', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                                <div style={{ marginBottom: '0.75rem' }}>
+                                  <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.85rem' }}>Output</span>
+                                  <div style={{ color: '#fff', fontSize: '0.95rem', marginTop: '0.25rem', fontFamily: 'monospace' }}>{utxo.txid.slice(0, 12)}...{utxo.txid.slice(-8)}:{utxo.vout}</div>
+                                </div>
+                                <div>
+                                  <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.85rem' }}>Available for RGB Binding</span>
+                                  <div style={{ color: '#fff', fontSize: '0.95rem', marginTop: '0.25rem', fontWeight: 600 }}>{(Number(utxo.value) / 100000000).toFixed(8)} BTC</div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {utxoTab === 'occupied' && (
+                      <>
+                        {rgbUtxos.length === 0 ? (
+                          <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'rgba(255, 255, 255, 0.4)' }}>
+                            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🎨</div>
+                            <p style={{ fontWeight: 600, marginBottom: '0.5rem' }}>No Occupied UTXOs</p>
+                            <p style={{ fontSize: '0.85rem', marginTop: '0.5rem', color: 'rgba(255, 255, 255, 0.3)' }}>UTXOs with RGB assets bound to them will appear here</p>
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            <div style={{ padding: '0.75rem 1rem', background: 'rgba(168, 85, 247, 0.1)', borderRadius: '8px', border: '1px solid rgba(168, 85, 247, 0.2)' }}>
+                              <div style={{ fontSize: '0.85rem', color: 'rgba(168, 85, 247, 0.9)' }}>🎨 These UTXOs have RGB assets bound to them</div>
+                            </div>
+                            {rgbUtxos.map((utxo) => (
+                              <div key={`${utxo.txid}:${utxo.vout}`} style={{ background: 'rgba(255, 255, 255, 0.04)', borderRadius: '12px', padding: '1rem', border: '1px solid rgba(168, 85, 247, 0.2)' }}>
+                                <div style={{ marginBottom: '0.75rem' }}>
+                                  <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.85rem' }}>Output</span>
+                                  <div style={{ color: '#fff', fontSize: '0.95rem', marginTop: '0.25rem', fontFamily: 'monospace' }}>{utxo.txid.slice(0, 12)}...{utxo.txid.slice(-8)}:{utxo.vout}</div>
+                                </div>
+                                <div style={{ marginBottom: '0.75rem' }}>
+                                  <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.85rem' }}>Bitcoin Value</span>
+                                  <div style={{ color: '#fff', fontSize: '0.95rem', marginTop: '0.25rem', fontWeight: 600 }}>{(Number(utxo.value) / 100000000).toFixed(8)} BTC</div>
+                                </div>
+                                {utxo.rgbAllocations && utxo.rgbAllocations.length > 0 && (
+                                  <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.1)', paddingTop: '0.75rem' }}>
+                                    <span style={{ color: 'rgba(168, 85, 247, 0.7)', fontSize: '0.85rem', fontWeight: 600 }}>RGB Assets ({utxo.rgbAllocations.length})</span>
+                                    {utxo.rgbAllocations.map((allocation, idx) => (
+                                      <div key={idx} style={{ marginTop: '0.5rem', padding: '0.5rem', background: 'rgba(168, 85, 247, 0.05)', borderRadius: '6px' }}>
+                                        <div style={{ fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.5)', marginBottom: '0.25rem' }}>
+                                          {allocation.ticker || allocation.assetName || 'RGB Asset'}
+                                        </div>
+                                        <div style={{ color: 'rgba(168, 85, 247, 0.9)', fontSize: '0.9rem', fontWeight: 600 }}>
+                                          {allocation.amount.toString()} units
+                                        </div>
+                                        <div style={{ fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.4)', marginTop: '0.25rem', fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                                          ID: {allocation.assetId.slice(0, 16)}...
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {utxoTab === 'unlockable' && (
+                      <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'rgba(255, 255, 255, 0.4)' }}>
+                        <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔓</div>
+                        <p style={{ fontWeight: 600, marginBottom: '0.5rem' }}>No Unlockable UTXOs</p>
+                        <p style={{ fontSize: '0.85rem', marginTop: '0.5rem', color: 'rgba(255, 255, 255, 0.3)' }}>UTXOs that can be unlocked for spending will appear here</p>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
           </div>
         )
