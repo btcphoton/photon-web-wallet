@@ -4,12 +4,41 @@
   "version": "1.0.0",
   "description": "A one-stop suite for RGB assets: from issuance and storage to invoicing and UTXO management. We offload the heavy lightning to decentralized blockchain storage",
   "permissions": [
-    "storage"
+    "storage",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "<all_urls>"
   ],
   "action": {
     "default_popup": "index.html",
     "default_title": "Photon Labs Wallet"
   },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_start"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "provider.js"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ],
   "icons": {
     "16": "logo.png",
     "48": "logo.png",

@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Photon Wallet dApp Integration</title>
+    <style>
+        :root {
+            --bg-dark: #0a0a0a;
+            --bg-card: #1a1a1a;
+            --primary: #ffd700;
+            --primary-hover: #ffed4e;
+            --text: #e0e0e0;
+            --text-dim: #999;
+            --border: rgba(255, 255, 255, 0.1);
+            --success: #22c55e;
+            --error: #ef4444;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text);
+            line-height: 1.6;
+            padding: 40px 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        h1 {
+            color: var(--primary);
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+        }
+
+        h1::before {
+            content: '⚡';
+        }
+
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        h2 {
+            font-size: 1.2rem;
+            margin-bottom: 20px;
+            color: var(--primary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-bottom: 20px;
+        }
+
+        .status-not-installed {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--error);
+            border: 1px solid var(--error);
+        }
+
+        .status-installed {
+            background: rgba(34, 197, 94, 0.1);
+            color: var(--success);
+            border: 1px solid var(--success);
+        }
+
+        .status-connected {
+            background: rgba(255, 215, 0, 0.1);
+            color: var(--primary);
+            border: 1px solid var(--primary);
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        .btn {
+            background: var(--bg-dark);
+            color: var(--text);
+            border: 1px solid var(--border);
+            padding: 12px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s;
+            text-align: center;
+        }
+
+        .btn:hover {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: var(--text-dim);
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: var(--bg-dark);
+            border: none;
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(255, 215, 0, 0.3);
+        }
+
+        .output {
+            background: #000;
+            border-radius: 8px;
+            padding: 16px;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.9rem;
+            color: #00ff00;
+            margin-top: 16px;
+            overflow-x: auto;
+            min-height: 60px;
+            white-space: pre-wrap;
+        }
+
+        .input-group {
+            margin-bottom: 16px;
+        }
+
+        label {
+            display: block;
+            font-size: 0.85rem;
+            color: var(--text-dim);
+            margin-bottom: 6px;
+        }
+
+        input {
+            width: 100%;
+            background: var(--bg-dark);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 12px;
+            border-radius: 8px;
+            font-family: inherit;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        .event-log {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .event-item {
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.85rem;
+        }
+
+        .event-time {
+            color: var(--text-dim);
+            margin-right: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>Photon dApp</h1>
+            <p style="color: var(--text-dim)">Integration Test Environment</p>
+        </header>
+
+        <div class="card">
+            <h2>Wallet Status</h2>
+            <div id="installStatus" class="status-badge status-not-installed">Checking Photon...</div>
+            <div id="connectionStatus" class="status-badge status-not-installed" style="display:none">Not Connected
+            </div>
+
+            <div class="grid">
+                <button class="btn btn-primary" id="connectBtn">Connect Wallet</button>
+                <button class="btn" id="getStateBtn">Get Wallet State</button>
+            </div>
+            <div class="output" id="statusOutput">// Wallet information will appear here</div>
+        </div>
+
+        <div class="card">
+            <h2>Transactions</h2>
+            <div class="input-group">
+                <label>Recipient Address</label>
+                <input type="text" id="txTo" value="tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx">
+            </div>
+            <div class="input-group">
+                <label>Amount (BTC)</label>
+                <input type="text" id="txAmount" value="0.0001">
+            </div>
+            <div class="grid">
+                <button class="btn" id="signTxBtn">Sign Transaction</button>
+                <button class="btn" id="sendTxBtn">Send Transaction</button>
+            </div>
+            <div class="output" id="txOutput">// Transaction results will appear here</div>
+        </div>
+
+        <div class="card">
+            <h2>Message Signing</h2>
+            <div class="input-group">
+                <label>Message</label>
+                <input type="text" id="msgInput" value="Verify my identity on Photon">
+            </div>
+            <button class="btn" id="signMsgBtn" style="width: 100%">Sign Message</button>
+            <div class="output" id="msgOutput">// Signature will appear here</div>
+        </div>
+
+        <div class="card">
+            <h2>Event Log</h2>
+            <div class="event-log" id="eventLog">
+                <div class="event-item"><span class="event-time">13:40:00</span> Waiting for events...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 1. Check if Photon is Installed
+        function checkInstallation() {
+            const badge = document.getElementById('installStatus');
+            if (typeof window.photon !== 'undefined') {
+                badge.textContent = 'Photon Installed';
+                badge.className = 'status-badge status-installed';
+                return true;
+            } else {
+                badge.textContent = 'Photon Not Found';
+                badge.className = 'status-badge status-not-installed';
+                return false;
+            }
+        }
+
+        // 2. Connect Wallet
+        async function connect() {
+            try {
+                const output = document.getElementById('statusOutput');
+                output.textContent = 'Connecting...';
+
+                const result = await window.photon.connect();
+
+                output.textContent = JSON.stringify(result, null, 2);
+
+                const connBadge = document.getElementById('connectionStatus');
+                connBadge.style.display = 'inline-block';
+                connBadge.textContent = 'Connected';
+                connBadge.className = 'status-badge status-connected';
+
+                logEvent('Wallet connected: ' + result.address);
+            } catch (error) {
+                document.getElementById('statusOutput').textContent = 'Error: ' + error.message;
+            }
+        }
+
+        // 3. Get Wallet State
+        async function getWalletState() {
+            try {
+                const accounts = await window.photon.getAccounts();
+                const network = await window.photon.getNetwork();
+                const balance = await window.photon.getBalance();
+
+                const state = {
+                    address: accounts[0] || 'Not connected',
+                    network: network.network,
+                    balance: balance.balance
+                };
+
+                document.getElementById('statusOutput').textContent = JSON.stringify(state, null, 2);
+            } catch (error) {
+                document.getElementById('statusOutput').textContent = 'Error: ' + error.message;
+            }
+        }
+
+        // 4. Sign Transaction
+        async function signTransaction() {
+            try {
+                const to = document.getElementById('txTo').value;
+                const amount = document.getElementById('txAmount').value;
+                const output = document.getElementById('txOutput');
+
+                output.textContent = 'Requesting signature...';
+
+                const signedTx = await window.photon.signTransaction({ to, amount });
+                output.textContent = 'Signed TX:\n' + signedTx;
+                logEvent('Transaction signed');
+            } catch (error) {
+                document.getElementById('txOutput').textContent = 'Error: ' + error.message;
+            }
+        }
+
+        // 5. Send Transaction
+        async function sendTransaction() {
+            try {
+                const to = document.getElementById('txTo').value;
+                const amount = document.getElementById('txAmount').value;
+                const output = document.getElementById('txOutput');
+
+                output.textContent = 'Sending...';
+
+                const txId = await window.photon.sendTransaction({ to, amount });
+                output.textContent = 'Transaction ID:\n' + txId;
+                logEvent('Transaction sent: ' + txId);
+            } catch (error) {
+                document.getElementById('txOutput').textContent = 'Error: ' + error.message;
+            }
+        }
+
+        // 6. Sign Message
+        async function signMessage() {
+            try {
+                const msg = document.getElementById('msgInput').value;
+                const output = document.getElementById('msgOutput');
+
+                output.textContent = 'Signing...';
+
+                const signature = await window.photon.signMessage(msg);
+                output.textContent = 'Signature:\n' + signature;
+                logEvent('Message signed');
+            } catch (error) {
+                document.getElementById('msgOutput').textContent = 'Error: ' + error.message;
+            }
+        }
+
+        // 7. Event Listeners
+        function setupEventListeners() {
+            if (typeof window.photon === 'undefined') return;
+
+            window.photon.on('accountsChanged', (accounts) => {
+                logEvent('Accounts changed: ' + (accounts[0] || 'Disconnected'));
+                getWalletState();
+            });
+
+            window.photon.on('networkChanged', (network) => {
+                logEvent('Network changed: ' + network);
+                getWalletState();
+            });
+        }
+
+        function logEvent(msg) {
+            const log = document.getElementById('eventLog');
+            const item = document.createElement('div');
+            item.className = 'event-item';
+            const time = new Date().toLocaleTimeString();
+            item.innerHTML = `<span class="event-time">${time}</span> ${msg}`;
+            log.prepend(item);
+        }
+
+        // Initialize
+        window.addEventListener('load', () => {
+            checkInstallation();
+            setupEventListeners();
+
+            document.getElementById('connectBtn').onclick = connect;
+            document.getElementById('getStateBtn').onclick = getWalletState;
+            document.getElementById('signTxBtn').onclick = signTransaction;
+            document.getElementById('sendTxBtn').onclick = sendTransaction;
+            document.getElementById('signMsgBtn').onclick = signMessage;
+        });
+    </script>
+</body>
+
+</html>
