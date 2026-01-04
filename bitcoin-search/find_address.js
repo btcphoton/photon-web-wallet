@@ -123,7 +123,7 @@ const mnemonic = "gasp attitude little organ palm crime layer answer dial twelve
 const targetAddresses = [
     {
         label: "Main Balance",
-        address: "tb1pyzsrsnu84dmrtvthpvxfjd88pk60h3q394ulaq2q5dqun3wrj2eqcwlxsw"
+        address: "tb1p0kwwnsrej5cpsczavj4mpznw5q4hr7n6ldwnvge3ryth4qyt8j9qzga3f4"
     },
     {
         label: "UTXOs Holder",
