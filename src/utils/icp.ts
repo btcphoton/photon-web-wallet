@@ -260,6 +260,9 @@ export interface Utxo {
     txid: string // Bitcoin hex format (reversed from canister bytes)
     vout: number
     value: bigint
+    account?: 'vanilla' | 'colored'
+    chain?: 0 | 1
+    index?: number
 }
 
 /**

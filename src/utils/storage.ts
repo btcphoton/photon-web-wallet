@@ -9,7 +9,7 @@ export interface Asset {
     color: string
 }
 
-interface StorageData {
+export interface StorageData {
     mnemonic?: string
     walletPassword?: string
     principalId?: string
@@ -24,6 +24,8 @@ interface StorageData {
     user_lbtc_balance?: string
     // Two-address system
     walletAddress?: string  // Main BTC wallet address
+    coloredAddress?: string // Colored Account (RGB Assets)
+    addressIndex?: number   // The 'i' value
     lightningAddress?: string // Lightning/ckBTC address
     // Per-network wallet addresses
     btcAddress_mainnet?: string
@@ -34,6 +36,11 @@ interface StorageData {
     walletAddress_testnet3?: string
     walletAddress_testnet4?: string
     walletAddress_regtest?: string
+    // Per-network colored addresses
+    coloredAddress_mainnet?: string
+    coloredAddress_testnet3?: string
+    coloredAddress_testnet4?: string
+    coloredAddress_regtest?: string
     // Multi-address wallet structure (per network)
     // MainBalance - receives Bitcoin from outside (index 0)
     MainBalance_mainnet?: string
@@ -69,6 +76,11 @@ interface StorageData {
     rgbContracts_testnet3?: string
     rgbContracts_testnet4?: string
     rgbContracts_regtest?: string
+    // Change address indices (BIP84 internal chain)
+    changeIndex_mainnet?: number
+    changeIndex_testnet3?: number
+    changeIndex_testnet4?: number
+    changeIndex_regtest?: number
     // Bitcoin Address Generation Method
     addressGenerationMethod?: 'icp' | 'bitcoin'
     // Auto-Lock Timer setting (in minutes)
@@ -97,9 +109,23 @@ const isChromeStorageAvailable = (): boolean => {
 export const getStorageData = (keys: (keyof StorageData)[]): Promise<Partial<StorageData>> => {
     return new Promise((resolve) => {
         if (isChromeStorageAvailable()) {
-            chrome.storage.local.get(keys, (result) => {
-                resolve(result as Partial<StorageData>)
-            })
+            const sensitiveKeys: (keyof StorageData)[] = ['mnemonic', 'walletPassword'];
+            const sessionKeys = keys.filter(k => sensitiveKeys.includes(k));
+            const localKeys = keys.filter(k => !sensitiveKeys.includes(k));
+
+            chrome.storage.local.get(localKeys, (localResult) => {
+                if (sessionKeys.length > 0 && chrome.storage.session) {
+                    chrome.storage.session.get(sessionKeys, (sessionResult) => {
+                        resolve({ ...localResult, ...sessionResult } as Partial<StorageData>);
+                    });
+                } else {
+                    // If session storage is not available or no sensitive keys requested,
+                    // still check local storage for backward compatibility or other keys
+                    chrome.storage.local.get(sessionKeys, (localSensitiveResult) => {
+                        resolve({ ...localResult, ...localSensitiveResult } as Partial<StorageData>);
+                    });
+                }
+            });
         } else {
             // Fallback to localStorage
             const result: Partial<StorageData> = {}
@@ -119,9 +145,34 @@ export const getStorageData = (keys: (keyof StorageData)[]): Promise<Partial<Sto
 export const setStorageData = (data: Partial<StorageData>): Promise<void> => {
     return new Promise((resolve) => {
         if (isChromeStorageAvailable()) {
-            chrome.storage.local.set(data, () => {
-                resolve()
-            })
+            const sensitiveKeys: (keyof StorageData)[] = ['mnemonic', 'walletPassword'];
+            const sessionData: Partial<StorageData> = {};
+            const localData: Partial<StorageData> = {};
+
+            Object.entries(data).forEach(([key, value]) => {
+                if (sensitiveKeys.includes(key as keyof StorageData)) {
+                    sessionData[key as keyof StorageData] = value as any;
+                } else {
+                    localData[key as keyof StorageData] = value as any;
+                }
+            });
+
+            const promises: Promise<void>[] = [];
+
+            if (Object.keys(localData).length > 0) {
+                promises.push(new Promise(res => chrome.storage.local.set(localData, res)));
+            }
+
+            if (Object.keys(sessionData).length > 0 && chrome.storage.session) {
+                promises.push(new Promise(res => chrome.storage.session.set(sessionData, res)));
+                // Also remove from local storage if it was there
+                promises.push(new Promise(res => chrome.storage.local.remove(Object.keys(sessionData), res)));
+            } else if (Object.keys(sessionData).length > 0) {
+                // Fallback to local if session not available
+                promises.push(new Promise(res => chrome.storage.local.set(sessionData, res)));
+            }
+
+            Promise.all(promises).then(() => resolve());
         } else {
             // Fallback to localStorage
             Object.entries(data).forEach(([key, value]) => {

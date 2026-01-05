@@ -35,6 +35,7 @@ async function deriveBitcoinAddress(mnemonic, network = 'testnet3', accountIndex
     // BIP86 derivation path
     const path = `m/86'/${coinType}'/${accountIndex}'/0/${addressIndex}`;
 
+    console.log(path)
     // Derive key from seed
     const root = bip32.fromSeed(seed, btcNetwork);
     const child = root.derivePath(path);
@@ -123,7 +124,7 @@ const mnemonic = "gasp attitude little organ palm crime layer answer dial twelve
 const targetAddresses = [
     {
         label: "Main Balance",
-        address: "tb1p0kwwnsrej5cpsczavj4mpznw5q4hr7n6ldwnvge3ryth4qyt8j9qzga3f4"
+        address: "tb1pyzsrsnu84dmrtvthpvxfjd88pk60h3q394ulaq2q5dqun3wrj2eqcwlxsw"
     },
     {
         label: "UTXOs Holder",

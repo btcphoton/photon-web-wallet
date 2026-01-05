@@ -482,12 +482,25 @@ body {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 1.5rem;
   overflow-y: visible;
   overflow-x: hidden;
   padding: 0 1rem;
   min-height: 0;
   padding-bottom: 2rem;
+}
+
+.activity-date-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.activity-date-header {
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.4);
+  margin-bottom: 0.25rem;
+  padding-left: 0.25rem;
 }
 
 .activities-loading {
@@ -501,68 +514,70 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 1rem;
-  background: rgba(255, 255, 255, 0.04);
-  backdrop-filter: blur(10px);
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 1.25rem 1rem;
+  background: #1a1a1a;
+  border-radius: 16px;
+  cursor: pointer;
   transition: all 0.2s ease;
+  border: 1px solid rgba(255, 255, 255, 0.03);
 }
 
 .activity-item:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.12);
+  background: #222;
+  border-color: rgba(255, 255, 255, 0.08);
 }
 
 .activity-left {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 1rem;
 }
 
-.activity-icon {
-  width: 40px;
-  height: 40px;
+.activity-icon-circle {
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.25rem;
-  font-weight: 700;
   color: #fff;
 }
 
-.activity-icon.receive {
-  background: linear-gradient(135deg, #22c55e, #16a34a);
+.activity-icon-circle.receive {
+  background: #4ade80; /* Green */
 }
 
-.activity-icon.send {
-  background: linear-gradient(135deg, #f7931a, #e67e00);
+.activity-icon-circle.send {
+  background: #6366f1; /* Indigo/Blue */
 }
 
 .activity-info {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.2rem;
 }
 
 .activity-type {
   font-weight: 600;
-  font-size: 0.95rem;
+  font-size: 1.05rem;
   color: #fff;
 }
 
-.activity-txid {
-  font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.5);
-  margin-top: 0.25rem;
-  font-family: monospace;
+.activity-tx-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
 }
 
-.activity-date {
+.activity-txid {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.4);
+  font-family: 'Inter', sans-serif;
+}
+
+.activity-link-icon {
   font-size: 0.8rem;
-  color: rgba(255, 255, 255, 0.5);
-  margin-top: 0.25rem;
+  color: rgba(255, 255, 255, 0.4);
 }
 
 .activity-right {
@@ -572,34 +587,24 @@ body {
   gap: 0.25rem;
 }
 
-.activity-amount {
+.activity-amount-new {
+  font-weight: 700;
+  font-size: 1rem;
+  color: #fff;
+  letter-spacing: -0.01em;
+}
+
+.activity-status-new {
+  font-size: 0.85rem;
   font-weight: 600;
-  font-size: 0.9rem;
 }
 
-.activity-amount.receive {
+.activity-status-new.confirmed {
   color: #22c55e;
 }
 
-.activity-amount.send {
-  color: #f7931a;
-}
-
-.activity-status {
-  font-size: 0.75rem;
-  padding: 0.2rem 0.5rem;
-  border-radius: 6px;
-  font-weight: 500;
-}
-
-.activity-status.confirmed {
-  background: rgba(34, 197, 94, 0.2);
-  color: #22c55e;
-}
-
-.activity-status.pending {
-  background: rgba(255, 149, 0, 0.15);
-  color: #ff9500;
+.activity-status-new.pending {
+  color: #f59e0b;
 }
 
 

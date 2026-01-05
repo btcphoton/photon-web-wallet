@@ -3,19 +3,24 @@ import * as bitcoin from 'bitcoinjs-lib';
 import BIP32Factory from 'bip32';
 import * as ecc from 'tiny-secp256k1';
 
+// Initialize ECC library for bitcoinjs-lib
+bitcoin.initEccLib(ecc);
+
 /**
- * Derive a Bitcoin address from a mnemonic using BIP86 (Taproot)
+ * Derive a Bitcoin address from a mnemonic using BIP84 (Native SegWit) or BIP86 (Taproot)
  * 
  * @param mnemonic - BIP39 mnemonic phrase
  * @param network - Bitcoin network ('mainnet', 'testnet3', 'testnet4', 'regtest')
+ * @param purpose - BIP purpose (84 for Native SegWit, 86 for Taproot)
  * @param accountIndex - Account index (default: 0)
- * @param chainIndex - Chain index (default: 0, can be 0/100/999 for different purposes)
+ * @param chainIndex - Chain index (0 = external/receive, 1 = internal/change)
  * @param addressIndex - Address index (default: 0)
- * @returns Bitcoin address (Taproot - bc1p... for mainnet, 62 characters)
+ * @returns Bitcoin address
  */
 export const deriveBitcoinAddress = async (
     mnemonic: string,
     network: 'mainnet' | 'testnet3' | 'testnet4' | 'regtest' = 'mainnet',
+    purpose: 84 | 86 = 84,
     accountIndex: number = 0,
     chainIndex: number = 0,
     addressIndex: number = 0
@@ -41,39 +46,42 @@ export const deriveBitcoinAddress = async (
         coinType = 1; // BIP44 coin type for Bitcoin testnet
     }
 
-    // BIP86 derivation path: m/86'/coin_type'/account'/chain/address_index
-    // 86' = Purpose (Taproot)
-    // coin_type' = 0 for mainnet, 1 for testnet
-    // account' = Account index
-    // chain = Chain index (0 = main, 100 = UTXO holder, 999 = dust holder)
-    // address_index = Address index
-    const path = `m/86'/${coinType}'/${accountIndex}'/${chainIndex}/${addressIndex}`;
+    // Derivation path: m/purpose'/coin_type'/account'/chain/address_index
+    const path = `m/${purpose}'/${coinType}'/${accountIndex}'/${chainIndex}/${addressIndex}`;
 
-    // Initialize BIP32 with tiny-secp256k1 (lazy initialization to avoid WASM issues)
+    // Initialize BIP32 with tiny-secp256k1
     const bip32 = BIP32Factory(ecc);
 
     // Derive key from seed
     const root = bip32.fromSeed(seed, btcNetwork);
     const child = root.derivePath(path);
 
-    // Generate P2TR (Pay to Taproot) address
     if (!child.publicKey) {
         throw new Error('Failed to derive public key');
     }
 
-    // For Taproot, we need to use the x-only public key (first 32 bytes)
-    const internalPubkey = child.publicKey.slice(1, 33);
+    if (purpose === 86) {
+        // Generate P2TR (Pay to Taproot) address
+        // For Taproot, we need to use the x-only public key (first 32 bytes)
+        const internalPubkey = child.publicKey.slice(1, 33);
 
-    const { address } = bitcoin.payments.p2tr({
-        internalPubkey,
-        network: btcNetwork,
-    });
+        const { address } = bitcoin.payments.p2tr({
+            internalPubkey,
+            network: btcNetwork,
+        });
 
-    if (!address) {
-        throw new Error('Failed to generate address');
+        if (!address) throw new Error('Failed to generate P2TR address');
+        return address;
+    } else {
+        // Default to BIP84: Generate P2WPKH (Pay to Witness Public Key Hash) address
+        const { address } = bitcoin.payments.p2wpkh({
+            pubkey: child.publicKey,
+            network: btcNetwork,
+        });
+
+        if (!address) throw new Error('Failed to generate P2WPKH address');
+        return address;
     }
-
-    return address;
 };
 
 /**
@@ -92,7 +100,7 @@ export const deriveMultipleBitcoinAddresses = async (
     const addresses: string[] = [];
 
     for (let i = 0; i < count; i++) {
-        const address = await deriveBitcoinAddress(mnemonic, network, 0, i);
+        const address = await deriveBitcoinAddress(mnemonic, network, 84, 0, 0, i);
         addresses.push(address);
     }
 

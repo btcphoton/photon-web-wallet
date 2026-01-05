@@ -1,14 +1,14 @@
 import { useState, useEffect, useRef } from 'react'
 import './App.css'
 import { generateMnemonic, deriveIdentity, validateMnemonic } from './utils/crypto'
-import { getBtcAddress, getWalletAddress, getWalletBalance, updateBalance, mapNetworkToCanister, getUtxos, getEstimatedBitcoinFees, sendBitcoin } from './utils/icp'
+import { getBtcAddress, getWalletAddress, updateBalance, mapNetworkToCanister, getUtxos, getEstimatedBitcoinFees, sendBitcoin } from './utils/icp'
 import { deriveBitcoinAddress } from './utils/bitcoin-address'
-import { signAndBroadcastTransaction, broadcastTransaction, fetchUTXOsFromBlockchain, fetchUTXOsFromAllAddresses } from './utils/bitcoin-transactions'
+import { signAndBroadcastTransaction, broadcastTransaction, fetchUTXOsFromBlockchain, performDiscoveryScan } from './utils/bitcoin-transactions'
 import type { UtxoWithRgbStatus } from './utils/rgb'
 import { fetchRgbOccupiedUtxos } from './utils/rgb-fetcher'
 import { getCkBTCBalance } from './utils/icrc1'
 import { convertLBTCtoBTC } from './utils/ckbtc-withdrawal'
-import { getStorageData, setStorageData, removeStorageData, getNetworkAddressKey, getNetworkAssetsKey, testnet3DefaultAssets, mainnetDefaultAssets } from './utils/storage'
+import { getStorageData, setStorageData, removeStorageData, getNetworkAddressKey, getNetworkAssetsKey, testnet3DefaultAssets, mainnetDefaultAssets, type StorageData } from './utils/storage'
 import type { Asset } from './utils/storage'
 import { QRCodeSVG } from 'qrcode.react'
 import { generateRgbInvoice, notifyRgbProxy, isValidRgbProxyUrl } from './utils/rgb-invoice'
@@ -137,11 +137,15 @@ function App() {
 
   // Multi-address wallet structure states
   const [mainBalanceAddress, setMainBalanceAddress] = useState<string>('')
+  const [coloredAddress, setColoredAddress] = useState<string>('') // Colored Account (RGB Assets)
   const [utxoHolderAddress, setUtxoHolderAddress] = useState<string>('')
   const [dustHolderAddress, setDustHolderAddress] = useState<string>('')
+  const [addressIndex, setAddressIndex] = useState<number>(0) // The 'i' value
+  const [changeIndex, setChangeIndex] = useState<number>(0)
+  const [fundedAddresses, setFundedAddresses] = useState<{ address: string, balance: number, account: 'vanilla' | 'colored', index: number, chain: 0 | 1 }[]>([])
 
   // Network settings states with defaults
-  const [electrumServer, setElectrumServer] = useState<string>('89.117.52.115:50002')
+  const [electrumServer, setElectrumServer] = useState<string>('ssl://electrum.iriswallet.com:50013')
   const [rgbProxy, setRgbProxy] = useState<string>('http://89.117.52.115:3000/json-rpc')
   const [networkSettingsSaved, setNetworkSettingsSaved] = useState<boolean>(false)
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting')
@@ -262,54 +266,66 @@ function App() {
     setLoadingAddress(true)
     try {
       const canisterNetwork = mapNetworkToCanister(network)
-      let walletAddr: string
-      let lightningAddr: string
-      let mainBalanceAddr: string
-      let utxoHolderAddr: string
-      let dustHolderAddr: string
+      let vanillaAddr = ''
+      let coloredAddr = ''
+      let lightningAddr = ''
+      let mainBalanceAddr = ''
+      let utxoHolderAddr = ''
+      let dustHolderAddr = ''
 
       // Check which address generation method to use
       if (addressGenerationMethod === 'bitcoin') {
-        // Generate Bitcoin addresses locally from mnemonic (3 addresses with different indices)
-        walletAddr = await deriveBitcoinAddress(mnemonicPhrase, network, 0, 0, 0)      // Main address (chain 0)
-        mainBalanceAddr = await deriveBitcoinAddress(mnemonicPhrase, network, 0, 0, 0) // MainBalance (chain 0, index 0)
-        utxoHolderAddr = await deriveBitcoinAddress(mnemonicPhrase, network, 0, 100, 0) // UTXOHolder (chain 100, index 0)
-        dustHolderAddr = await deriveBitcoinAddress(mnemonicPhrase, network, 0, 999, 0) // DustHolder (chain 999, index 0)
+        // Generate Bitcoin addresses locally from mnemonic using BIP86 dual-account structure
+        // Vanilla Account (BTC/Fees): m/86'/n'/0'/0/i
+        // Colored Account (RGB Assets): m/86'/n'/1'/0/i
 
-        // For Bitcoin method, use the same address for lightning (or generate a second one if needed)
-        lightningAddr = walletAddr
-        console.log(`Generated Bitcoin addresses locally for ${network}:`)
-        console.log(`  MainBalance: ${mainBalanceAddr} (chain 0)`)
-        console.log(`  UTXOHolder:  ${utxoHolderAddr} (chain 100)`)
-        console.log(`  DustHolder:  ${dustHolderAddr} (chain 999)`)
+        vanillaAddr = await deriveBitcoinAddress(mnemonicPhrase, network, 86, 0, 0, addressIndex)
+        coloredAddr = await deriveBitcoinAddress(mnemonicPhrase, network, 86, 1, 0, addressIndex)
+
+        mainBalanceAddr = vanillaAddr
+        utxoHolderAddr = await deriveBitcoinAddress(mnemonicPhrase, network, 86, 0, 100, 0) // Keeping these for now
+        dustHolderAddr = await deriveBitcoinAddress(mnemonicPhrase, network, 86, 0, 999, 0)
+
+        // For Bitcoin method, use the same address for lightning
+        lightningAddr = vanillaAddr
+        console.log(`Generated BIP86 addresses locally for ${network} at index ${addressIndex}:`)
+        console.log(`  Vanilla (Main): ${vanillaAddr}`)
+        console.log(`  Colored (RGB):  ${coloredAddr}`)
       } else {
         // Fetch addresses from ICP canister (default/existing behavior)
         const [canisterWalletAddr, canisterLightningAddr] = await Promise.all([
           getWalletAddress(mnemonicPhrase, canisterNetwork),
           getBtcAddress(mnemonicPhrase, canisterNetwork)
         ])
-        walletAddr = canisterWalletAddr
+        vanillaAddr = canisterWalletAddr
+        coloredAddr = canisterWalletAddr // For ICP method, use the same main address for all three
         lightningAddr = canisterLightningAddr
         // For ICP method, use the same main address for all three
-        mainBalanceAddr = walletAddr
-        utxoHolderAddr = walletAddr
-        dustHolderAddr = walletAddr
-        console.log(`Fetched addresses from canister for ${network}:`, walletAddr)
+        mainBalanceAddr = vanillaAddr
+        utxoHolderAddr = vanillaAddr
+        dustHolderAddr = vanillaAddr
+        console.log(`Fetched addresses from canister for ${network}:`, vanillaAddr)
       }
 
-      // Update both addresses in state
-      setWalletAddress(walletAddr)
+      // Update addresses in state
+      setWalletAddress(vanillaAddr)
+      setColoredAddress(coloredAddr)
       setLightningAddress(lightningAddr)
-      setBtcAddress(walletAddr) // For backward compatibility, use wallet address
+      setBtcAddress(vanillaAddr)
+
+      console.log('Active Colored Address:', coloredAddr)
 
       // Save all addresses to network-specific storage
       const addressKey = getNetworkAddressKey(network)
       await setStorageData({
-        [addressKey]: walletAddr, // Network-specific wallet address
-        btcAddress: walletAddr, // Backward compatibility
-        walletAddress: walletAddr, // Main wallet address
-        lightningAddress: lightningAddr, // Lightning/ckBTC address
-        [`walletAddress_${network}`]: walletAddr,
+        [addressKey]: vanillaAddr,
+        btcAddress: vanillaAddr,
+        walletAddress: vanillaAddr,
+        coloredAddress: coloredAddr,
+        addressIndex: addressIndex, // Store the 'i' value
+        lightningAddress: lightningAddr,
+        [`walletAddress_${network}`]: vanillaAddr,
+        [`coloredAddress_${network}`]: coloredAddr,
         [`lightningAddress_${network}`]: lightningAddr,
         // Store the three addresses for RGB wallet structure
         [`MainBalance_${network}`]: mainBalanceAddr,
@@ -317,10 +333,10 @@ function App() {
         [`DustHolder_${network}`]: dustHolderAddr
       })
 
-      console.log(`Wallet address for ${network}:`, walletAddr)
-      console.log(`Lightning address for ${network}:`, lightningAddr)
+      console.log(`Vanilla address for ${network}:`, vanillaAddr)
+      console.log(`Colored address for ${network}:`, coloredAddr)
 
-      return walletAddr
+      return vanillaAddr
     } catch (e) {
       console.error('Failed to fetch/generate addresses:', e)
       setWalletAddress('')
@@ -338,15 +354,27 @@ function App() {
       try {
         const result = await getStorageData([
           'mnemonic', 'walletPassword', 'principalId', 'btcAddress', 'selectedNetwork',
-          'walletAddress', 'lightningAddress', // Load both addresses
+          'walletAddress', 'lightningAddress', 'coloredAddress', 'addressIndex',
           'btcAddress_mainnet', 'btcAddress_testnet3', 'btcAddress_testnet4', 'btcAddress_regtest',
           'walletAddress_mainnet', 'walletAddress_testnet3', 'walletAddress_testnet4', 'walletAddress_regtest',
+          'coloredAddress_mainnet', 'coloredAddress_testnet3', 'coloredAddress_testnet4', 'coloredAddress_regtest',
           'lightningAddress_mainnet', 'lightningAddress_testnet3', 'lightningAddress_testnet4', 'lightningAddress_regtest',
           'addressGenerationMethod', // Load address generation method
           'AutoLockTimer', // Load auto-lock timer setting
-          'LoginTime' // Load last login time
+          'LoginTime', // Load last login time
+          'changeIndex_mainnet', 'changeIndex_testnet3', 'changeIndex_testnet4', 'changeIndex_regtest' // Load change indices
         ])
         console.log('Storage check result:', result)
+
+        // Load change index for current network
+        const network = (result.selectedNetwork as Network) || 'mainnet'
+        const changeIndexKey = `changeIndex_${network}` as keyof StorageData
+        const changeIndexValue = (result as any)[changeIndexKey]
+        if (changeIndexValue !== undefined) {
+          setChangeIndex(Number(changeIndexValue))
+        } else {
+          setChangeIndex(0)
+        }
 
         if (result.mnemonic && result.walletPassword && result.principalId) {
           // Wallet exists - restore network if saved
@@ -361,8 +389,11 @@ function App() {
           if (result.lightningAddress) {
             setLightningAddress(result.lightningAddress)
           }
-          if (result.btcAddress) {
-            setBtcAddress(result.btcAddress)
+          if (result.coloredAddress) {
+            setColoredAddress(result.coloredAddress as string)
+          }
+          if (result.addressIndex !== undefined) {
+            setAddressIndex(Number(result.addressIndex))
           }
 
           // Load address generation method (default to 'icp' for backward compatibility)
@@ -395,6 +426,14 @@ function App() {
               setMnemonic(result.mnemonic)
               setPrincipalId(result.principalId)
 
+              // Proactively move sensitive data to session storage if it was in local storage
+              if (result.mnemonic || result.walletPassword) {
+                await setStorageData({
+                  mnemonic: result.mnemonic,
+                  walletPassword: result.walletPassword
+                })
+              }
+
               // Restore network and address
               const network = (result.selectedNetwork as Network) || 'mainnet'
               setSelectedNetwork(network)
@@ -407,7 +446,7 @@ function App() {
 
               // Fetch balance after auto-login
               if (result.mnemonic && networkAddress) {
-                fetchBalance(result.mnemonic, networkAddress as string, network)
+                fetchBalance(result.mnemonic, network)
               }
 
               // Load assets for current network
@@ -462,19 +501,23 @@ function App() {
         const networkAddress = result[networkAddressKey] || result.btcAddress || ''
         setBtcAddress(networkAddress as string)
 
+        // Proactively move sensitive data to session storage if it was in local storage
+        await setStorageData({
+          mnemonic: result.mnemonic,
+          walletPassword: result.walletPassword,
+          LoginTime: Date.now()
+        })
+        console.log('Login time and sensitive data updated in storage')
+
         setError('')
         setUnlockPassword('')
-
-        // Save login time for auto-login feature
-        await setStorageData({ LoginTime: Date.now() })
-        console.log('Login time saved:', Date.now())
 
         setView('dashboard')
         console.log('Unlock successful, going to dashboard')
 
         // Fetch balance after unlock
         if (result.mnemonic && networkAddress) {
-          fetchBalance(result.mnemonic, networkAddress as string, network)
+          fetchBalance(result.mnemonic, network)
         }
 
         // Load assets for current network
@@ -514,7 +557,8 @@ function App() {
 
       if (unlockPassword === result.walletPassword) {
         // Password correct - restore wallet data and go to dashboard
-        setMnemonic(result.mnemonic || mnemonic)
+        const currentMnemonic = result.mnemonic || mnemonic
+        setMnemonic(currentMnemonic)
         setPrincipalId(result.principalId || principalId)
 
         // Restore network and address
@@ -524,20 +568,23 @@ function App() {
         const networkAddress = result[networkAddressKey] || result.btcAddress || btcAddress
         setBtcAddress(networkAddress as string)
 
+        // Proactively move sensitive data to session storage if it was in local storage
+        await setStorageData({
+          mnemonic: currentMnemonic,
+          walletPassword: result.walletPassword,
+          LoginTime: Date.now()
+        })
+        console.log('Login time and sensitive data updated in storage (from lock)')
+
         setError('')
         setUnlockPassword('')
-
-        // Save login time for auto-login feature
-        await setStorageData({ LoginTime: Date.now() })
-        console.log('Login time saved:', Date.now())
 
         setView('dashboard')
         console.log('Unlock from lock successful')
 
         // Fetch balance after unlock
-        const currentMnemonic = result.mnemonic || mnemonic
         if (currentMnemonic && networkAddress) {
-          fetchBalance(currentMnemonic, networkAddress as string, network)
+          fetchBalance(currentMnemonic, network)
         }
 
         // Load assets for current network
@@ -691,7 +738,17 @@ function App() {
     setLoadingActivities(true)
     try {
       console.log('Fetching activities for address:', walletAddress, 'on network:', selectedNetwork)
-      const btcActivities = await fetchBtcActivities(walletAddress, selectedNetwork)
+
+      // Collect all known wallet addresses to correctly identify change
+      const allWalletAddresses = [
+        mainBalanceAddress,
+        utxoHolderAddress,
+        dustHolderAddress,
+        coloredAddress,
+        ...fundedAddresses.map(fa => fa.address)
+      ].filter(Boolean);
+
+      const btcActivities = await fetchBtcActivities(walletAddress, selectedNetwork, allWalletAddresses)
       setActivities(btcActivities)
       console.log(`Loaded ${btcActivities.length} activities`)
     } catch (error) {
@@ -745,11 +802,19 @@ function App() {
     const result = await getStorageData([
       networkAddressKey,
       `walletAddress_${network}`,
-      `lightningAddress_${network}`
+      `lightningAddress_${network}`,
+      `changeIndex_${network}` as any
     ])
     const cachedAddress = result[networkAddressKey]
     const cachedWalletAddress = result[`walletAddress_${network}`]
     const cachedLightningAddress = result[`lightningAddress_${network}`]
+    const cachedChangeIndex = result[`changeIndex_${network}` as keyof typeof result]
+
+    if (cachedChangeIndex !== undefined) {
+      setChangeIndex(Number(cachedChangeIndex))
+    } else {
+      setChangeIndex(0)
+    }
 
     let currentAddress = ''
 
@@ -781,7 +846,7 @@ function App() {
 
     // Fetch balance for the new network
     if (mnemonic && currentAddress) {
-      fetchBalance(mnemonic, currentAddress, network)
+      fetchBalance(mnemonic, network)
     }
 
     // Load assets for the new network
@@ -847,52 +912,48 @@ function App() {
     setShowNoticeModal(true)
   }
 
-  const fetchBalance = async (currentMnemonic: string, currentAddress: string, networkId: Network) => {
-    if (!currentMnemonic || !currentAddress) return
+  // Placeholder for future canister-based index retrieval
+  const fetchIndexFromCanister = async (network: Network): Promise<number | null> => {
+    // TODO: Implement actual canister call here
+    console.log(`[Canister] Placeholder: Fetching index for ${network}...`);
+    return null;
+  }
 
-    // Load cached balance from storage first
-    try {
-      const cachedData = await getStorageData(['walletBalance'])
-      if (cachedData.walletBalance) {
-        setBtcBalance(cachedData.walletBalance)
-        console.log('Using cached balance:', cachedData.walletBalance)
-      }
-    } catch (error) {
-      console.error('Error loading cached balance:', error)
-    }
-
+  const fetchBalance = async (currentMnemonic: string, networkId: Network) => {
+    if (!currentMnemonic) return
     setLoadingBalance(true)
-    setBalanceError('') // Clear previous error
     try {
-      // Primary source: Blockstream API
-      const apiUrl = networkId === 'mainnet'
-        ? `https://blockstream.info/api/address/${currentAddress.trim()}`
-        : `https://blockstream.info/testnet/api/address/${currentAddress.trim()}`
+      console.log(`[Balance] Fetching balance for ${networkId}...`)
 
-      const response = await fetch(apiUrl)
+      // Get stored index and check canister (placeholder)
+      const canisterIndex = await fetchIndexFromCanister(networkId);
+      const effectiveIndex = Math.max(addressIndex, canisterIndex || 0);
 
-      if (!response.ok) {
-        if (response.status === 400) {
-          throw new Error('Invalid Bitcoin address format')
-        } else if (response.status === 404) {
-          throw new Error('Address not found')
-        } else {
-          throw new Error('Failed to fetch balance from Blockstream API')
-        }
+      // Perform Discovery Scan with Gap Limit 20
+      const { totalBalance: vanillaBalance, maxIndex, fundedAddresses: discoveredAddresses } = await performDiscoveryScan(
+        currentMnemonic,
+        networkId,
+        effectiveIndex
+      );
+
+      setFundedAddresses(discoveredAddresses);
+      if (maxIndex > addressIndex) {
+        console.log(`[DiscoveryScan] Found higher index: ${maxIndex}. Updating state and storage.`);
+        setAddressIndex(maxIndex);
+        const indexKey = `addressIndex_${networkId}` as any;
+        await setStorageData({
+          addressIndex: maxIndex,
+          [indexKey]: maxIndex
+        });
       }
 
-      const data = await response.json()
-      const balanceFromAPI = (data.chain_stats?.funded_txo_sum || 0) - (data.chain_stats?.spent_txo_sum || 0)
-      const balanceBtc = (balanceFromAPI / 100000000).toFixed(8)
+      const formattedBalance = (vanillaBalance / 100000000).toFixed(8)
+      setBtcBalance(formattedBalance)
+      console.log(`[Balance] Updated Vanilla Balance: ${formattedBalance} BTC (Max Index: ${maxIndex})`)
 
-      // Store in Chrome storage (both keys for compatibility)
-      await setStorageData({
-        user_bitcoin_balance: balanceBtc,
-        walletBalance: balanceBtc
-      })
-      setBtcBalance(balanceBtc)
-      setBalanceError('')
-      console.log('Balance from Blockstream API (primary):', balanceBtc)
+      // Update in storage for persistence
+      const balanceKey = `MainBalance_${networkId}` as any
+      await setStorageData({ [balanceKey]: formattedBalance })
 
       // Also fetch LBTC balance from canister
       try {
@@ -903,90 +964,16 @@ function App() {
       } catch (lbtcError) {
         console.error('Error fetching LBTC balance:', lbtcError)
       }
-    } catch (error: any) {
-      console.error('Error fetching Bitcoin balance from Blockstream:', error)
-      setBalanceError(error.message || 'Error fetching balance')
-      setBtcBalance('0.00000000')
-
-      // Fallback to wallet canister if Blockstream API fails
-      try {
-        console.log('Blockstream API failed, falling back to wallet canister...')
-        const canisterNetwork = mapNetworkToCanister(networkId)
-        const balanceNat64 = await getWalletBalance(currentMnemonic, canisterNetwork)
-        const balanceBtc = (Number(balanceNat64) / 100000000).toFixed(8)
-
-        await setStorageData({
-          user_bitcoin_balance: balanceBtc,
-          walletBalance: balanceBtc
-        })
-        setBtcBalance(balanceBtc)
-        setBalanceError('')
-        console.log('Balance from wallet canister (fallback):', balanceBtc)
-
-        // Also fetch LBTC balance
-        try {
-          const ckBTCBalance = await getCkBTCBalance(currentMnemonic, canisterNetwork)
-          await setStorageData({ user_lbtc_balance: ckBTCBalance })
-          console.log('LBTC balance fetched:', ckBTCBalance)
-        } catch (lbtcError) {
-          console.error('Error fetching LBTC balance:', lbtcError)
-        }
-      } catch (canisterError: any) {
-        console.error('Error fetching Bitcoin balance from canister (fallback):', canisterError)
-        setBalanceError(canisterError.message || 'Error fetching balance from both sources.')
-        setBtcBalance('0.00000000')
-      }
+    } catch (e) {
+      console.error('Failed to fetch balance:', e)
     } finally {
       setLoadingBalance(false)
     }
   }
 
   const handleRefreshBalance = async () => {
-    if (!btcAddress || !mnemonic) return
-
-    setLoadingBalance(true)
-    try {
-      // Determine API URL based on network
-      const apiUrl = selectedNetwork === 'mainnet'
-        ? `https://blockstream.info/api/address/${btcAddress.trim()}`
-        : `https://blockstream.info/testnet/api/address/${btcAddress.trim()}`
-
-      const response = await fetch(apiUrl)
-
-      if (!response.ok) {
-        if (response.status === 400) {
-          throw new Error('Invalid Bitcoin address format')
-        } else if (response.status === 404) {
-          throw new Error('Address not found')
-        } else {
-          throw new Error('Failed to fetch balance')
-        }
-      }
-
-      const data = await response.json()
-      // Blockstream API returns chain_stats.funded_txo_sum - chain_stats.spent_txo_sum
-      const balanceFromAPI = (data.chain_stats?.funded_txo_sum || 0) - (data.chain_stats?.spent_txo_sum || 0)
-      const balanceBtc = (balanceFromAPI / 100000000).toFixed(8)
-
-      // Store in Chrome storage
-      await setStorageData({ user_bitcoin_balance: balanceBtc })
-      setBtcBalance(balanceBtc)
-      console.log('Refreshed balance from Blockstream API:', balanceBtc)
-
-      // Also fetch LBTC balance
-      try {
-        const canisterNetwork = mapNetworkToCanister(selectedNetwork)
-        const ckBTCBalance = await getCkBTCBalance(mnemonic, canisterNetwork)
-        await setStorageData({ user_lbtc_balance: ckBTCBalance })
-        console.log('LBTC balance refreshed:', ckBTCBalance)
-      } catch (lbtcError) {
-        console.error('Error fetching LBTC balance:', lbtcError)
-      }
-    } catch (error) {
-      console.error('Error refreshing balance:', error)
-    } finally {
-      setLoadingBalance(false)
-    }
+    if (!mnemonic || !walletAddress) return
+    await fetchBalance(mnemonic, selectedNetwork)
   }
 
   const handleConfirmNotice = async () => {
@@ -1019,7 +1006,7 @@ function App() {
         } catch (e) {
           console.error('Error updating balance on canister:', e)
         }
-        fetchBalance(mnemonic, address, selectedNetwork)
+        fetchBalance(mnemonic, selectedNetwork)
 
         // Load assets for current network
         loadAssetsForNetwork(selectedNetwork, mnemonic)
@@ -1271,7 +1258,7 @@ function App() {
         // Refresh balances after successful conversion
         setTimeout(async () => {
           if (btcAddress) {
-            await fetchBalance(mnemonic, btcAddress, selectedNetwork)
+            await fetchBalance(mnemonic, selectedNetwork)
           }
           // Also reload swap balances
           const balanceResult = await getStorageData(['user_bitcoin_balance', 'user_lbtc_balance'])
@@ -1454,18 +1441,23 @@ function App() {
         // Use local Bitcoin signing (offline signing)
         console.log('Using local Bitcoin transaction signing')
 
-        // Get UTXOs from blockchain API (not canister)
-        if (!walletAddress) {
-          throw new Error('Wallet address not available')
+        // Use all discovered Vanilla UTXOs for spending
+        const vanillaUtxos = bitcoinUtxos
+          .filter(u => u.account === 'vanilla' && !u.isLocked)
+          .map(u => ({
+            txid: u.txid,
+            vout: u.vout,
+            value: Number(u.value),
+            account: u.account,
+            chain: u.chain,
+            index: u.index
+          }));
+
+        if (vanillaUtxos.length === 0) {
+          throw new Error('No spendable Vanilla UTXOs available')
         }
 
-        const utxos = await fetchUTXOsFromBlockchain(walletAddress, selectedNetwork)
-
-        if (!utxos || utxos.length === 0) {
-          throw new Error('No UTXOs available for spending')
-        }
-
-        console.log(`Found ${utxos.length} UTXOs from blockchain`)
+        console.log(`Using ${vanillaUtxos.length} Vanilla UTXOs for transaction`)
 
         // Get fee rate from selected fee option
         const feeRateMap = { slow: 0, avg: 1, fast: 2 }
@@ -1475,12 +1467,21 @@ function App() {
         // Sign transaction locally
         const txHex = await signAndBroadcastTransaction(
           mnemonic,
-          utxos,
+          vanillaUtxos as any,
           sendReceiverAddress,
           Number(amountSats),
           feeRate,
-          selectedNetwork
+          selectedNetwork,
+          changeIndex
         )
+
+        // Increment and save change index
+        const nextChangeIndex = changeIndex + 1
+        setChangeIndex(nextChangeIndex)
+        const changeIndexKey = `changeIndex_${selectedNetwork}` as any
+        await setStorageData({ [changeIndexKey]: nextChangeIndex })
+        // TODO: Save the changeIndex into canister after local storage update
+        console.log(`[ChangeIndex] Incremented to ${nextChangeIndex} for ${selectedNetwork}`)
 
         // Broadcast to network
         txid = await broadcastTransaction(txHex, selectedNetwork)
@@ -1526,7 +1527,7 @@ function App() {
       // Refresh balance from blockchain after 3 seconds to get accurate balance
       setTimeout(async () => {
         if (btcAddress) {
-          await fetchBalance(mnemonic, btcAddress, selectedNetwork)
+          await fetchBalance(mnemonic, selectedNetwork)
         }
       }, 3000)
     } catch (error: any) {
@@ -1604,7 +1605,7 @@ function App() {
       if (view === 'network-settings') {
         const result = await getStorageData(['electrumServer', 'rgbProxy'])
         // Use saved values, or keep the defaults if not saved
-        setElectrumServer(result.electrumServer || '89.117.52.115:50002')
+        setElectrumServer(result.electrumServer || 'ssl://electrum.iriswallet.com:50013')
         setRgbProxy(result.rgbProxy || 'http://89.117.52.115:3000/json-rpc')
       }
     }
@@ -1661,35 +1662,26 @@ function App() {
 
       // Determine fetch method based on address generation mode
       if (addressGenerationMethod === 'bitcoin') {
-        // Bitcoin mode: Fetch from all three addresses
-        console.log('[Multi-Address] Fetching UTXOs from all wallet addresses...')
+        // Bitcoin mode: Use Discovery Scan to find all UTXOs across both accounts
+        console.log('[Multi-Address] Fetching UTXOs using Discovery Scan...')
 
-        // Load the three addresses from storage
-        const storage = await getStorageData([
-          `MainBalance_${selectedNetwork}`,
-          `UTXOHolder_${selectedNetwork}`,
-          `DustHolder_${selectedNetwork}`
-        ]);
+        const { utxos: discoveryUtxos, maxIndex, fundedAddresses: discoveredAddresses } = await performDiscoveryScan(mnemonic, selectedNetwork, addressIndex);
 
-        const mainAddr = (storage[`MainBalance_${selectedNetwork}` as keyof typeof storage] as string) || walletAddress;
-        const utxoHolderAddr = (storage[`UTXOHolder_${selectedNetwork}` as keyof typeof storage] as string) || walletAddress;
-        const dustHolderAddr = (storage[`DustHolder_${selectedNetwork}` as keyof typeof storage] as string) || walletAddress;
+        setFundedAddresses(discoveredAddresses);
 
-        console.log('[Multi-Address] Fetching from:');
-        console.log(`  Main: ${mainAddr}`);
-        console.log(`  UTXO Holder: ${utxoHolderAddr}`);
-        console.log(`  Dust Holder: ${dustHolderAddr}`);
+        // Update address index if a higher one was found during scan
+        if (maxIndex > addressIndex) {
+          console.log(`[DiscoveryScan] Found higher index during UTXO fetch: ${maxIndex}. Updating.`);
+          setAddressIndex(maxIndex);
+          const indexKey = `addressIndex_${selectedNetwork}` as any;
+          await setStorageData({
+            addressIndex: maxIndex,
+            [indexKey]: maxIndex
+          });
+        }
 
-        // Fetch UTXOs from all three addresses
-        const blockchainUtxos = await fetchUTXOsFromAllAddresses(
-          mainAddr,
-          utxoHolderAddr,
-          dustHolderAddr,
-          selectedNetwork
-        );
-
-        // Convert to canister format (number → bigint)
-        utxos = blockchainUtxos.map(u => ({
+        // Convert to canister format (number → bigint) and preserve account info
+        utxos = discoveryUtxos.map(u => ({
           ...u,
           value: BigInt(u.value)
         }))
@@ -1721,20 +1713,32 @@ function App() {
             rgbOccupiedUtxos.map(u => `${u.txid}:${u.vout}`)
           )
 
+          // Filter and tag unoccupied UTXOs
           const unoccupiedUtxos = utxos
             .filter(u => !occupiedOutpoints.has(`${u.txid}:${u.vout}`))
-            .map(u => ({ ...u, isOccupied: false }))
+            .map(u => ({
+              ...u,
+              isOccupied: false,
+              // Isolation Wall: Tag as locked if it belongs to the Colored account
+              isLocked: u.account === 'colored'
+            }))
 
           setBitcoinUtxos(unoccupiedUtxos)
 
           // Convert RGB UTXOs to the expected format
-          const occupiedUtxos = rgbOccupiedUtxos.map(u => ({
-            txid: u.txid,
-            vout: u.vout,
-            value: BigInt(u.btcAmount),
-            isOccupied: true,
-            rgbAssets: u.assets
-          }))
+          const occupiedUtxos = rgbOccupiedUtxos.map(u => {
+            // Find the original UTXO to get account info
+            const originalUtxo = utxos!.find(utxo => utxo.txid === u.txid && utxo.vout === u.vout);
+            return {
+              txid: u.txid,
+              vout: u.vout,
+              value: BigInt(u.btcAmount),
+              isOccupied: true,
+              isLocked: true, // RGB-occupied UTXOs are always locked
+              rgbAssets: u.assets,
+              account: originalUtxo?.account || 'colored'
+            };
+          })
 
           setRgbUtxos(occupiedUtxos)
 
@@ -2359,42 +2363,62 @@ function App() {
                     <p className="empty-text">No activities yet</p>
                   </div>
                 ) : (
-                  activities.map((activity) => {
-                    // Build Blockstream URL based on network
-                    const explorerUrl = selectedNetwork === 'mainnet'
-                      ? `https://blockstream.info/tx/${activity.txid}`
-                      : `https://blockstream.info/testnet/tx/${activity.txid}`;
+                  (() => {
+                    // Group activities by date
+                    const groups: { [date: string]: BitcoinActivity[] } = {};
+                    activities.forEach(activity => {
+                      if (!groups[activity.date]) {
+                        groups[activity.date] = [];
+                      }
+                      groups[activity.date].push(activity);
+                    });
 
-                    // Shorten txid for display
-                    const shortTxid = activity.txid ? `${activity.txid.slice(0, 8)}...${activity.txid.slice(-4)}` : 'unknown';
+                    return Object.entries(groups).map(([date, dateActivities]) => (
+                      <div key={date} className="activity-date-group">
+                        <div className="activity-date-header">{date}</div>
+                        {dateActivities.map((activity) => {
+                          const explorerUrl = selectedNetwork === 'mainnet'
+                            ? `https://blockstream.info/tx/${activity.txid}`
+                            : `https://blockstream.info/testnet/tx/${activity.txid}`;
 
-                    return (
-                      <div
-                        key={activity.txid}
-                        className="activity-item"
-                        onClick={() => window.open(explorerUrl, '_blank')}
-                        style={{ cursor: 'pointer' }}
-                      >
-                        <div className="activity-left">
-                          <div className={`activity-icon ${activity.type.toLowerCase()}`}>
-                            {activity.type === 'Receive' ? '↓' : '↗'}
-                          </div>
-                          <div className="activity-info">
-                            <span className="activity-type">{activity.type}</span>
-                            <span className="activity-txid">tx: {shortTxid}</span>
-                          </div>
-                        </div>
-                        <div className="activity-right">
-                          <span className={`activity-amount ${activity.type.toLowerCase()}`}>
-                            {activity.amount.toFixed(8)} BTC
-                          </span>
-                          <span className={`activity-status ${activity.status.toLowerCase()}`}>
-                            {activity.status}
-                          </span>
-                        </div>
+                          const shortTxid = activity.txid ? `${activity.txid.slice(0, 4)}...${activity.txid.slice(-4)}` : 'unknown';
+
+                          return (
+                            <div
+                              key={activity.txid}
+                              className="activity-item"
+                              onClick={() => window.open(explorerUrl, '_blank')}
+                            >
+                              <div className="activity-left">
+                                <div className={`activity-icon-circle ${activity.type.toLowerCase()}`}>
+                                  {activity.type === 'Receive' ? (
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M19 12l-7 7-7-7" /></svg>
+                                  ) : (
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19V5M5 12l7-7 7 7" /></svg>
+                                  )}
+                                </div>
+                                <div className="activity-info">
+                                  <span className="activity-type">{activity.type}</span>
+                                  <div className="activity-tx-row">
+                                    <span className="activity-txid">tx: {shortTxid}</span>
+                                    <span className="activity-link-icon">↗</span>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="activity-right">
+                                <span className={`activity-amount-new ${activity.type.toLowerCase()}`}>
+                                  {activity.type === 'Send' ? '-' : ''}{activity.amount.toFixed(8)} BTC
+                                </span>
+                                <span className={`activity-status-new ${activity.status.toLowerCase()}`}>
+                                  {activity.status}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
-                    );
-                  })
+                    ));
+                  })()
                 )}
               </div>
             )}
@@ -2606,6 +2630,22 @@ function App() {
                   <div className="rgb-info-content">
                     <p className="rgb-info-title">Gas Requirement</p>
                     <p className="rgb-info-desc">You need a small amount of {selectedNetwork === 'mainnet' ? 'Bitcoin' : 'Testnet BTC'} for RGB transfers. Current balance: {btcBalance} BTC</p>
+                  </div>
+                </div>
+
+                {/* Colored Address Display */}
+                <div className="rgb-field">
+                  <label className="rgb-label">Your Colored Address (RGB)</label>
+                  <div className="rgb-address-display" style={{
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    padding: '10px',
+                    borderRadius: '8px',
+                    fontSize: '0.8rem',
+                    wordBreak: 'break-all',
+                    color: '#9ca3af',
+                    marginTop: '5px'
+                  }}>
+                    {coloredAddress || 'Generating...'}
                   </div>
                 </div>
 
@@ -2931,22 +2971,54 @@ function App() {
 
                   {mainBalanceAddress && (
                     <div style={{ marginBottom: '0.75rem' }}>
-                      <div style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.5)', marginBottom: '0.25rem' }}>Main Address</div>
+                      <div style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.5)', marginBottom: '0.25rem' }}>Main Address (Index 0)</div>
                       <div style={{ fontSize: '0.9rem', color: '#fff', fontFamily: 'monospace', wordBreak: 'break-all' }}>{mainBalanceAddress}</div>
                     </div>
                   )}
 
                   {utxoHolderAddress && (
                     <div style={{ marginBottom: '0.75rem' }}>
-                      <div style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.5)', marginBottom: '0.25rem' }}>UTXO Holder</div>
+                      <div style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.5)', marginBottom: '0.25rem' }}>UTXO Holder (Index 100)</div>
                       <div style={{ fontSize: '0.9rem', color: '#fff', fontFamily: 'monospace', wordBreak: 'break-all' }}>{utxoHolderAddress}</div>
                     </div>
                   )}
 
                   {dustHolderAddress && (
-                    <div>
-                      <div style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.5)', marginBottom: '0.25rem' }}>Dust Holder</div>
+                    <div style={{ marginBottom: '0.75rem' }}>
+                      <div style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.5)', marginBottom: '0.25rem' }}>Dust Holder (Index 999)</div>
                       <div style={{ fontSize: '0.9rem', color: '#fff', fontFamily: 'monospace', wordBreak: 'break-all' }}>{dustHolderAddress}</div>
+                    </div>
+                  )}
+
+                  <div style={{ marginTop: '1rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                    <div style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.5)', marginBottom: '0.25rem' }}>Current Change Index</div>
+                    <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#f7931a' }}>{addressIndex}</div>
+                    <div style={{ fontSize: '0.8rem', color: '#9ca3af', marginTop: '4px' }}>
+                      Iterative scan with Gap Limit (20)
+                    </div>
+                  </div>
+
+                  {/* Display funded addresses found during scan */}
+                  {fundedAddresses.length > 0 && (
+                    <div style={{ marginTop: '1rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                      <div style={{ fontSize: '0.85rem', color: '#f7931a', fontWeight: '600', marginBottom: '0.5rem' }}>
+                        Funded Addresses Found
+                      </div>
+                      <div style={{ maxHeight: '150px', overflowY: 'auto', paddingRight: '4px' }}>
+                        {fundedAddresses
+                          .filter(fa => fa.account === 'vanilla') // Only show vanilla addresses as requested
+                          .map((fa, idx) => (
+                            <div key={idx} style={{ marginBottom: '0.5rem', padding: '0.5rem', background: 'rgba(255, 255, 255, 0.02)', borderRadius: '4px' }}>
+                              <div style={{ fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.5)', display: 'flex', justifyContent: 'space-between' }}>
+                                <span>Index {fa.index} ({fa.chain === 0 ? 'External' : 'Internal'})</span>
+                                <span style={{ color: '#f7931a' }}>{(fa.balance / 100000000).toFixed(8)} BTC</span>
+                              </div>
+                              <div style={{ fontSize: '0.8rem', color: '#fff', fontFamily: 'monospace', wordBreak: 'break-all', marginTop: '2px' }}>
+                                {fa.address}
+                              </div>
+                            </div>
+                          ))}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -3151,11 +3223,11 @@ function App() {
               <input
                 type="text"
                 className="settings-input"
-                placeholder="e.g., 89.117.52.115:50002"
+                placeholder="e.g., ssl://electrum.iriswallet.com:50013"
                 value={electrumServer}
                 onChange={(e) => setElectrumServer(e.target.value)}
               />
-              <span className="settings-hint">Enter server IP and port (e.g., 89.117.52.115:50002)</span>
+              <span className="settings-hint">Enter server URL (e.g., ssl://electrum.iriswallet.com:50013)</span>
             </div>
 
             <div className="input-group">
@@ -3836,13 +3908,34 @@ function App() {
                               <div style={{ fontSize: '0.85rem', color: 'rgba(59, 130, 246, 0.9)' }}>💡 These Bitcoin UTXOs are available for RGB asset binding</div>
                             </div>
                             {bitcoinUtxos.map((utxo) => (
-                              <div key={`${utxo.txid}:${utxo.vout}`} style={{ background: 'rgba(255, 255, 255, 0.04)', borderRadius: '12px', padding: '1rem', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
-                                <div style={{ marginBottom: '0.75rem' }}>
-                                  <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.85rem' }}>Output</span>
-                                  <div style={{ color: '#fff', fontSize: '0.95rem', marginTop: '0.25rem', fontFamily: 'monospace' }}>{utxo.txid.slice(0, 12)}...{utxo.txid.slice(-8)}:{utxo.vout}</div>
+                              <div key={`${utxo.txid}:${utxo.vout}`} style={{
+                                background: 'rgba(255, 255, 255, 0.04)',
+                                borderRadius: '12px',
+                                padding: '1rem',
+                                border: utxo.isLocked ? '1px solid rgba(239, 68, 68, 0.2)' : '1px solid rgba(255, 255, 255, 0.06)',
+                                opacity: utxo.isLocked ? 0.8 : 1
+                              }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
+                                  <div>
+                                    <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.85rem' }}>Output</span>
+                                    <div style={{ color: '#fff', fontSize: '0.95rem', marginTop: '0.25rem', fontFamily: 'monospace' }}>{utxo.txid.slice(0, 12)}...{utxo.txid.slice(-8)}:{utxo.vout}</div>
+                                  </div>
+                                  {utxo.isLocked && (
+                                    <div style={{
+                                      background: 'rgba(239, 68, 68, 0.1)',
+                                      color: '#ef4444',
+                                      fontSize: '0.7rem',
+                                      padding: '2px 6px',
+                                      borderRadius: '4px',
+                                      fontWeight: 600,
+                                      border: '1px solid rgba(239, 68, 68, 0.2)'
+                                    }}>
+                                      LOCKED
+                                    </div>
+                                  )}
                                 </div>
                                 <div>
-                                  <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.85rem' }}>Available for RGB Binding</span>
+                                  <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.85rem' }}>{utxo.isLocked ? 'Reserved for RGB' : 'Available for RGB Binding'}</span>
                                   <div style={{ color: '#fff', fontSize: '0.95rem', marginTop: '0.25rem', fontWeight: 600 }}>{(Number(utxo.value) / 100000000).toFixed(8)} BTC</div>
                                 </div>
                               </div>
@@ -3866,10 +3959,29 @@ function App() {
                               <div style={{ fontSize: '0.85rem', color: 'rgba(168, 85, 247, 0.9)' }}>🎨 These UTXOs have RGB assets bound to them</div>
                             </div>
                             {rgbUtxos.map((utxo) => (
-                              <div key={`${utxo.txid}:${utxo.vout}`} style={{ background: 'rgba(255, 255, 255, 0.04)', borderRadius: '12px', padding: '1rem', border: '1px solid rgba(168, 85, 247, 0.2)' }}>
-                                <div style={{ marginBottom: '0.75rem' }}>
-                                  <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.85rem' }}>Output</span>
-                                  <div style={{ color: '#fff', fontSize: '0.95rem', marginTop: '0.25rem', fontFamily: 'monospace' }}>{utxo.txid.slice(0, 12)}...{utxo.txid.slice(-8)}:{utxo.vout}</div>
+                              <div key={`${utxo.txid}:${utxo.vout}`} style={{
+                                background: 'rgba(255, 255, 255, 0.04)',
+                                borderRadius: '12px',
+                                padding: '1rem',
+                                border: '1px solid rgba(168, 85, 247, 0.2)',
+                                opacity: 0.9
+                              }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
+                                  <div>
+                                    <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.85rem' }}>Output</span>
+                                    <div style={{ color: '#fff', fontSize: '0.95rem', marginTop: '0.25rem', fontFamily: 'monospace' }}>{utxo.txid.slice(0, 12)}...{utxo.txid.slice(-8)}:{utxo.vout}</div>
+                                  </div>
+                                  <div style={{
+                                    background: 'rgba(239, 68, 68, 0.1)',
+                                    color: '#ef4444',
+                                    fontSize: '0.7rem',
+                                    padding: '2px 6px',
+                                    borderRadius: '4px',
+                                    fontWeight: 600,
+                                    border: '1px solid rgba(239, 68, 68, 0.2)'
+                                  }}>
+                                    LOCKED
+                                  </div>
                                 </div>
                                 <div style={{ marginBottom: '0.75rem' }}>
                                   <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.85rem' }}>Bitcoin Value</span>
@@ -4051,10 +4163,69 @@ function App() {
               {/* Sign & Pay Button */}
               <button
                 className="btn-primary"
-                onClick={() => {
-                  // TODO: Implement actual transaction signing and broadcasting
-                  console.log('Signing and broadcasting transaction to UTXO Holder address...');
-                  setView('utxos');
+                onClick={async () => {
+                  try {
+                    console.log('Signing and broadcasting transaction to UTXO Holder address...');
+
+                    const amountBtc = createUtxoMode === 'default' ? 0.0003 : parseFloat(createUtxoAmount || '0.0003');
+                    const amountSats = Math.floor(amountBtc * 100000000);
+
+                    // Use all discovered Vanilla UTXOs for spending
+                    const vanillaUtxos = bitcoinUtxos
+                      .filter(u => u.account === 'vanilla' && !u.isLocked)
+                      .map(u => ({
+                        txid: u.txid,
+                        vout: u.vout,
+                        value: Number(u.value),
+                        account: u.account,
+                        chain: u.chain,
+                        index: u.index
+                      }));
+
+                    if (vanillaUtxos.length === 0) {
+                      throw new Error('No spendable Vanilla UTXOs available');
+                    }
+
+                    // Get fee rate
+                    let feeRate = 2;
+                    if (createUtxoMode === 'custom') {
+                      if (createUtxoFeeOption === 'custom') {
+                        feeRate = Number(createUtxoCustomFee);
+                      } else {
+                        const feeRateMap = { slow: 0, avg: 1, fast: 2 };
+                        const feeIndex = feeRateMap[createUtxoFeeOption as 'slow' | 'avg' | 'fast'] || 2;
+                        feeRate = Number(sendEstimatedFees[feeIndex]);
+                      }
+                    }
+
+                    // Sign transaction locally
+                    const txHex = await signAndBroadcastTransaction(
+                      mnemonic,
+                      vanillaUtxos as any,
+                      utxoHolderAddress,
+                      amountSats,
+                      feeRate,
+                      selectedNetwork,
+                      changeIndex
+                    );
+
+                    // Increment and save change index
+                    const nextChangeIndex = changeIndex + 1;
+                    setChangeIndex(nextChangeIndex);
+                    const changeIndexKey = `changeIndex_${selectedNetwork}` as any;
+                    await setStorageData({ [changeIndexKey]: nextChangeIndex });
+                    console.log(`[ChangeIndex] Incremented to ${nextChangeIndex} for ${selectedNetwork}`);
+
+                    // Broadcast to network
+                    const txid = await broadcastTransaction(txHex, selectedNetwork);
+                    console.log('UTXO creation transaction broadcast:', txid);
+
+                    // Refresh UTXOs and return to list
+                    await handleViewUtxos();
+                  } catch (error: any) {
+                    console.error('Failed to create UTXO:', error);
+                    alert(`Failed to create UTXO: ${error.message}`);
+                  }
                 }}
                 style={{
                   width: '100%',
@@ -4062,7 +4233,11 @@ function App() {
                   background: '#f7931a',
                   padding: '1rem',
                   fontSize: '1rem',
-                  fontWeight: 600
+                  fontWeight: 600,
+                  borderRadius: '12px',
+                  border: 'none',
+                  color: '#fff',
+                  cursor: 'pointer'
                 }}
               >
                 Sign & Pay

@@ -11,7 +11,8 @@ export interface BitcoinActivity {
 
 export const fetchBtcActivities = async (
     address: string,
-    network: string
+    network: string,
+    allWalletAddresses: string[] = []
 ): Promise<BitcoinActivity[]> => {
     try {
         const baseUrl = network === 'testnet3' || network === 'testnet4' || network === 'regtest'
@@ -25,6 +26,9 @@ export const fetchBtcActivities = async (
         }
 
         const txs = await response.json();
+
+        // Ensure the current address is included in the wallet addresses list
+        const walletAddresses = new Set([address, ...allWalletAddresses]);
 
         return txs.map((tx: any) => {
             // Validate transaction structure
@@ -44,12 +48,14 @@ export const fetchBtcActivities = async (
                     .filter((out: any) => out?.scriptpubkey_address === address)
                     .reduce((sum: number, out: any) => sum + (out?.value || 0), 0);
             } else {
-                // For sends, calculate total spent (inputs from this address - change back to this address)
-                const totalOut = tx.vout.reduce((sum: number, out: any) => sum + (out?.value || 0), 0);
-                const changeBack = tx.vout
-                    .filter((out: any) => out?.scriptpubkey_address === address)
+                // For sends, calculate total spent (inputs from this address - change back to ANY wallet address)
+                // The amount sent to others is the sum of outputs NOT going to our wallet
+                const sentToOthers = tx.vout
+                    .filter((out: any) => !walletAddresses.has(out?.scriptpubkey_address))
                     .reduce((sum: number, out: any) => sum + (out?.value || 0), 0);
-                amount = totalOut - changeBack + (tx.fee || 0);
+
+                // Total "Send" amount usually includes the fee
+                amount = sentToOthers + (tx.fee || 0);
             }
 
             return {

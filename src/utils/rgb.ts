@@ -18,6 +18,10 @@ export interface UtxoWithRgbStatus {
     vout: number;
     value: bigint;
     isOccupied: boolean;
+    isLocked?: boolean; // Isolation Wall: Locked UTXOs cannot be spent as BTC fees
+    account?: 'vanilla' | 'colored';
+    chain?: 0 | 1;
+    index?: number;
     rgbAllocations?: RgbAllocation[];
 }
 

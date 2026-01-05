@@ -65,9 +65,9 @@ async function findBitLightAddress(mnemonic, targetAddress, isTestnet = true) {
 
 // --- CONFIGURATION ---
 //const mnemonic = "gasp attitude little organ palm crime layer answer dial twelve feed meadow";
-const mnemonic = "utxo attitude little organ palm crime layer answer dial twelve feed meadow";
+const mnemonic = "gasp attitude little organ palm crime layer answer dial twelve feed meadow";
 
-const target = "tb1pyzsrsnu84dmrtvthpvxfjd88pk60h3q394ulaq2q5dqun3wrj2eqcwlxsw";
+const target = "tb1q6h4qvlufaqsa588gfxs2q6qfxydm8ewaqtq5e2";
 
 findBitLightAddress(mnemonic, target).then(result => {
     if (result.found) {
