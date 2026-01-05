@@ -143,6 +143,7 @@ function App() {
   const [addressIndex, setAddressIndex] = useState<number>(0) // The 'i' value
   const [changeIndex, setChangeIndex] = useState<number>(0)
   const [fundedAddresses, setFundedAddresses] = useState<{ address: string, balance: number, account: 'vanilla' | 'colored', index: number, chain: 0 | 1 }[]>([])
+  const [allDiscoveredAddresses, setAllDiscoveredAddresses] = useState<string[]>([])
 
   // Network settings states with defaults
   const [electrumServer, setElectrumServer] = useState<string>('ssl://electrum.iriswallet.com:50013')
@@ -740,15 +741,15 @@ function App() {
       console.log('Fetching activities for address:', walletAddress, 'on network:', selectedNetwork)
 
       // Collect all known wallet addresses to correctly identify change
-      const allWalletAddresses = [
+      const walletAddresses = [
         mainBalanceAddress,
         utxoHolderAddress,
         dustHolderAddress,
         coloredAddress,
-        ...fundedAddresses.map(fa => fa.address)
+        ...allDiscoveredAddresses
       ].filter(Boolean);
 
-      const btcActivities = await fetchBtcActivities(walletAddress, selectedNetwork, allWalletAddresses)
+      const btcActivities = await fetchBtcActivities(walletAddress, selectedNetwork, walletAddresses)
       setActivities(btcActivities)
       console.log(`Loaded ${btcActivities.length} activities`)
     } catch (error) {
@@ -930,13 +931,14 @@ function App() {
       const effectiveIndex = Math.max(addressIndex, canisterIndex || 0);
 
       // Perform Discovery Scan with Gap Limit 20
-      const { totalBalance: vanillaBalance, maxIndex, fundedAddresses: discoveredAddresses } = await performDiscoveryScan(
+      const { totalBalance: vanillaBalance, maxIndex, fundedAddresses: discoveredAddresses, allDiscoveredAddresses: discoveredHistoryAddresses } = await performDiscoveryScan(
         currentMnemonic,
         networkId,
         effectiveIndex
       );
 
       setFundedAddresses(discoveredAddresses);
+      setAllDiscoveredAddresses(discoveredHistoryAddresses);
       if (maxIndex > addressIndex) {
         console.log(`[DiscoveryScan] Found higher index: ${maxIndex}. Updating state and storage.`);
         setAddressIndex(maxIndex);
@@ -1665,9 +1667,10 @@ function App() {
         // Bitcoin mode: Use Discovery Scan to find all UTXOs across both accounts
         console.log('[Multi-Address] Fetching UTXOs using Discovery Scan...')
 
-        const { utxos: discoveryUtxos, maxIndex, fundedAddresses: discoveredAddresses } = await performDiscoveryScan(mnemonic, selectedNetwork, addressIndex);
+        const { utxos: discoveryUtxos, maxIndex, fundedAddresses: discoveredAddresses, allDiscoveredAddresses: discoveredHistoryAddresses } = await performDiscoveryScan(mnemonic, selectedNetwork, addressIndex);
 
         setFundedAddresses(discoveredAddresses);
+        setAllDiscoveredAddresses(discoveredHistoryAddresses);
 
         // Update address index if a higher one was found during scan
         if (maxIndex > addressIndex) {

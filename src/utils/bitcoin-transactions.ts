@@ -285,13 +285,15 @@ export const performDiscoveryScan = async (
     totalBalance: number,
     utxos: UTXO[],
     maxIndex: number,
-    fundedAddresses: { address: string, balance: number, account: 'vanilla' | 'colored', index: number, chain: 0 | 1 }[]
+    fundedAddresses: { address: string, balance: number, account: 'vanilla' | 'colored', index: number, chain: 0 | 1 }[],
+    allDiscoveredAddresses: string[]
 }> => {
     console.log(`[DiscoveryScan] Starting iterative scan for ${network} with Gap Limit 20...`);
 
     const GAP_LIMIT = 20;
     const allUtxos: UTXO[] = [];
     const fundedAddresses: { address: string, balance: number, account: 'vanilla' | 'colored', index: number, chain: 0 | 1 }[] = [];
+    const allDiscoveredAddresses: string[] = [];
     let maxIndexFound = storedIndex;
 
     // We scan 4 chains: 
@@ -322,6 +324,14 @@ export const performDiscoveryScan = async (
         ];
 
         const results = await Promise.all(chainPromises);
+
+        // Track all addresses with history for change detection
+        results.forEach(r => {
+            if (r.hasHistory) {
+                allDiscoveredAddresses.push(r.addr);
+            }
+        });
+
         const anyHistory = results.some(r => r.hasHistory);
 
         if (anyHistory) {
@@ -383,6 +393,7 @@ export const performDiscoveryScan = async (
         totalBalance: vanillaBalance,
         utxos: allUtxos,
         maxIndex: maxIndexFound,
-        fundedAddresses: fundedAddresses
+        fundedAddresses: fundedAddresses,
+        allDiscoveredAddresses: allDiscoveredAddresses
     };
 };
