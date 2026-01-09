@@ -18,9 +18,12 @@ This document summarizes the key features and security enhancements implemented 
 *   **Transparency**: Added a "Funded Addresses Found" list to the Network Settings (Admin) section.
 *   **Details**: Displays the address index, chain type (External/Internal), the address itself, and the balance in BTC for all "Vanilla" addresses found during the discovery scan.
 
-## 4. Activity Balance Fix (Change Detection)
+## 4. Activity Balance Fix (Comprehensive Change Detection)
 *   **Problem**: "Send" transactions previously showed the total input balance instead of the actual amount sent.
-*   **Solution**: Updated `fetchBtcActivities` to identify outputs going back to any wallet-owned address (change) and subtract them from the total spent amount.
+*   **Solution**: 
+    *   Updated `performDiscoveryScan` to return *all* scanned addresses (up to the gap limit).
+    *   These addresses are persisted in storage and used by `fetchBtcActivities` to identify change.
+    *   The activities list is refreshed immediately after a discovery scan to ensure accuracy.
 *   **Result**: Transaction history now accurately reflects the amount sent to the recipient plus the network fee.
 
 ## 5. External Servers Documentation

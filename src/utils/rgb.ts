@@ -17,6 +17,8 @@ export interface UtxoWithRgbStatus {
     txid: string;
     vout: number;
     value: bigint;
+    address: string;
+    derivationPath: string;
     isOccupied: boolean;
     isLocked?: boolean; // Isolation Wall: Locked UTXOs cannot be spent as BTC fees
     account?: 'vanilla' | 'colored';
@@ -193,7 +195,7 @@ export const checkUtxoRgbStatus = async (
  * @returns Classified UTXOs split into occupied and unoccupied
  */
 export const classifyUtxos = async (
-    utxos: Array<{ txid: string; vout: number; value: bigint }>
+    utxos: Array<{ txid: string; vout: number; value: bigint; address: string; derivationPath: string }>
 ): Promise<ClassifiedUtxos> => {
     const unoccupied: UtxoWithRgbStatus[] = [];
     const occupied: UtxoWithRgbStatus[] = [];
@@ -209,6 +211,8 @@ export const classifyUtxos = async (
             console.warn(`[RGB] Error checking ${utxo.txid}:${utxo.vout}, treating as unoccupied`);
             unoccupied.push({
                 ...utxo,
+                address: utxo.address,
+                derivationPath: utxo.derivationPath,
                 isOccupied: false
             });
             continue;
@@ -219,6 +223,8 @@ export const classifyUtxos = async (
             console.log(`[RGB] ✓ Occupied: ${utxo.txid}:${utxo.vout} (${rgbAllocations.length} allocations)`);
             occupied.push({
                 ...utxo,
+                address: utxo.address,
+                derivationPath: utxo.derivationPath,
                 isOccupied: true,
                 rgbAllocations
             });
@@ -226,6 +232,8 @@ export const classifyUtxos = async (
             console.log(`[RGB] ○ Unoccupied: ${utxo.txid}:${utxo.vout}`);
             unoccupied.push({
                 ...utxo,
+                address: utxo.address,
+                derivationPath: utxo.derivationPath,
                 isOccupied: false
             });
         }

@@ -3,11 +3,12 @@ import './App.css'
 import { generateMnemonic, deriveIdentity, validateMnemonic } from './utils/crypto'
 import { getBtcAddress, getWalletAddress, updateBalance, mapNetworkToCanister, getUtxos, getEstimatedBitcoinFees, sendBitcoin } from './utils/icp'
 import { deriveBitcoinAddress } from './utils/bitcoin-address'
-import { signAndBroadcastTransaction, broadcastTransaction, fetchUTXOsFromBlockchain, performDiscoveryScan } from './utils/bitcoin-transactions'
+import { signAndSendVanilla, broadcastTransaction, fetchUTXOsFromBlockchain, performDiscoveryScan, fetchLiveFees, estimateFee } from './utils/bitcoin-transactions'
 import type { UtxoWithRgbStatus } from './utils/rgb'
 import { fetchRgbOccupiedUtxos } from './utils/rgb-fetcher'
 import { getCkBTCBalance } from './utils/icrc1'
 import { convertLBTCtoBTC } from './utils/ckbtc-withdrawal'
+import { getErrorLogs, clearErrorLogs, type ErrorLog } from './utils/error-logger'
 import { getStorageData, setStorageData, removeStorageData, getNetworkAddressKey, getNetworkAssetsKey, testnet3DefaultAssets, mainnetDefaultAssets, type StorageData } from './utils/storage'
 import type { Asset } from './utils/storage'
 import { QRCodeSVG } from 'qrcode.react'
@@ -16,7 +17,7 @@ import { LightningAnimation } from './components/LightningAnimation'
 import { fetchBtcActivities, type BitcoinActivity } from './utils/bitcoin-activities'
 
 
-type View = 'welcome' | 'unlock' | 'lock' | 'forgot' | 'create' | 'verify' | 'password' | 'restore' | 'dashboard' | 'receive' | 'receive-btc' | 'receive-rgb' | 'convert-lightning' | 'add-assets' | 'settings' | 'user-settings' | 'auto-lock-settings' | 'network-settings' | 'swap' | 'send' | 'send-amount' | 'send-confirm' | 'send-success' | 'utxos' | 'create-rgb-utxo' | 'create-utxo-confirm' | 'faucet'
+type View = 'welcome' | 'unlock' | 'lock' | 'forgot' | 'create' | 'verify' | 'password' | 'restore' | 'dashboard' | 'receive' | 'receive-btc' | 'receive-rgb' | 'convert-lightning' | 'add-assets' | 'settings' | 'user-settings' | 'auto-lock-settings' | 'network-settings' | 'swap' | 'send' | 'send-amount' | 'send-confirm' | 'send-success' | 'utxos' | 'create-rgb-utxo' | 'create-utxo-confirm' | 'faucet' | 'error-logs'
 type Tab = 'assets' | 'activities'
 type Network = 'mainnet' | 'testnet3' | 'testnet4' | 'regtest'
 
@@ -30,7 +31,7 @@ interface NetworkInfo {
 const networks: NetworkInfo[] = [
   { id: 'mainnet', name: 'Bitcoin mainnet', color: '#f7931a', enabled: true },
   { id: 'testnet3', name: 'Bitcoin testnet 3', color: '#22c55e', enabled: true },
-  { id: 'testnet4', name: 'Bitcoin testnet 4', color: '#9ca3af', enabled: false },
+  { id: 'testnet4', name: 'Bitcoin testnet 4', color: '#8b5cf6', enabled: true },
   { id: 'regtest', name: 'Bitcoin regtest', color: '#3b82f6', enabled: true },
 ]
 
@@ -54,6 +55,7 @@ const getRandomPositions = (): number[] => {
 
 function App() {
   const [view, setView] = useState<View>('welcome')
+  const [errorLogs, setErrorLogs] = useState<ErrorLog[]>([])
   const [mnemonic, setMnemonic] = useState<string>('')
   const [principalId, setPrincipalId] = useState<string>('')
   const [restoreInput, setRestoreInput] = useState<string>('gasp attitude little organ palm crime layer answer dial twelve feed meadow')
@@ -162,6 +164,7 @@ function App() {
   const [swapSuccess, setSwapSuccess] = useState<string>('')
   const [sendReceiverAddress, setSendReceiverAddress] = useState<string>('')
   const [sendAmount, setSendAmount] = useState<string>('')
+  const [maxSendableAmount, setMaxSendableAmount] = useState<string>('0.00000000')
   const [sendFeeOption, setSendFeeOption] = useState<'slow' | 'avg' | 'fast' | 'custom'>('fast')
   const [sendUserBalance, setSendUserBalance] = useState<string>('0.00000000')
   const [sendEstimatedFees, setSendEstimatedFees] = useState<bigint[]>([2n, 3n, 5n]) // Default: [slow, avg, fast]
@@ -363,7 +366,8 @@ function App() {
           'addressGenerationMethod', // Load address generation method
           'AutoLockTimer', // Load auto-lock timer setting
           'LoginTime', // Load last login time
-          'changeIndex_mainnet', 'changeIndex_testnet3', 'changeIndex_testnet4', 'changeIndex_regtest' // Load change indices
+          'changeIndex_mainnet', 'changeIndex_testnet3', 'changeIndex_testnet4', 'changeIndex_regtest', // Load change indices
+          'allDiscoveredAddresses_mainnet', 'allDiscoveredAddresses_testnet3', 'allDiscoveredAddresses_testnet4', 'allDiscoveredAddresses_regtest' // Load discovered addresses
         ])
         console.log('Storage check result:', result)
 
@@ -442,6 +446,10 @@ function App() {
               const networkAddress = result[networkAddressKey] || result.btcAddress || ''
               setBtcAddress(networkAddress as string)
 
+              // Load discovered addresses for change detection
+              const discoveredAddressesKey = `allDiscoveredAddresses_${network}` as keyof StorageData
+              setAllDiscoveredAddresses(result[discoveredAddressesKey] as string[] || [])
+
               setView('dashboard')
               setIsLoading(false)
 
@@ -501,6 +509,10 @@ function App() {
         const networkAddressKey = getNetworkAddressKey(network)
         const networkAddress = result[networkAddressKey] || result.btcAddress || ''
         setBtcAddress(networkAddress as string)
+
+        // Load discovered addresses for change detection
+        const discoveredAddressesKey = `allDiscoveredAddresses_${network}` as keyof StorageData
+        setAllDiscoveredAddresses(result[discoveredAddressesKey] as string[] || [])
 
         // Proactively move sensitive data to session storage if it was in local storage
         await setStorageData({
@@ -568,6 +580,10 @@ function App() {
         const networkAddressKey = getNetworkAddressKey(network)
         const networkAddress = result[networkAddressKey] || result.btcAddress || btcAddress
         setBtcAddress(networkAddress as string)
+
+        // Load discovered addresses for change detection
+        const discoveredAddressesKey = `allDiscoveredAddresses_${network}` as keyof StorageData
+        setAllDiscoveredAddresses(result[discoveredAddressesKey] as string[] || [])
 
         // Proactively move sensitive data to session storage if it was in local storage
         await setStorageData({
@@ -730,7 +746,7 @@ function App() {
   }
 
   // Load activities for current address
-  const loadActivities = async () => {
+  const loadActivities = async (overrideAddresses?: string[]) => {
     if (!walletAddress) {
       setActivities([])
       return
@@ -741,7 +757,7 @@ function App() {
       console.log('Fetching activities for address:', walletAddress, 'on network:', selectedNetwork)
 
       // Collect all known wallet addresses to correctly identify change
-      const walletAddresses = [
+      const walletAddresses = overrideAddresses || [
         mainBalanceAddress,
         utxoHolderAddress,
         dustHolderAddress,
@@ -928,7 +944,7 @@ function App() {
 
       // Get stored index and check canister (placeholder)
       const canisterIndex = await fetchIndexFromCanister(networkId);
-      const effectiveIndex = Math.max(addressIndex, canisterIndex || 0);
+      const effectiveIndex = Math.max(addressIndex, changeIndex, canisterIndex || 0);
 
       // Perform Discovery Scan with Gap Limit 20
       const { totalBalance: vanillaBalance, maxIndex, fundedAddresses: discoveredAddresses, allDiscoveredAddresses: discoveredHistoryAddresses } = await performDiscoveryScan(
@@ -939,6 +955,11 @@ function App() {
 
       setFundedAddresses(discoveredAddresses);
       setAllDiscoveredAddresses(discoveredHistoryAddresses);
+
+      // Save discovered addresses to storage
+      const discoveredAddressesKey = `allDiscoveredAddresses_${networkId}` as any;
+      await setStorageData({ [discoveredAddressesKey]: discoveredHistoryAddresses });
+
       if (maxIndex > addressIndex) {
         console.log(`[DiscoveryScan] Found higher index: ${maxIndex}. Updating state and storage.`);
         setAddressIndex(maxIndex);
@@ -947,6 +968,19 @@ function App() {
           addressIndex: maxIndex,
           [indexKey]: maxIndex
         });
+      }
+
+      // Refresh activities with the latest discovered addresses to ensure correct change detection
+      const latestWalletAddresses = [
+        mainBalanceAddress,
+        utxoHolderAddress,
+        dustHolderAddress,
+        coloredAddress,
+        ...discoveredHistoryAddresses
+      ].filter(Boolean);
+
+      if (view === 'dashboard') {
+        loadActivities(latestWalletAddresses);
       }
 
       const formattedBalance = (vanillaBalance / 100000000).toFixed(8)
@@ -1312,12 +1346,9 @@ function App() {
         }
       }
 
-      // Calculate transaction size
-      // Inputs: numUTXOs * 148 bytes each (SegWit input)
-      // Outputs: 1 output * 34 bytes (no change when sending max)
-      // Overhead: 10 bytes
-      const estimatedSize = numUTXOs * 148 + 1 * 34 + 10
-      const estimatedFeeSats = Math.ceil(estimatedSize * feeRate)
+      // Calculate transaction size using the user's formula
+      // For Max, we have 1 output (recipient) and no change
+      const estimatedFeeSats = estimateFee(numUTXOs, 1, feeRate)
       const estimatedFeeBtc = estimatedFeeSats / 100000000
 
       // Calculate max sendable amount
@@ -1330,12 +1361,11 @@ function App() {
       console.log(`Max calculation: Balance=${balanceBtc}, Fee=${estimatedFeeBtc}, Max=${maxSendable}, UTXOs=${numUTXOs}`)
     } catch (error) {
       console.error('Error calculating max amount:', error)
-      // Fallback to balance - estimated fee with 1 UTXO
+      // Fallback
       const feeRateMap = { slow: 0, avg: 1, fast: 2, custom: 2 }
       const feeIndex = feeRateMap[sendFeeOption as 'slow' | 'avg' | 'fast' | 'custom'] || 2
       const feeRate = Number(sendEstimatedFees[feeIndex])
-      const estimatedSize = 1 * 148 + 1 * 34 + 10 // Assume 1 UTXO
-      const estimatedFeeSats = Math.ceil(estimatedSize * feeRate)
+      const estimatedFeeSats = estimateFee(1, 1, feeRate)
       const estimatedFeeBtc = estimatedFeeSats / 100000000
       const balanceBtc = parseFloat(btcBalance)
       const maxSendable = Math.max(0, balanceBtc - estimatedFeeBtc)
@@ -1351,25 +1381,65 @@ function App() {
         const balance = result.user_bitcoin_balance || '0.00000000'
         setSendUserBalance(balance)
 
-        // Fetch estimated fees from canister
-        if (mnemonic) {
-          setSendLoadingFees(true)
-          try {
-            const canisterNetwork = mapNetworkToCanister(selectedNetwork)
-            const fees = await getEstimatedBitcoinFees(mnemonic, canisterNetwork)
-            setSendEstimatedFees(fees)
-            console.log('Estimated fees:', fees)
-          } catch (error) {
-            console.error('Error fetching estimated fees:', error)
-            // Keep default fees if fetch fails
-          } finally {
-            setSendLoadingFees(false)
+        // Fetch estimated fees from mempool.space
+        setSendLoadingFees(true)
+        try {
+          const fees = await fetchLiveFees(selectedNetwork)
+          // Map to the array format [slow, average, fast]
+          const feeArray = [BigInt(fees.slow), BigInt(fees.average), BigInt(fees.fast)]
+          setSendEstimatedFees(feeArray)
+          console.log('Live fees from mempool:', fees)
+        } catch (error) {
+          console.error('Error fetching live fees:', error)
+          // Fallback to canister if mempool fails
+          if (mnemonic) {
+            try {
+              const canisterNetwork = mapNetworkToCanister(selectedNetwork)
+              const fees = await getEstimatedBitcoinFees(mnemonic, canisterNetwork)
+              setSendEstimatedFees(fees)
+            } catch (e) {
+              console.error('Canister fee fetch also failed:', e)
+            }
           }
+        } finally {
+          setSendLoadingFees(false)
         }
       }
     }
     loadSendBalance()
   }, [view, mnemonic, selectedNetwork])
+
+  // Calculate max sendable amount whenever relevant state changes
+  useEffect(() => {
+    const calculateMax = async () => {
+      if (view === 'send-amount' && mnemonic && walletAddress) {
+        try {
+          const feeRateMap = { slow: 0, avg: 1, fast: 2, custom: 2 }
+          const feeIndex = feeRateMap[sendFeeOption as 'slow' | 'avg' | 'fast' | 'custom'] || 2
+          const feeRate = Number(sendEstimatedFees[feeIndex])
+
+          let numUTXOs = 0
+          if (addressGenerationMethod === 'bitcoin') {
+            const utxos = await fetchUTXOsFromBlockchain(walletAddress, selectedNetwork)
+            numUTXOs = utxos?.length || 0
+          } else {
+            const canisterNetwork = mapNetworkToCanister(selectedNetwork)
+            const utxos = await getUtxos(walletAddress, canisterNetwork)
+            numUTXOs = utxos?.length || 0
+          }
+
+          const estimatedFeeSats = estimateFee(numUTXOs || 1, 1, feeRate)
+          const estimatedFeeBtc = estimatedFeeSats / 100000000
+          const balanceBtc = parseFloat(btcBalance)
+          const max = Math.max(0, balanceBtc - estimatedFeeBtc)
+          setMaxSendableAmount(max.toFixed(8))
+        } catch (e) {
+          console.error('Error calculating max sendable:', e)
+        }
+      }
+    }
+    calculateMax()
+  }, [view, btcBalance, sendEstimatedFees, sendFeeOption, walletAddress, selectedNetwork])
 
   // Navigate to send confirm screen
   const handleSendNext = async () => {
@@ -1404,16 +1474,13 @@ function App() {
         }
       }
 
-      // Calculate actual transaction size based on UTXOs
-      // Inputs: numUTXOs * 148 bytes each (SegWit)
-      // Outputs: 2 outputs * 34 bytes (recipient + change)
-      // Overhead: 10 bytes
-      const estimatedTxSize = numUTXOs * 148 + 2 * 34 + 10
-      const networkFeeSats = Number(feeRate) * estimatedTxSize
+      // Calculate actual transaction size based on UTXOs using the user's formula
+      // For a standard send, we have 2 outputs (recipient + change)
+      const networkFeeSats = estimateFee(numUTXOs, 2, Number(feeRate))
       const networkFeeBtc = (networkFeeSats / 100000000).toFixed(8)
       setSendNetworkFee(networkFeeBtc)
 
-      console.log(`Fee calculation: ${numUTXOs} UTXOs × 148 + 2×34 + 10 = ${estimatedTxSize} bytes × ${feeRate} sat/vB = ${networkFeeSats} sats`)
+      console.log(`Fee calculation: ${numUTXOs} UTXOs, 2 outputs, ${feeRate} sat/vB = ${networkFeeSats} sats`)
 
       setSendError('')
       setView('send-confirm')
@@ -1450,9 +1517,11 @@ function App() {
             txid: u.txid,
             vout: u.vout,
             value: Number(u.value),
-            account: u.account,
-            chain: u.chain,
-            index: u.index
+            address: u.address,
+            derivationPath: u.derivationPath,
+            account: u.account as 'vanilla',
+            chain: u.chain as 0 | 1,
+            index: u.index as number
           }));
 
         if (vanillaUtxos.length === 0) {
@@ -1466,12 +1535,12 @@ function App() {
         const feeIndex = feeRateMap[sendFeeOption as 'slow' | 'avg' | 'fast'] || 2
         const feeRate = Number(sendEstimatedFees[feeIndex])
 
-        // Sign transaction locally
-        const txHex = await signAndBroadcastTransaction(
+        // Sign transaction locally using Vanilla isolation rule
+        const txHex = await signAndSendVanilla(
           mnemonic,
-          vanillaUtxos as any,
+          vanillaUtxos,
           sendReceiverAddress,
-          Number(amountSats),
+          amountSats,
           feeRate,
           selectedNetwork,
           changeIndex
@@ -1660,17 +1729,22 @@ function App() {
     setRgbClassificationError('')
 
     try {
-      let utxos;
+      let utxos: any[];
 
       // Determine fetch method based on address generation mode
       if (addressGenerationMethod === 'bitcoin') {
         // Bitcoin mode: Use Discovery Scan to find all UTXOs across both accounts
         console.log('[Multi-Address] Fetching UTXOs using Discovery Scan...')
 
-        const { utxos: discoveryUtxos, maxIndex, fundedAddresses: discoveredAddresses, allDiscoveredAddresses: discoveredHistoryAddresses } = await performDiscoveryScan(mnemonic, selectedNetwork, addressIndex);
+        const effectiveIndex = Math.max(addressIndex, changeIndex);
+        const { utxos: discoveryUtxos, maxIndex, fundedAddresses: discoveredAddresses, allDiscoveredAddresses: discoveredHistoryAddresses } = await performDiscoveryScan(mnemonic, selectedNetwork, effectiveIndex);
 
         setFundedAddresses(discoveredAddresses);
         setAllDiscoveredAddresses(discoveredHistoryAddresses);
+
+        // Save discovered addresses to storage
+        const discoveredAddressesKey = `allDiscoveredAddresses_${selectedNetwork}` as any;
+        await setStorageData({ [discoveredAddressesKey]: discoveredHistoryAddresses });
 
         // Update address index if a higher one was found during scan
         if (maxIndex > addressIndex) {
@@ -1721,6 +1795,8 @@ function App() {
             .filter(u => !occupiedOutpoints.has(`${u.txid}:${u.vout}`))
             .map(u => ({
               ...u,
+              address: u.address,
+              derivationPath: u.derivationPath,
               isOccupied: false,
               // Isolation Wall: Tag as locked if it belongs to the Colored account
               isLocked: u.account === 'colored'
@@ -1736,6 +1812,8 @@ function App() {
               txid: u.txid,
               vout: u.vout,
               value: BigInt(u.btcAmount),
+              address: originalUtxo?.address || '',
+              derivationPath: originalUtxo?.derivationPath || '',
               isOccupied: true,
               isLocked: true, // RGB-occupied UTXOs are always locked
               rgbAssets: u.assets,
@@ -1756,9 +1834,15 @@ function App() {
 
         // Fallback: treat all as unoccupied if RGB fetcher fails
         if (utxos && utxos.length > 0) {
-          setBitcoinUtxos(utxos.map(u => ({ ...u, isOccupied: false })))
+          setBitcoinUtxos(utxos.map(u => ({
+            ...u,
+            address: u.address,
+            derivationPath: u.derivationPath,
+            isOccupied: false
+          })))
           setRgbUtxos([])
-        } else {
+        }
+        else {
           setBitcoinUtxos([])
           setRgbUtxos([])
         }
@@ -3039,7 +3123,7 @@ function App() {
               Save Changes
             </button>
 
-            <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem', justifyContent: 'center' }}>
+            <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
               <button
                 className="reset-link"
                 onClick={handleSwapCanisterIds}
@@ -3052,12 +3136,89 @@ function App() {
               >
                 Reset to Defaults
               </button>
+              <button
+                className="reset-link"
+                style={{ color: '#ef4444' }}
+                onClick={async () => {
+                  const logs = await getErrorLogs();
+                  setErrorLogs(logs);
+                  setView('error-logs');
+                }}
+              >
+                Error Logs
+              </button>
             </div>
           </div>
         </div>
       )}
 
       {/* User Settings Screen */}
+      {/* Error Logs Screen */}
+      {view === 'error-logs' && (
+        <div className="settings-container">
+          <div className="password-header">
+            <button className="back-arrow" onClick={() => setView('settings')}>←</button>
+            <h2 className="card-title">Error Logs</h2>
+            <button
+              className="reset-link"
+              style={{ color: '#ef4444', fontSize: '0.8rem' }}
+              onClick={async () => {
+                await clearErrorLogs();
+                setErrorLogs([]);
+              }}
+            >
+              Clear
+            </button>
+          </div>
+
+          <div className="settings-content" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+            {errorLogs.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '2rem', color: 'rgba(255, 255, 255, 0.5)' }}>
+                No error logs found.
+              </div>
+            ) : (
+              errorLogs.map((log) => (
+                <div key={log.id} style={{
+                  padding: '1rem',
+                  background: 'rgba(255, 255, 255, 0.03)',
+                  borderRadius: '8px',
+                  border: '1px solid rgba(255, 255, 255, 0.06)',
+                  marginBottom: '1rem'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                    <span style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.8rem' }}>{log.source}</span>
+                    <span style={{ color: 'rgba(255, 255, 255, 0.4)', fontSize: '0.7rem' }}>
+                      {new Date(log.timestamp).toLocaleString()}
+                    </span>
+                  </div>
+                  <div style={{ color: '#fff', fontSize: '0.9rem', fontWeight: '500', marginBottom: '0.5rem' }}>
+                    {log.message}
+                  </div>
+                  {log.network && (
+                    <div style={{ fontSize: '0.75rem', color: '#f7931a', marginBottom: '0.5rem' }}>
+                      Network: {log.network}
+                    </div>
+                  )}
+                  {log.details && (
+                    <div style={{
+                      padding: '0.5rem',
+                      background: 'rgba(0, 0, 0, 0.2)',
+                      borderRadius: '4px',
+                      fontSize: '0.75rem',
+                      color: '#9ca3af',
+                      fontFamily: 'monospace',
+                      wordBreak: 'break-all'
+                    }}>
+                      {typeof log.details === 'string' ? log.details : JSON.stringify(log.details)}
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
       {view === 'user-settings' && (
         <div className="settings-container">
           <div className="password-header">
@@ -3535,7 +3696,18 @@ function App() {
                       type="text"
                       placeholder="0.000000"
                       value={sendAmount}
-                      onChange={(e) => setSendAmount(e.target.value)}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                          const numVal = parseFloat(val);
+                          const maxNum = parseFloat(maxSendableAmount);
+                          if (!isNaN(numVal) && numVal > maxNum) {
+                            setSendAmount(maxSendableAmount);
+                          } else {
+                            setSendAmount(val);
+                          }
+                        }
+                      }}
                       style={{ width: '100%', padding: '1rem', paddingRight: '120px', background: 'transparent', border: 'none', color: '#fff', fontSize: '1.5rem', fontWeight: '700', outline: 'none' }}
                     />
                     <div style={{ position: 'absolute', right: '1rem', top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -3547,6 +3719,9 @@ function App() {
                         Max
                       </button>
                     </div>
+                  </div>
+                  <div style={{ marginTop: '0.5rem', fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.5)', display: 'flex', justifyContent: 'space-between' }}>
+                    <span>maximum amount that can be sent: {maxSendableAmount} BTC</span>
                   </div>
                 </div>
               </div>
@@ -4171,7 +4346,7 @@ function App() {
                     console.log('Signing and broadcasting transaction to UTXO Holder address...');
 
                     const amountBtc = createUtxoMode === 'default' ? 0.0003 : parseFloat(createUtxoAmount || '0.0003');
-                    const amountSats = Math.floor(amountBtc * 100000000);
+                    const amountSats = BigInt(Math.floor(amountBtc * 100000000));
 
                     // Use all discovered Vanilla UTXOs for spending
                     const vanillaUtxos = bitcoinUtxos
@@ -4180,9 +4355,11 @@ function App() {
                         txid: u.txid,
                         vout: u.vout,
                         value: Number(u.value),
-                        account: u.account,
-                        chain: u.chain,
-                        index: u.index
+                        address: u.address,
+                        derivationPath: u.derivationPath,
+                        account: u.account as 'vanilla',
+                        chain: u.chain as 0 | 1,
+                        index: u.index as number
                       }));
 
                     if (vanillaUtxos.length === 0) {
@@ -4202,15 +4379,16 @@ function App() {
                     }
 
                     // Sign transaction locally
-                    const txHex = await signAndBroadcastTransaction(
+                    const txHex = await signAndSendVanilla(
                       mnemonic,
-                      vanillaUtxos as any,
+                      vanillaUtxos,
                       utxoHolderAddress,
                       amountSats,
                       feeRate,
                       selectedNetwork,
                       changeIndex
-                    );
+                    )
+                      ;
 
                     // Increment and save change index
                     const nextChangeIndex = changeIndex + 1;

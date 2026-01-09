@@ -9,6 +9,8 @@ Mainnet oazba-2qaaa-aaaau-ac66a-cai
 TestNet ja2nc-uiaaa-aaaaf-qc4la-cai
 
 
+tb1ph4xtahm9uwjuswt8megvsw7ma5xz8ltfcvk7udzjhprhs995mu3sqdq37m
+tb1pyzsrsnu84dmrtvthpvxfjd88pk60h3q394ulaq2q5dqun3wrj2eqcwlxsw
 
 
 bitcoin-cli -conf=/home/waheed/.bitcoin_testnet/bitcoin.conf scantxoutset start '["addr(tb1q6h4qvlufaqsa588gfxs2q6qfxydm8ewaqtq5e2)"]'

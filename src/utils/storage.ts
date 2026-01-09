@@ -81,6 +81,11 @@ export interface StorageData {
     changeIndex_testnet3?: number
     changeIndex_testnet4?: number
     changeIndex_regtest?: number
+    // All discovered addresses with history (for change detection)
+    allDiscoveredAddresses_mainnet?: string[]
+    allDiscoveredAddresses_testnet3?: string[]
+    allDiscoveredAddresses_testnet4?: string[]
+    allDiscoveredAddresses_regtest?: string[]
     // Bitcoin Address Generation Method
     addressGenerationMethod?: 'icp' | 'bitcoin'
     // Auto-Lock Timer setting (in minutes)
@@ -89,6 +94,8 @@ export interface StorageData {
     LoginTime?: number
     // Cached wallet balance
     walletBalance?: string
+    // Error logs for Admin section
+    error_logs?: any[]
 }
 
 // Check if chrome.storage is actually available and functional

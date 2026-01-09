@@ -15,9 +15,13 @@ export const fetchBtcActivities = async (
     allWalletAddresses: string[] = []
 ): Promise<BitcoinActivity[]> => {
     try {
-        const baseUrl = network === 'testnet3' || network === 'testnet4' || network === 'regtest'
-            ? 'https://mempool.space/testnet/api'
-            : 'https://mempool.space/api';
+        // Use network-specific API endpoints
+        let baseUrl = 'https://mempool.space/api'; // mainnet
+        if (network === 'testnet3' || network === 'regtest') {
+            baseUrl = 'https://mempool.space/testnet/api';
+        } else if (network === 'testnet4') {
+            baseUrl = 'https://mempool.space/testnet4/api';
+        }
 
         const response = await fetch(`${baseUrl}/address/${address}/txs`);
 

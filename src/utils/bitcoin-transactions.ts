@@ -3,21 +3,72 @@ import * as bitcoin from 'bitcoinjs-lib';
 import BIP32Factory from 'bip32';
 import * as ecc from 'tiny-secp256k1';
 import { deriveBitcoinAddress } from './bitcoin-address';
+import { logError } from './error-logger';
 
 // Initialize ECC library for bitcoinjs-lib
 bitcoin.initEccLib(ecc);
 
 /**
- * Interface for UTXO
+ * Estimate Bitcoin transaction fee in satoshis
+ * 
+ * @param inputsCount - Number of inputs
+ * @param outputsCount - Number of outputs
+ * @param feeRate - Fee rate in satoshis per vbyte
+ * @returns Estimated fee in satoshis
  */
+export const estimateFee = (inputsCount: number, outputsCount: number, feeRate: number): number => {
+    const overhead = 10.5;
+    const inputSize = 57.5;
+    const outputSize = 43.0;
+
+    const transactionSize = overhead + (inputsCount * inputSize) + (outputsCount * outputSize);
+    return Math.ceil(transactionSize * feeRate);
+};
+
+/**
+ * Fetch live recommended fees from mempool.space
+ * 
+ * @param network - Bitcoin network
+ * @returns Recommended fees object
+ */
+export const fetchLiveFees = async (network: 'mainnet' | 'testnet3' | 'testnet4' | 'regtest' = 'mainnet') => {
+    let baseUrl = 'https://mempool.space/api/v1/fees/recommended';
+    if (network === 'testnet3') {
+        baseUrl = 'https://mempool.space/testnet/api/v1/fees/recommended';
+    } else if (network === 'testnet4') {
+        baseUrl = 'https://mempool.space/testnet4/api/v1/fees/recommended';
+    }
+
+    try {
+        const response = await fetch(baseUrl);
+        if (!response.ok) {
+            const errorText = await response.text();
+            await logError(`Failed to fetch fees: ${response.status}`, 'Mempool API', errorText, network);
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+
+        return {
+            fast: data.fastestFee,    // Next block (~10 min)
+            average: data.halfHourFee, // 3 blocks (~30 min)
+            slow: data.hourFee,       // 6 blocks (~60 min)
+            min: data.minimumFee      // Purge limit
+        };
+    } catch (error) {
+        console.error("Failed to fetch fees:", error);
+        await logError(`Network error fetching fees`, 'Mempool API', error, network);
+        return { fast: 25, average: 15, slow: 5, min: 1 }; // Fallback defaults
+    }
+};
 export interface UTXO {
     txid: string;
     vout: number;
     value: number; // satoshis
-    addressSource?: 'main' | 'utxo-holder' | 'dust-holder'; // Track which address this UTXO came from (legacy)
-    account?: 'vanilla' | 'colored'; // Track which account this UTXO belongs to
-    chain?: 0 | 1; // 0: external, 1: internal/change
-    index?: number; // Address index
+    address: string; // The address this UTXO belongs to
+    derivationPath: string; // The BIP86 derivation path
+    account: 'vanilla' | 'colored';
+    chain: 0 | 1; // 0: external, 1: internal/change
+    index: number; // Address index
 }
 
 /**
@@ -31,22 +82,34 @@ export const checkAddressHistory = async (
     address: string,
     network: 'mainnet' | 'testnet3' | 'testnet4' | 'regtest' = 'mainnet'
 ): Promise<boolean> => {
-    const baseUrl = network === 'mainnet'
-        ? 'https://blockstream.info/api'
-        : 'https://blockstream.info/testnet/api';
-
-    const response = await fetch(`${baseUrl}/address/${address}`);
-
-    if (!response.ok) {
-        if (response.status === 404) return false;
-        throw new Error(`Failed to check address history: ${response.statusText}`);
+    let baseUrl = 'https://mempool.space/api';
+    if (network === 'testnet3') {
+        baseUrl = 'https://mempool.space/testnet/api';
+    } else if (network === 'testnet4') {
+        baseUrl = 'https://mempool.space/testnet4/api';
+    } else if (network === 'regtest') {
+        baseUrl = 'https://blockstream.info/testnet/api'; // Fallback for regtest
     }
 
-    const data = await response.json();
-    const fundedCount = data.chain_stats?.funded_txo_count || 0;
-    const mempoolCount = data.mempool_stats?.funded_txo_count || 0;
+    try {
+        const response = await fetch(`${baseUrl}/address/${address}`);
 
-    return (fundedCount + mempoolCount) > 0;
+        if (!response.ok) {
+            if (response.status === 404) return false;
+            const errorText = await response.text();
+            await logError(`Failed to check address history: ${response.status}`, 'Blockchain API', errorText, network);
+            throw new Error(`Failed to check address history: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        const fundedCount = data.chain_stats?.funded_txo_count || 0;
+        const mempoolCount = data.mempool_stats?.funded_txo_count || 0;
+
+        return (fundedCount + mempoolCount) > 0;
+    } catch (error) {
+        await logError(`Network error checking history`, 'Blockchain API', error, network);
+        throw error;
+    }
 };
 
 /**
@@ -58,24 +121,36 @@ export const fetchUTXOsFromBlockchain = async (
     address: string,
     network: 'mainnet' | 'testnet3' | 'testnet4' | 'regtest' = 'mainnet'
 ): Promise<UTXO[]> => {
-    const baseUrl = network === 'mainnet'
-        ? 'https://blockstream.info/api'
-        : 'https://blockstream.info/testnet/api';
-
-    const response = await fetch(`${baseUrl}/address/${address}/utxo`);
-
-    if (!response.ok) {
-        throw new Error(`Failed to fetch UTXOs: ${response.statusText}`);
+    let baseUrl = 'https://mempool.space/api';
+    if (network === 'testnet3') {
+        baseUrl = 'https://mempool.space/testnet/api';
+    } else if (network === 'testnet4') {
+        baseUrl = 'https://mempool.space/testnet4/api';
+    } else if (network === 'regtest') {
+        baseUrl = 'https://blockstream.info/testnet/api'; // Fallback for regtest
     }
 
-    const utxos = await response.json();
+    try {
+        const response = await fetch(`${baseUrl}/address/${address}/utxo`);
 
-    // Transform to our UTXO interface
-    return utxos.map((utxo: any) => ({
-        txid: utxo.txid,
-        vout: utxo.vout,
-        value: utxo.value
-    }));
+        if (!response.ok) {
+            const errorText = await response.text();
+            await logError(`Failed to fetch UTXOs: ${response.status}`, 'Blockchain API', errorText, network);
+            throw new Error(`Failed to fetch UTXOs: ${response.statusText}`);
+        }
+
+        const utxos = await response.json();
+
+        // Transform to our UTXO interface
+        return utxos.map((utxo: any) => ({
+            txid: utxo.txid,
+            vout: utxo.vout,
+            value: utxo.value
+        }));
+    } catch (error) {
+        await logError(`Network error fetching UTXOs`, 'Blockchain API', error, network);
+        throw error;
+    }
 };
 
 /**
@@ -115,6 +190,7 @@ export const fetchUTXOsFromAllAddresses = async (
 
 /**
  * Sign and create a Bitcoin transaction locally (for Bitcoin mode)
+ * Following the "Vanilla" isolation rule: Only spends from Account 0.
  * 
  * @param mnemonic - User's mnemonic phrase
  * @param utxos - Available UTXOs to spend
@@ -122,124 +198,99 @@ export const fetchUTXOsFromAllAddresses = async (
  * @param amountToSend - Amount to send in satoshis
  * @param feeRate - Fee rate in satoshis per vbyte
  * @param network - Bitcoin network
+ * @param changeIndex - Index for the change address
  * @returns Transaction hex ready for broadcasting
  */
-export const signAndBroadcastTransaction = async (
+export const signAndSendVanilla = async (
     mnemonic: string,
     utxos: UTXO[],
     toAddress: string,
-    amountToSend: number,
+    amountToSend: number | bigint,
     feeRate: number = 3,
     network: 'mainnet' | 'testnet3' | 'testnet4' | 'regtest' = 'mainnet',
     changeIndex: number = 0
 ): Promise<string> => {
-    // Isolation Wall: Filter for Vanilla UTXOs only
-    const vanillaUtxos = utxos.filter(u => u.account === 'vanilla' || u.account === undefined); // undefined for backward compatibility
-
-    if (vanillaUtxos.length === 0) {
-        throw new Error('No Vanilla UTXOs available for spending');
-    }
-
-    // Determine Bitcoin network
     const btcNetwork = network === 'mainnet'
         ? bitcoin.networks.bitcoin
         : bitcoin.networks.testnet;
 
-    // Derive root from mnemonic
     const seed = await bip39.mnemonicToSeed(mnemonic);
     const bip32 = BIP32Factory(ecc);
     const root = bip32.fromSeed(seed, btcNetwork);
-    const coinType = network === 'mainnet' ? 0 : 1;
 
-    // Create PSBT
+    // 1. Setup PSBT
     const psbt = new bitcoin.Psbt({ network: btcNetwork });
 
-    // Calculate total input value and add inputs
-    let totalInput = 0;
-    for (const utxo of vanillaUtxos) {
+    // 2. Add Inputs (Only from Vanilla Account)
+    let totalIn = 0n;
+    const amountBigInt = BigInt(amountToSend);
+
+    for (const utxo of utxos) {
+        // SAFETY CHECK: The "Colored" Block
+        // If the path contains /1'/ (Colored Account), abort the transaction.
+        if (utxo.derivationPath.includes("/1'/")) {
+            throw new Error(`CRITICAL SAFETY VIOLATION: Attempted to spend from Colored Account UTXO at ${utxo.derivationPath}. Transaction aborted to protect RGB assets.`);
+        }
+
         // Derive the specific private key for this UTXO
-        // Default to m/86'/coinType'/0'/0/0 if not specified
-        const accountIndex = 0; // Vanilla is always Account 0
-        const chain = utxo.chain ?? 0;
-        const index = utxo.index ?? 0;
-        const path = `m/86'/${coinType}'/${accountIndex}'/${chain}/${index}`;
+        const child = root.derivePath(utxo.derivationPath);
 
-        const child = root.derivePath(path);
-        if (!child.privateKey) throw new Error(`Failed to derive private key for path ${path}`);
-
+        // Taproot Tweak: Required to spend BIP86 outputs
         const internalPubkey = child.publicKey.slice(1, 33);
-        const p2tr = bitcoin.payments.p2tr({
-            internalPubkey,
-            network: btcNetwork
-        });
-
-        if (!p2tr.output) throw new Error('Failed to generate payment output');
 
         psbt.addInput({
             hash: utxo.txid,
             index: utxo.vout,
             witnessUtxo: {
-                script: p2tr.output,
                 value: BigInt(utxo.value),
+                script: bitcoin.address.toOutputScript(utxo.address, btcNetwork),
             },
             tapInternalKey: internalPubkey,
         });
-        totalInput += utxo.value;
+
+        totalIn += BigInt(utxo.value);
     }
 
-    // Add output for recipient
+    // 3. Add Recipient Output
     psbt.addOutput({
         address: toAddress,
-        value: BigInt(amountToSend),
+        value: amountBigInt,
     });
 
-    // Estimate fee (simple estimation: inputs * 148 + outputs * 34 + 10)
-    const estimatedSize = vanillaUtxos.length * 148 + 2 * 34 + 10;
-    const estimatedFee = Math.ceil(estimatedSize * feeRate);
+    // 4. Calculate & Add Change Output
+    // Use the precise fee estimation formula
+    const fee = BigInt(estimateFee(utxos.length, 2, feeRate));
+    const changeValue = totalIn - amountBigInt - fee;
 
-    // Calculate change
-    const change = totalInput - amountToSend - estimatedFee;
-
-    // Add change output if it's above dust threshold (546 sats)
-    if (change > 546) {
-        // Vanilla Change: Must be sent to the next available index on the m/86'/n'/0'/1/i path
+    if (changeValue > 546n) { // Dust limit check
+        // Change goes to Vanilla Internal Chain (m/86'/n'/0'/1/index)
         const changeAddress = await deriveBitcoinAddress(mnemonic, network, 86, 0, 1, changeIndex);
-
         psbt.addOutput({
             address: changeAddress,
-            value: BigInt(change),
+            value: changeValue,
         });
-        console.log(`[Transaction] Added Vanilla change output of ${change} sats to ${changeAddress}`);
-    } else if (change < 0) {
-        throw new Error(`Insufficient funds. Need ${amountToSend + estimatedFee} sats, have ${totalInput} sats`);
+        console.log(`[Transaction] Added Vanilla change output of ${changeValue} sats to ${changeAddress}`);
+    } else if (changeValue < 0n) {
+        throw new Error(`Insufficient funds. Need ${amountBigInt + fee} sats, have ${totalIn} sats`);
     }
 
-    // Sign all inputs
-    for (let i = 0; i < vanillaUtxos.length; i++) {
-        const utxo = vanillaUtxos[i];
-        const chain = utxo.chain ?? 0;
-        const index = utxo.index ?? 0;
-        const path = `m/86'/${coinType}'/0'/${chain}/${index}`;
-        const child = root.derivePath(path);
-
-        // Tweak the private key for Taproot (BIP86)
+    // 5. Sign and Extract
+    // Note: You must sign each input with its specific derived tweakedSigner
+    for (let i = 0; i < utxos.length; i++) {
+        const child = root.derivePath(utxos[i].derivationPath);
         const internalPubkey = child.publicKey.slice(1, 33);
-        const tweakedChild = child.tweak(
-            bitcoin.crypto.taggedHash('TapTweak', internalPubkey)
-        );
+        const tweak = bitcoin.crypto.taggedHash('TapTweak', internalPubkey);
+        const tweakedSigner = child.tweak(tweak);
 
-        psbt.signInput(i, tweakedChild);
+        psbt.signInput(i, tweakedSigner);
     }
 
-    // Finalize and extract transaction
     psbt.finalizeAllInputs();
-    const txHex = psbt.extractTransaction().toHex();
-
-    return txHex;
+    return psbt.extractTransaction().toHex();
 };
 
 /**
- * Broadcast a signed transaction to the network
+ * Broadcast a signed transaction to the network using mempool.space
  * 
  * @param txHex - Transaction hex
  * @param network - Bitcoin network
@@ -249,23 +300,35 @@ export const broadcastTransaction = async (
     txHex: string,
     network: 'mainnet' | 'testnet3' | 'testnet4' | 'regtest' = 'mainnet'
 ): Promise<string> => {
-    // Use Blockstream API for broadcasting
-    const baseUrl = network === 'mainnet'
-        ? 'https://blockstream.info/api'
-        : 'https://blockstream.info/testnet/api';
-
-    const response = await fetch(`${baseUrl}/tx`, {
-        method: 'POST',
-        body: txHex,
-    });
-
-    if (!response.ok) {
-        const error = await response.text();
-        throw new Error(`Failed to broadcast transaction: ${error}`);
+    // Use mempool.space API for broadcasting
+    let baseUrl = 'https://mempool.space/api';
+    if (network === 'testnet3') {
+        baseUrl = 'https://mempool.space/testnet/api';
+    } else if (network === 'testnet4') {
+        baseUrl = 'https://mempool.space/testnet4/api';
+    } else if (network === 'regtest') {
+        // Fallback to blockstream for regtest if mempool doesn't support it locally
+        baseUrl = 'https://blockstream.info/testnet/api';
     }
 
-    const txid = await response.text();
-    return txid;
+    try {
+        const response = await fetch(`${baseUrl}/tx`, {
+            method: 'POST',
+            body: txHex,
+        });
+
+        if (!response.ok) {
+            const error = await response.text();
+            await logError(`Broadcast failed: ${response.status}`, 'Blockchain API', error, network);
+            throw new Error(`Failed to broadcast transaction: ${error}`);
+        }
+
+        const txid = await response.text();
+        return txid;
+    } catch (error) {
+        await logError(`Network error during broadcast`, 'Blockchain API', error, network);
+        throw error;
+    }
 };
 
 /**
@@ -293,7 +356,7 @@ export const performDiscoveryScan = async (
     const GAP_LIMIT = 20;
     const allUtxos: UTXO[] = [];
     const fundedAddresses: { address: string, balance: number, account: 'vanilla' | 'colored', index: number, chain: 0 | 1 }[] = [];
-    const allDiscoveredAddresses: string[] = [];
+    const allDiscoveredAddresses = new Set<string>();
     let maxIndexFound = storedIndex;
 
     // We scan 4 chains: 
@@ -325,11 +388,9 @@ export const performDiscoveryScan = async (
 
         const results = await Promise.all(chainPromises);
 
-        // Track all addresses with history for change detection
+        // Track all scanned addresses for change detection
         results.forEach(r => {
-            if (r.hasHistory) {
-                allDiscoveredAddresses.push(r.addr);
-            }
+            allDiscoveredAddresses.add(r.addr);
         });
 
         const anyHistory = results.some(r => r.hasHistory);
@@ -341,8 +402,14 @@ export const performDiscoveryScan = async (
             // If any history found, fetch UTXOs for all 4 addresses at this index
             const utxoPromises = results.map(async r => {
                 const utxos = await fetchUTXOsFromBlockchain(r.addr, network);
+                const coinType = network === 'mainnet' ? 0 : 1;
+                const accountIndex = r.account === 'vanilla' ? 0 : 1;
+                const derivationPath = `m/86'/${coinType}'/${accountIndex}'/${r.chain}/${currentIndex}`;
+
                 return utxos.map(u => ({
                     ...u,
+                    address: r.addr,
+                    derivationPath: derivationPath,
                     account: r.account,
                     chain: r.chain,
                     index: currentIndex
@@ -394,6 +461,6 @@ export const performDiscoveryScan = async (
         utxos: allUtxos,
         maxIndex: maxIndexFound,
         fundedAddresses: fundedAddresses,
-        allDiscoveredAddresses: allDiscoveredAddresses
+        allDiscoveredAddresses: Array.from(allDiscoveredAddresses)
     };
 };

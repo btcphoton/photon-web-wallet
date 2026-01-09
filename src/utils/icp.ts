@@ -260,6 +260,8 @@ export interface Utxo {
     txid: string // Bitcoin hex format (reversed from canister bytes)
     vout: number
     value: bigint
+    address: string
+    derivationPath: string
     account?: 'vanilla' | 'colored'
     chain?: 0 | 1
     index?: number
@@ -304,7 +306,10 @@ export const getUtxos = async (address: string, network: NetworkEnum = 'Mainnet'
             return {
                 txid: txidString,
                 vout,
-                value
+                value,
+                address: address, // Use the address passed to getUtxos
+                derivationPath: "m/86'/0'/0'/0/0", // Default path for canister-managed addresses
+                account: 'vanilla'
             };
         });
 
