@@ -31,7 +31,7 @@ interface NetworkInfo {
 const networks: NetworkInfo[] = [
   { id: 'mainnet', name: 'Bitcoin mainnet', color: '#f7931a', enabled: true },
   { id: 'testnet3', name: 'Bitcoin testnet 3', color: '#22c55e', enabled: true },
-  { id: 'testnet4', name: 'Bitcoin testnet 4', color: '#8b5cf6', enabled: true },
+  { id: 'testnet4', name: 'Bitcoin Testnet 4', color: '#8b5cf6', enabled: true }, // ENABLED
   { id: 'regtest', name: 'Bitcoin regtest', color: '#3b82f6', enabled: true },
 ]
 
