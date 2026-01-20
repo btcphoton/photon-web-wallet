@@ -227,8 +227,22 @@ export const signAndSendVanilla = async (
 
     for (const utxo of utxos) {
         // SAFETY CHECK: The "Colored" Block
-        // If the path contains /1'/ (Colored Account), abort the transaction.
-        if (utxo.derivationPath.includes("/1'/")) {
+        // Check derivation path format: m/purpose'/cointype'/account'/chain/index
+        // We need to ensure account (3rd position) is 0' (Vanilla), not 1' (Colored)
+        // This correctly distinguishes between:
+        //   - Testnet Vanilla: m/86'/1'/0'/0/0 (coin type 1', account 0') ✅ ALLOWED
+        //   - Mainnet Colored: m/86'/0'/1'/0/0 (coin type 0', account 1') ❌ BLOCKED
+        //   - Testnet Colored: m/86'/1'/1'/0/0 (coin type 1', account 1') ❌ BLOCKED
+        const pathParts = utxo.derivationPath.split('/');
+
+        // Validate path structure (must have at least 5 parts: m, purpose', cointype', account', chain/index)
+        if (pathParts.length < 5) {
+            throw new Error(`CRITICAL SAFETY VIOLATION: Malformed derivation path ${utxo.derivationPath}. Cannot verify account safety.`);
+        }
+
+        const accountIndex = pathParts[3]; // m / 86' / cointype' / account' / ...
+
+        if (accountIndex === "1'") {
             throw new Error(`CRITICAL SAFETY VIOLATION: Attempted to spend from Colored Account UTXO at ${utxo.derivationPath}. Transaction aborted to protect RGB assets.`);
         }
 

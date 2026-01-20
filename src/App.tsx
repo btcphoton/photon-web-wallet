@@ -3,7 +3,7 @@ import './App.css'
 import { generateMnemonic, deriveIdentity, validateMnemonic } from './utils/crypto'
 import { getBtcAddress, getWalletAddress, updateBalance, mapNetworkToCanister, getUtxos, getEstimatedBitcoinFees, sendBitcoin } from './utils/icp'
 import { deriveBitcoinAddress } from './utils/bitcoin-address'
-import { signAndSendVanilla, broadcastTransaction, fetchUTXOsFromBlockchain, performDiscoveryScan, fetchLiveFees, estimateFee } from './utils/bitcoin-transactions'
+import { signAndSendVanilla, broadcastTransaction, fetchUTXOsFromBlockchain, performDiscoveryScan, fetchLiveFees, estimateFee, type UTXO } from './utils/bitcoin-transactions'
 import type { UtxoWithRgbStatus } from './utils/rgb'
 import { fetchRgbOccupiedUtxos } from './utils/rgb-fetcher'
 import { getCkBTCBalance } from './utils/icrc1'
@@ -1510,19 +1510,42 @@ function App() {
         // Use local Bitcoin signing (offline signing)
         console.log('Using local Bitcoin transaction signing')
 
-        // Use all discovered Vanilla UTXOs for spending
-        const vanillaUtxos = bitcoinUtxos
-          .filter(u => u.account === 'vanilla' && !u.isLocked)
-          .map(u => ({
-            txid: u.txid,
-            vout: u.vout,
-            value: Number(u.value),
-            address: u.address,
-            derivationPath: u.derivationPath,
-            account: u.account as 'vanilla',
-            chain: u.chain as 0 | 1,
-            index: u.index as number
-          }));
+        // Fetch UTXOs on-demand if not already loaded
+        let vanillaUtxos: UTXO[] = [];
+
+        if (bitcoinUtxos.length === 0) {
+          console.log('[Send] No UTXOs in state, fetching fresh via Discovery Scan...')
+          const effectiveIndex = Math.max(addressIndex, changeIndex);
+          const { utxos: discoveryUtxos } = await performDiscoveryScan(mnemonic, selectedNetwork, effectiveIndex);
+
+          // Filter for vanilla UTXOs only
+          vanillaUtxos = discoveryUtxos
+            .filter(u => u.account === 'vanilla')
+            .map(u => ({
+              txid: u.txid,
+              vout: u.vout,
+              value: u.value,
+              address: u.address,
+              derivationPath: u.derivationPath,
+              account: u.account as 'vanilla',
+              chain: u.chain as 0 | 1,
+              index: u.index as number
+            }));
+        } else {
+          // Use already-loaded UTXOs from state
+          vanillaUtxos = bitcoinUtxos
+            .filter(u => u.account === 'vanilla' && !u.isLocked)
+            .map(u => ({
+              txid: u.txid,
+              vout: u.vout,
+              value: Number(u.value),
+              address: u.address,
+              derivationPath: u.derivationPath,
+              account: u.account as 'vanilla',
+              chain: u.chain as 0 | 1,
+              index: u.index as number
+            }));
+        }
 
         if (vanillaUtxos.length === 0) {
           throw new Error('No spendable Vanilla UTXOs available')
