@@ -287,7 +287,12 @@ function App() {
     setUnlockUtxoError('')
 
     try {
-      if (!mainBalanceAddress) {
+      const derivedMainBalanceAddress =
+        addressGenerationMethod === 'bitcoin'
+          ? await deriveBitcoinAddress(mnemonic, selectedNetwork, 86, 0, 0, addressIndex)
+          : mainBalanceAddress
+
+      if (!derivedMainBalanceAddress) {
         throw new Error('Main balance address is not available.')
       }
 
@@ -308,7 +313,7 @@ function App() {
           chain: (selectedUnlockUtxo.chain || 0) as 0 | 1,
           index: selectedUnlockUtxo.index || 0,
         },
-        mainBalanceAddress,
+        derivedMainBalanceAddress,
         feeRate,
         selectedNetwork
       )
@@ -4915,6 +4920,15 @@ function App() {
                   try {
                     console.log('Signing and broadcasting transaction to UTXO Holder address...');
 
+                    const derivedUtxoHolderAddress =
+                      addressGenerationMethod === 'bitcoin'
+                        ? await deriveBitcoinAddress(mnemonic, selectedNetwork, 86, 0, 100, 0)
+                        : utxoHolderAddress
+
+                    if (!derivedUtxoHolderAddress) {
+                      throw new Error('UTXO holder address is not available.');
+                    }
+
                     const amountBtc = createUtxoMode === 'default' ? 0.0003 : parseFloat(createUtxoAmount || '0.0003');
                     const amountSats = BigInt(Math.floor(amountBtc * 100000000));
 
@@ -4955,7 +4969,7 @@ function App() {
                     const txHex = await signAndSendVanilla(
                       mnemonic,
                       vanillaUtxos,
-                      utxoHolderAddress,
+                      derivedUtxoHolderAddress,
                       amountSats,
                       feeRate,
                       selectedNetwork,
