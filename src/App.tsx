@@ -1268,9 +1268,10 @@ function App() {
       if (view === 'receive-rgb') {
         try {
           if (selectedNetwork === 'regtest') {
+            console.log('[RGB Receive] Checking regtest RGB backend health')
             const localNodeOnline = await checkLocalRgbNode()
             setRgbWalletOnline(localNodeOnline)
-            console.log('Local RGB node status:', localNodeOnline ? 'online' : 'offline')
+            console.log('[RGB Receive] Regtest RGB backend health result:', localNodeOnline ? 'online' : 'offline')
             return
           }
 
@@ -1288,7 +1289,7 @@ function App() {
             console.log('RGB Proxy not configured')
           }
         } catch (error) {
-          console.error('Error checking RGB connection:', error)
+          console.error('[RGB Receive] Error checking RGB connection:', error)
           setRgbWalletOnline(false)
         }
       }
@@ -2878,11 +2879,30 @@ function App() {
                 className="btn-primary create-invoice-btn"
                 disabled={rgbGenerating || parseFloat(btcBalance) === 0}
                 onClick={async () => {
+                  console.log('[RGB Receive] Create Invoice clicked', {
+                    network: selectedNetwork,
+                    assetKey: rgbAsset || null,
+                    openAmount,
+                    rgbAmount,
+                    btcBalance,
+                  })
                   setRgbGenerating(true)
                   setRgbError('')
 
                   try {
                     if (selectedNetwork === 'regtest') {
+                      console.log('[RGB Receive] Using Photon backend regtest invoice flow')
+                      const rgbBackendOnline = await checkLocalRgbNode()
+                      setRgbWalletOnline(rgbBackendOnline)
+                      console.log('[RGB Receive] Backend health before invoice request:', rgbBackendOnline)
+
+                      if (!rgbBackendOnline) {
+                        console.warn('[RGB Receive] Aborting invoice creation because backend is offline')
+                        setRgbError('Photon RGB backend is unavailable. Please try again in a moment.')
+                        setRgbGenerating(false)
+                        return
+                      }
+
                       const contractSettingsKey = getNetworkContractsKey(selectedNetwork)
                       const contractSettings = await getStorageData([contractSettingsKey])
                       const storedContractMapRaw = contractSettings[contractSettingsKey]
@@ -2892,18 +2912,27 @@ function App() {
                           : {}
 
                       const assetId = rgbAsset ? storedContractMap[rgbAsset] : undefined
+                      console.log('[RGB Receive] Resolved regtest asset mapping', {
+                        assetKey: rgbAsset || null,
+                        assetId: assetId || null,
+                      })
 
                       if (rgbAsset && !assetId) {
+                        console.warn('[RGB Receive] Selected asset has no registered regtest contract ID')
                         setRgbError('Selected asset is not registered with a regtest RGB contract ID.')
-                        setRgbWalletOnline(false)
                         setRgbGenerating(false)
                         return
                       }
 
                       const invoiceAmount = openAmount ? undefined : (parseFloat(rgbAmount) || 0)
+                      console.log('[RGB Receive] Prepared invoice request', {
+                        assetId: assetId || null,
+                        invoiceAmount: invoiceAmount ?? null,
+                        openAmount,
+                      })
                       if (!openAmount && (!invoiceAmount || invoiceAmount <= 0)) {
+                        console.warn('[RGB Receive] Invalid amount supplied for fixed-amount invoice')
                         setRgbError('Enter a valid RGB amount or enable Open Amount.')
-                        setRgbWalletOnline(false)
                         setRgbGenerating(false)
                         return
                       }
@@ -2912,6 +2941,11 @@ function App() {
                         assetId,
                         amount: invoiceAmount,
                         openAmount,
+                      })
+                      console.log('[RGB Receive] Invoice created successfully', {
+                        recipientId: invoiceResult.recipient_id,
+                        batchTransferIdx: invoiceResult.batch_transfer_idx,
+                        expirationTimestamp: invoiceResult.expiration_timestamp ?? null,
                       })
 
                       setRgbWalletOnline(true)
@@ -3002,10 +3036,14 @@ function App() {
                     setRgbInvoice(invoiceResult.invoice)
                     setRgbInvoiceStep('invoice')
                   } catch (error) {
-                    console.error('Error generating RGB invoice:', error)
+                    console.error('[RGB Receive] Error generating RGB invoice:', error)
+                    const backendStillOnline =
+                      selectedNetwork === 'regtest' ? await checkLocalRgbNode() : false
+                    console.log('[RGB Receive] Backend health after invoice failure:', backendStillOnline)
+                    setRgbWalletOnline(backendStillOnline)
                     setRgbError(`Failed to generate invoice: ${error instanceof Error ? error.message : 'Unknown error'}`)
-                    setRgbWalletOnline(false)
                   } finally {
+                    console.log('[RGB Receive] Create Invoice flow complete')
                     setRgbGenerating(false)
                   }
                 }}
