@@ -14,7 +14,7 @@ import type { Asset } from './utils/storage'
 import { BACKEND_PROFILES, DEFAULT_BACKEND_PROFILE_ID, getBackendProfileById, getDefaultElectrumServer, getDefaultRgbProxy, type BackendProfileId } from './utils/backend-config'
 import { QRCodeSVG } from 'qrcode.react'
 import { generateRgbInvoice, notifyRgbProxy, isValidRgbProxyUrl } from './utils/rgb-invoice'
-import { checkLocalRgbNode, createRegtestRgbInvoice, fetchRegtestRgbBalance } from './utils/rgb-wallet'
+import { checkLocalRgbNode, createRegtestRgbInvoice, fetchRegtestRgbBalance, fetchRegtestRgbRegistry } from './utils/rgb-wallet'
 import { LightningAnimation } from './components/LightningAnimation'
 import { fetchBtcActivities, type BitcoinActivity } from './utils/bitcoin-activities'
 
@@ -49,6 +49,10 @@ interface ImportableAsset {
   contracts?: Partial<Record<Network, string>>
 }
 
+const buildAssetIdFromTicker = (ticker: string) => {
+  return ticker.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+}
+
 // Generate 5 random unique positions from 1-12
 const getRandomPositions = (): number[] => {
   const positions: number[] = []
@@ -62,6 +66,7 @@ const getRandomPositions = (): number[] => {
 }
 
 const REGTEST_PHO_CONTRACT_ID = 'rgb:2Mhfmuc0-BqWCUwP-kkJKF_V-F1~L4j6-A1_W6Yy-hK6Z~rA'
+const REGTEST_LIGHT_CONTRACT_ID = 'rgb:WDJM8Vmw-Gnipws~-5i7T1Hh-~v028f1-FUW_OqC-1ClqyPk'
 
 const importableAssets: ImportableAsset[] = [
   {
@@ -80,6 +85,23 @@ const importableAssets: ImportableAsset[] = [
     ],
     contracts: {
       regtest: REGTEST_PHO_CONTRACT_ID,
+    },
+  },
+  {
+    asset: {
+      id: 'light',
+      name: 'LIGHT Token',
+      amount: '0',
+      unit: 'LIGHT',
+      color: '#f8fafc',
+    },
+    aliases: [
+      'light',
+      'light token',
+      REGTEST_LIGHT_CONTRACT_ID.toLowerCase(),
+    ],
+    contracts: {
+      regtest: REGTEST_LIGHT_CONTRACT_ID,
     },
   },
 ]
@@ -314,12 +336,47 @@ function App() {
     setAddAssetSuccess('')
 
     try {
-      const matchedAsset = importableAssets.find((entry) =>
+      let matchedAsset = importableAssets.find((entry) =>
         entry.aliases.includes(normalizedInput)
       )
 
+      if (selectedNetwork === 'regtest') {
+        try {
+          const registryAssets = await fetchRegtestRgbRegistry()
+          const registryMatch = registryAssets.find((entry) => {
+            return (
+              entry.contract_id.toLowerCase() === normalizedInput ||
+              entry.ticker.toLowerCase() === normalizedInput ||
+              entry.token_name.toLowerCase() === normalizedInput
+            )
+          })
+
+          if (registryMatch) {
+            matchedAsset = {
+              asset: {
+                id: buildAssetIdFromTicker(registryMatch.ticker),
+                name: registryMatch.token_name,
+                amount: '0',
+                unit: registryMatch.ticker,
+                color: registryMatch.ticker.toUpperCase() === 'PHO' ? '#38bdf8' : '#f8fafc',
+              },
+              aliases: [
+                registryMatch.ticker.toLowerCase(),
+                registryMatch.token_name.toLowerCase(),
+                registryMatch.contract_id.toLowerCase(),
+              ],
+              contracts: {
+                regtest: registryMatch.contract_id,
+              },
+            }
+          }
+        } catch (registryError) {
+          console.error('[Add Assets] Failed to query regtest registry, falling back to local list:', registryError)
+        }
+      }
+
       if (!matchedAsset) {
-        setAddAssetError('Asset not found in the local registry for this wallet build.')
+        setAddAssetError('Asset not found in the Photon asset registry for this network.')
         return
       }
 
@@ -3332,7 +3389,7 @@ function App() {
             <div className="asset-registry-row">
               <span className="registry-text">Display data for all public RGB assets</span>
               <a
-                href="https://photonbolt.xyz/asset/testnet"
+                href="https://faucet.photonbolt.xyz/asset-registry.html"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="registry-link"

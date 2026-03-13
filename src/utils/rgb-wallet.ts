@@ -23,6 +23,18 @@ export interface RgbWalletBalanceResponse {
     }
 }
 
+export interface RgbRegistryAsset {
+    token_name: string
+    ticker: string
+    total_supply: string
+    precision: number
+    issuer_ref?: string | null
+    creation_date?: string | null
+    block_height?: string | null
+    contract_id: string
+    schema_id?: string | null
+}
+
 async function getRegtestRgbApiBase(): Promise<string> {
     const { PHOTON_REGTEST_API_BASE } = await import('./backend-config')
     return PHOTON_REGTEST_API_BASE
@@ -104,4 +116,21 @@ export async function fetchRegtestRgbBalance(params: {
     }
 
     return data as RgbWalletBalanceResponse
+}
+
+export async function fetchRegtestRgbRegistry(): Promise<RgbRegistryAsset[]> {
+    const apiBase = await getRegtestRgbApiBase()
+    const response = await fetch(`${apiBase}/rgb/registry`)
+
+    if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(errorText || `RGB registry lookup failed with status ${response.status}`)
+    }
+
+    const data = await response.json()
+    if (!data.ok) {
+        throw new Error(data.error || 'RGB registry lookup failed')
+    }
+
+    return Array.isArray(data.assets) ? data.assets as RgbRegistryAsset[] : []
 }
