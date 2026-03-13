@@ -4670,14 +4670,14 @@ function App() {
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.5)', marginBottom: '0.35rem' }}>From</div>
                     <div style={{ fontSize: '0.9rem', color: '#fff', fontFamily: 'monospace' }}>
-                      {mainBalanceAddress ? `${mainBalanceAddress.slice(0, 7)}...${mainBalanceAddress.slice(-4)}` : walletAddress ? `${walletAddress.slice(0, 7)}...${walletAddress.slice(-4)}` : 'tb1p...'}
+                      {mainBalanceAddress ? `${mainBalanceAddress.slice(0, 7)}...${mainBalanceAddress.slice(-4)}` : walletAddress ? `${walletAddress.slice(0, 7)}...${walletAddress.slice(-4)}` : selectedNetwork === 'regtest' ? 'bcrt1p...' : 'tb1p...'}
                     </div>
                   </div>
                   <div style={{ fontSize: '1.5rem', color: 'rgba(255, 255, 255, 0.3)', margin: '0 1rem' }}>→</div>
                   <div style={{ flex: 1, textAlign: 'right' }}>
                     <div style={{ fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.5)', marginBottom: '0.35rem' }}>Send to</div>
                     <div style={{ fontSize: '0.9rem', color: '#fff', fontFamily: 'monospace' }}>
-                      {utxoHolderAddress ? `${utxoHolderAddress.slice(0, 7)}...${utxoHolderAddress.slice(-4)}` : 'tb1p...pxak'}
+                      {utxoHolderAddress ? `${utxoHolderAddress.slice(0, 7)}...${utxoHolderAddress.slice(-4)}` : selectedNetwork === 'regtest' ? 'bcrt1p...pxak' : 'tb1p...pxak'}
                     </div>
                   </div>
                 </div>
