@@ -4,6 +4,7 @@ import BIP32Factory from 'bip32';
 import * as ecc from 'tiny-secp256k1';
 import { deriveBitcoinAddress } from './bitcoin-address';
 import { logError } from './error-logger';
+import { resolveBitcoinApiBase, type WalletNetwork } from './backend-config';
 
 // Initialize ECC library for bitcoinjs-lib
 bitcoin.initEccLib(ecc);
@@ -31,13 +32,8 @@ export const estimateFee = (inputsCount: number, outputsCount: number, feeRate: 
  * @param network - Bitcoin network
  * @returns Recommended fees object
  */
-export const fetchLiveFees = async (network: 'mainnet' | 'testnet3' | 'testnet4' | 'regtest' = 'mainnet') => {
-    let baseUrl = 'https://mempool.space/api/v1/fees/recommended';
-    if (network === 'testnet3') {
-        baseUrl = 'https://mempool.space/testnet/api/v1/fees/recommended';
-    } else if (network === 'testnet4') {
-        baseUrl = 'https://mempool.space/testnet4/api/v1/fees/recommended';
-    }
+export const fetchLiveFees = async (network: WalletNetwork = 'mainnet') => {
+    const baseUrl = await resolveBitcoinApiBase(network, 'fees');
 
     try {
         const response = await fetch(baseUrl);
@@ -80,16 +76,9 @@ export interface UTXO {
  */
 export const checkAddressHistory = async (
     address: string,
-    network: 'mainnet' | 'testnet3' | 'testnet4' | 'regtest' = 'mainnet'
+    network: WalletNetwork = 'mainnet'
 ): Promise<boolean> => {
-    let baseUrl = 'https://mempool.space/api';
-    if (network === 'testnet3') {
-        baseUrl = 'https://mempool.space/testnet/api';
-    } else if (network === 'testnet4') {
-        baseUrl = 'https://mempool.space/testnet4/api';
-    } else if (network === 'regtest') {
-        baseUrl = 'https://blockstream.info/testnet/api'; // Fallback for regtest
-    }
+    const baseUrl = await resolveBitcoinApiBase(network, 'address');
 
     try {
         const response = await fetch(`${baseUrl}/address/${address}`);
@@ -119,16 +108,9 @@ export const checkAddressHistory = async (
         */
 export const fetchUTXOsFromBlockchain = async (
     address: string,
-    network: 'mainnet' | 'testnet3' | 'testnet4' | 'regtest' = 'mainnet'
+    network: WalletNetwork = 'mainnet'
 ): Promise<UTXO[]> => {
-    let baseUrl = 'https://mempool.space/api';
-    if (network === 'testnet3') {
-        baseUrl = 'https://mempool.space/testnet/api';
-    } else if (network === 'testnet4') {
-        baseUrl = 'https://mempool.space/testnet4/api';
-    } else if (network === 'regtest') {
-        baseUrl = 'https://blockstream.info/testnet/api'; // Fallback for regtest
-    }
+    const baseUrl = await resolveBitcoinApiBase(network, 'utxo');
 
     try {
         const response = await fetch(`${baseUrl}/address/${address}/utxo`);
@@ -166,7 +148,7 @@ export const fetchUTXOsFromAllAddresses = async (
     mainAddress: string,
     utxoHolderAddress: string,
     dustHolderAddress: string,
-    network: 'mainnet' | 'testnet3' | 'testnet4' | 'regtest' = 'mainnet'
+    network: WalletNetwork = 'mainnet'
 ): Promise<UTXO[]> => {
     console.log('[Multi-Address] Fetching UTXOs from all three addresses...');
 
@@ -207,7 +189,7 @@ export const signAndSendVanilla = async (
     toAddress: string,
     amountToSend: number | bigint,
     feeRate: number = 3,
-    network: 'mainnet' | 'testnet3' | 'testnet4' | 'regtest' = 'mainnet',
+    network: WalletNetwork = 'mainnet',
     changeIndex: number = 0
 ): Promise<string> => {
     const btcNetwork = network === 'mainnet'
@@ -312,18 +294,9 @@ export const signAndSendVanilla = async (
  */
 export const broadcastTransaction = async (
     txHex: string,
-    network: 'mainnet' | 'testnet3' | 'testnet4' | 'regtest' = 'mainnet'
+    network: WalletNetwork = 'mainnet'
 ): Promise<string> => {
-    // Use mempool.space API for broadcasting
-    let baseUrl = 'https://mempool.space/api';
-    if (network === 'testnet3') {
-        baseUrl = 'https://mempool.space/testnet/api';
-    } else if (network === 'testnet4') {
-        baseUrl = 'https://mempool.space/testnet4/api';
-    } else if (network === 'regtest') {
-        // Fallback to blockstream for regtest if mempool doesn't support it locally
-        baseUrl = 'https://blockstream.info/testnet/api';
-    }
+    const baseUrl = await resolveBitcoinApiBase(network, 'broadcast');
 
     try {
         const response = await fetch(`${baseUrl}/tx`, {
@@ -356,7 +329,7 @@ export const broadcastTransaction = async (
  */
 export const performDiscoveryScan = async (
     mnemonic: string,
-    network: 'mainnet' | 'testnet3' | 'testnet4' | 'regtest' = 'mainnet',
+    network: WalletNetwork = 'mainnet',
     storedIndex: number = 0
 ): Promise<{
     totalBalance: number,

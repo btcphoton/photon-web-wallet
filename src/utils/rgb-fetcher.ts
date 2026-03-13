@@ -1,5 +1,8 @@
 // src/utils/rgb-fetcher.ts
 
+import { fetchUTXOsFromBlockchain } from './bitcoin-transactions';
+import type { WalletNetwork } from './backend-config';
+
 interface RgbUtxo {
     txid: string;
     vout: number;
@@ -18,12 +21,12 @@ interface RgbUtxo {
  */
 export const fetchRgbOccupiedUtxos = async (
     address: string,
-    proxyUrl: string = 'https://proxy.iriswallet.com/0.2/json-rpc'
+    proxyUrl: string = 'https://proxy.iriswallet.com/0.2/json-rpc',
+    network: WalletNetwork = 'mainnet'
 ): Promise<RgbUtxo[]> => {
     try {
-        // 1. Get all standard BTC UTXOs first (usually from your existing service)
-        const btcUtxos = await fetch(`https://blockstream.info/testnet/api/address/${address}/utxo`)
-            .then(res => res.json());
+        // 1. Get all BTC UTXOs via the configured Bitcoin backend for the active network
+        const btcUtxos = await fetchUTXOsFromBlockchain(address, network);
 
         // 2. Query the RGB Proxy for asset assignments linked to this address
         // Note: In a real RGB-lib integration, this uses the 'list_unspent' method

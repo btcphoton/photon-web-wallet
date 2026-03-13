@@ -1,5 +1,7 @@
 // src/utils/bitcoin-activities.ts
 
+import { resolveBitcoinApiBase, type WalletNetwork } from './backend-config';
+
 export interface BitcoinActivity {
     type: 'Receive' | 'Send';
     txid: string;
@@ -11,17 +13,11 @@ export interface BitcoinActivity {
 
 export const fetchBtcActivities = async (
     address: string,
-    network: string,
+    network: WalletNetwork,
     allWalletAddresses: string[] = []
 ): Promise<BitcoinActivity[]> => {
     try {
-        // Use network-specific API endpoints
-        let baseUrl = 'https://mempool.space/api'; // mainnet
-        if (network === 'testnet3' || network === 'regtest') {
-            baseUrl = 'https://mempool.space/testnet/api';
-        } else if (network === 'testnet4') {
-            baseUrl = 'https://mempool.space/testnet4/api';
-        }
+        const baseUrl = await resolveBitcoinApiBase(network, 'activities');
 
         const response = await fetch(`${baseUrl}/address/${address}/txs`);
 

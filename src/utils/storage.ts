@@ -15,6 +15,7 @@ export interface StorageData {
     principalId?: string
     btcAddress?: string
     selectedNetwork?: string
+    backendProfileId?: string
     // Canister IDs
     mainnetCanisterId?: string
     testnetCanisterId?: string

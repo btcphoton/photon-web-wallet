@@ -11,6 +11,7 @@ import { convertLBTCtoBTC } from './utils/ckbtc-withdrawal'
 import { getErrorLogs, clearErrorLogs, type ErrorLog } from './utils/error-logger'
 import { getStorageData, setStorageData, removeStorageData, getNetworkAddressKey, getNetworkAssetsKey, testnet3DefaultAssets, mainnetDefaultAssets, type StorageData } from './utils/storage'
 import type { Asset } from './utils/storage'
+import { BACKEND_PROFILES, DEFAULT_BACKEND_PROFILE_ID, getBackendProfileById, getDefaultElectrumServer, getDefaultRgbProxy, type BackendProfileId } from './utils/backend-config'
 import { QRCodeSVG } from 'qrcode.react'
 import { generateRgbInvoice, notifyRgbProxy, isValidRgbProxyUrl } from './utils/rgb-invoice'
 import { LightningAnimation } from './components/LightningAnimation'
@@ -148,6 +149,7 @@ function App() {
   const [allDiscoveredAddresses, setAllDiscoveredAddresses] = useState<string[]>([])
 
   // Network settings states with defaults
+  const [backendProfileId, setBackendProfileId] = useState<BackendProfileId>(DEFAULT_BACKEND_PROFILE_ID)
   const [electrumServer, setElectrumServer] = useState<string>('ssl://electrum.iriswallet.com:50013')
   const [rgbProxy, setRgbProxy] = useState<string>('http://89.117.52.115:3000/json-rpc')
   const [networkSettingsSaved, setNetworkSettingsSaved] = useState<boolean>(false)
@@ -1697,14 +1699,22 @@ function App() {
   useEffect(() => {
     const loadNetworkSettings = async () => {
       if (view === 'network-settings') {
-        const result = await getStorageData(['electrumServer', 'rgbProxy'])
+        const result = await getStorageData(['backendProfileId', 'electrumServer', 'rgbProxy'])
+        const activeProfileId = (result.backendProfileId as BackendProfileId) || DEFAULT_BACKEND_PROFILE_ID
+        setBackendProfileId(activeProfileId)
         // Use saved values, or keep the defaults if not saved
-        setElectrumServer(result.electrumServer || 'ssl://electrum.iriswallet.com:50013')
-        setRgbProxy(result.rgbProxy || 'http://89.117.52.115:3000/json-rpc')
+        setElectrumServer(result.electrumServer || getDefaultElectrumServer(selectedNetwork, activeProfileId))
+        setRgbProxy(result.rgbProxy || getDefaultRgbProxy(selectedNetwork, activeProfileId))
       }
     }
     loadNetworkSettings()
-  }, [view])
+  }, [view, selectedNetwork])
+
+  const applyBackendProfileDefaults = (profileId: BackendProfileId) => {
+    setBackendProfileId(profileId)
+    setElectrumServer(getDefaultElectrumServer(selectedNetwork, profileId))
+    setRgbProxy(getDefaultRgbProxy(selectedNetwork, profileId))
+  }
 
   // Save network settings
   const handleSaveNetworkSettings = async () => {
@@ -1716,6 +1726,7 @@ function App() {
     try {
       // Save to storage
       await setStorageData({
+        backendProfileId,
         electrumServer,
         rgbProxy
       })
@@ -1740,8 +1751,7 @@ function App() {
 
   // Reset network settings
   const handleResetNetworkSettings = () => {
-    setElectrumServer('')
-    setRgbProxy('')
+    applyBackendProfileDefaults(DEFAULT_BACKEND_PROFILE_ID)
   }
 
   // Fetch and display UTXOs
@@ -1803,7 +1813,7 @@ function App() {
         const rgbProxyUrl = (storageData.rgbProxy as string) || 'http://89.117.52.115:3000/json-rpc'
 
         // Fetch RGB UTXOs directly from the proxy
-        const rgbOccupiedUtxos = await fetchRgbOccupiedUtxos(walletAddress, rgbProxyUrl)
+        const rgbOccupiedUtxos = await fetchRgbOccupiedUtxos(walletAddress, rgbProxyUrl, selectedNetwork)
 
         console.log(`[RGB] Found ${rgbOccupiedUtxos.length} RGB-occupied UTXOs`)
 
@@ -3402,7 +3412,25 @@ function App() {
           <div className="settings-content">
             <div className="settings-section">
               <h3 className="settings-section-title">Network Configuration</h3>
-              <p className="settings-info">Configure the Electrum Server and RGB Proxy for network connectivity.</p>
+              <p className="settings-info">Configure the backend profile, Electrum Server, and RGB Proxy for network connectivity.</p>
+            </div>
+
+            <div className="input-group">
+              <label className="input-label">Backend Profile</label>
+              <select
+                className="settings-input"
+                value={backendProfileId}
+                onChange={(e) => applyBackendProfileDefaults(e.target.value as BackendProfileId)}
+              >
+                {BACKEND_PROFILES.map((profile) => (
+                  <option key={profile.id} value={profile.id}>
+                    {profile.name}
+                  </option>
+                ))}
+              </select>
+              <span className="settings-hint">
+                {getBackendProfileById(backendProfileId).description}
+              </span>
             </div>
 
             <div className="input-group">
