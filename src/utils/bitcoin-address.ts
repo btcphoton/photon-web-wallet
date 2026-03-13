@@ -6,6 +6,30 @@ import * as ecc from 'tiny-secp256k1';
 // Initialize ECC library for bitcoinjs-lib
 bitcoin.initEccLib(ecc);
 
+const REGTEST_NETWORK: bitcoin.Network = {
+    ...bitcoin.networks.regtest,
+    bech32: 'bcrt',
+};
+
+export const getBitcoinJsNetwork = (
+    network: 'mainnet' | 'testnet3' | 'testnet4' | 'regtest' = 'mainnet'
+): bitcoin.Network => {
+    if (network === 'mainnet') {
+        return bitcoin.networks.bitcoin;
+    }
+
+    if (network === 'regtest') {
+        return REGTEST_NETWORK;
+    }
+
+    return bitcoin.networks.testnet;
+};
+
+export const isLikelyRegtestAddress = (address: string): boolean => {
+    const normalized = address.trim().toLowerCase();
+    return normalized.startsWith('bcrt1') || normalized.startsWith('m') || normalized.startsWith('n') || normalized.startsWith('2');
+};
+
 /**
  * Derive a Bitcoin address from a mnemonic using BIP84 (Native SegWit) or BIP86 (Taproot)
  * 
@@ -41,9 +65,9 @@ export const deriveBitcoinAddress = async (
         btcNetwork = bitcoin.networks.bitcoin;
         coinType = 0; // BIP44 coin type for Bitcoin mainnet
     } else {
-        // testnet3, testnet4, and regtest all use testnet network
-        btcNetwork = bitcoin.networks.testnet;
-        coinType = 1; // BIP44 coin type for Bitcoin testnet
+        // testnet3/testnet4 use testnet, while regtest keeps coin type 1 but needs bcrt bech32 prefix.
+        btcNetwork = getBitcoinJsNetwork(network);
+        coinType = 1; // BIP44 coin type for Bitcoin testnet/regtest
     }
 
     // Derivation path: m/purpose'/coin_type'/account'/chain/address_index

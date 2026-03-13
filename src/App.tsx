@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import './App.css'
 import { generateMnemonic, deriveIdentity, validateMnemonic } from './utils/crypto'
 import { getBtcAddress, getWalletAddress, updateBalance, mapNetworkToCanister, getUtxos, getEstimatedBitcoinFees, sendBitcoin } from './utils/icp'
-import { deriveBitcoinAddress } from './utils/bitcoin-address'
+import { deriveBitcoinAddress, isLikelyRegtestAddress } from './utils/bitcoin-address'
 import { signAndSendVanilla, broadcastTransaction, fetchUTXOsFromBlockchain, performDiscoveryScan, fetchLiveFees, estimateFee, type UTXO } from './utils/bitcoin-transactions'
 import type { UtxoWithRgbStatus } from './utils/rgb'
 import { fetchRgbOccupiedUtxos } from './utils/rgb-fetcher'
@@ -211,6 +211,18 @@ function App() {
   const truncateAddress = (addr: string) => {
     if (!addr || addr.length < 12) return addr
     return `${addr.slice(0, 8)}...${addr.slice(-4)}`
+  }
+
+  const shouldRegenerateRegtestAddress = (network: Network, address: string) => {
+    return network === 'regtest' && !!address && !isLikelyRegtestAddress(address)
+  }
+
+  const openRegtestFaucet = () => {
+    const address = walletAddress || btcAddress
+    const targetUrl = address
+      ? `https://faucet.photonbolt.xyz/?address=${encodeURIComponent(address)}`
+      : 'https://faucet.photonbolt.xyz/'
+    window.open(targetUrl, '_blank')
   }
 
   // Copy address function removed - now using inline copy handlers
@@ -445,7 +457,11 @@ function App() {
               const network = (result.selectedNetwork as Network) || 'mainnet'
               setSelectedNetwork(network)
               const networkAddressKey = getNetworkAddressKey(network)
-              const networkAddress = result[networkAddressKey] || result.btcAddress || ''
+              let networkAddress = (result[networkAddressKey] || result.btcAddress || '') as string
+              if (shouldRegenerateRegtestAddress(network, networkAddress) && result.mnemonic) {
+                const regeneratedAddress = await fetchAndSaveBtcAddress(result.mnemonic, network)
+                networkAddress = regeneratedAddress || networkAddress
+              }
               setBtcAddress(networkAddress as string)
 
               // Load discovered addresses for change detection
@@ -509,7 +525,11 @@ function App() {
         const network = (result.selectedNetwork as Network) || 'mainnet'
         setSelectedNetwork(network)
         const networkAddressKey = getNetworkAddressKey(network)
-        const networkAddress = result[networkAddressKey] || result.btcAddress || ''
+        let networkAddress = (result[networkAddressKey] || result.btcAddress || '') as string
+        if (shouldRegenerateRegtestAddress(network, networkAddress) && result.mnemonic) {
+          const regeneratedAddress = await fetchAndSaveBtcAddress(result.mnemonic, network)
+          networkAddress = regeneratedAddress || networkAddress
+        }
         setBtcAddress(networkAddress as string)
 
         // Load discovered addresses for change detection
@@ -580,7 +600,11 @@ function App() {
         const network = (result.selectedNetwork as Network) || selectedNetwork
         setSelectedNetwork(network)
         const networkAddressKey = getNetworkAddressKey(network)
-        const networkAddress = result[networkAddressKey] || result.btcAddress || btcAddress
+        let networkAddress = (result[networkAddressKey] || result.btcAddress || btcAddress) as string
+        if (shouldRegenerateRegtestAddress(network, networkAddress) && currentMnemonic) {
+          const regeneratedAddress = await fetchAndSaveBtcAddress(currentMnemonic, network)
+          networkAddress = regeneratedAddress || networkAddress
+        }
         setBtcAddress(networkAddress as string)
 
         // Load discovered addresses for change detection
@@ -840,13 +864,21 @@ function App() {
     if (cachedAddress || cachedWalletAddress) {
       // Use cached wallet address
       currentAddress = (cachedWalletAddress || cachedAddress) as string
-      setBtcAddress(currentAddress)
-      setWalletAddress(currentAddress)
-      await setStorageData({
-        btcAddress: currentAddress,
-        walletAddress: currentAddress
-      })
-      console.log('Using cached wallet address for', network, ':', currentAddress)
+      if (shouldRegenerateRegtestAddress(network, currentAddress) && mnemonic) {
+        console.log('Cached regtest address is invalid for regtest, regenerating:', currentAddress)
+        const regeneratedAddress = await fetchAndSaveBtcAddress(mnemonic, network)
+        if (regeneratedAddress) {
+          currentAddress = regeneratedAddress
+        }
+      } else {
+        setBtcAddress(currentAddress)
+        setWalletAddress(currentAddress)
+        await setStorageData({
+          btcAddress: currentAddress,
+          walletAddress: currentAddress
+        })
+        console.log('Using cached wallet address for', network, ':', currentAddress)
+      }
     } else if (mnemonic) {
       // Fetch new address from canister
       console.log('Fetching new address for network:', network)
@@ -2612,6 +2644,12 @@ function App() {
           }}>
             {copied ? '✓ Copied!' : '⧉ Copy bitcoin address'}
           </button>
+
+          {selectedNetwork === 'regtest' && (
+            <button className="btn-secondary copy-btc-btn" onClick={openRegtestFaucet}>
+              🚰 Open Photon faucet
+            </button>
+          )}
         </div>
       )}
 
@@ -3490,10 +3528,29 @@ function App() {
 
           <div className="settings-content">
             <div className="settings-section">
-              <h3 className="settings-section-title">Get Free Testnet Coins</h3>
-              <p className="settings-info">Use these faucets to get free testnet Bitcoin and ckBTC for testing.</p>
+              <h3 className="settings-section-title">
+                {selectedNetwork === 'regtest' ? 'Get Photon regtest coins' : 'Get Free Testnet Coins'}
+              </h3>
+              <p className="settings-info">
+                {selectedNetwork === 'regtest'
+                  ? 'Use the PhotonBolt regtest faucet to fund the wallet with valid bcrt1 regtest bitcoin.'
+                  : 'Use these faucets to get free testnet Bitcoin and ckBTC for testing.'}
+              </p>
             </div>
 
+            {selectedNetwork === 'regtest' && (
+              <div className="faucet-item" onClick={() => window.open('https://faucet.photonbolt.xyz/', '_blank')}>
+                <div className="faucet-icon">🧪</div>
+                <div className="faucet-details">
+                  <div className="faucet-name">PhotonBolt Regtest Faucet</div>
+                  <div className="faucet-url">faucet.photonbolt.xyz</div>
+                </div>
+                <div className="faucet-arrow">↗</div>
+              </div>
+            )}
+
+            {selectedNetwork !== 'regtest' && (
+              <>
             {/* ckBTC Faucet */}
             <div className="faucet-item" onClick={() => window.open('https://testnet-faucet.ckboost.com/', '_blank')}>
               <div className="faucet-icon">⚡</div>
@@ -3523,6 +3580,8 @@ function App() {
               </div>
               <div className="faucet-arrow">↗</div>
             </div>
+              </>
+            )}
           </div>
         </div>
       )}
