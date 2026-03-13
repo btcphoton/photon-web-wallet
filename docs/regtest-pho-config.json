@@ -1,0 +1,21 @@
+{
+  "assets_regtest": [
+    {
+      "id": "lightning-btc",
+      "name": "Lightning BTC",
+      "amount": "0",
+      "unit": "ckBTC",
+      "color": "#fbbf24"
+    },
+    {
+      "id": "pho",
+      "name": "Photon Token",
+      "amount": "1000000",
+      "unit": "PHO",
+      "color": "#38bdf8"
+    }
+  ],
+  "rgbContracts_regtest": {
+    "pho": "rgb:2Mhfmuc0-BqWCUwP-kkJKF_V-F1~L4j6-A1_W6Yy-hK6Z~rA"
+  }
+}

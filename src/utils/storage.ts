@@ -220,6 +220,11 @@ export const getNetworkAssetsKey = (network: string): keyof StorageData => {
     return `assets_${network}` as keyof StorageData
 }
 
+// Helper to get network-specific RGB contract map key
+export const getNetworkContractsKey = (network: string): keyof StorageData => {
+    return `rgbContracts_${network}` as keyof StorageData
+}
+
 // Testnet default assets (testnet3, testnet4, regtest)
 export const testnet3DefaultAssets: Asset[] = [
     { id: 'lightning-btc', name: 'Lightning BTC', amount: '0', unit: 'ckBTC', color: '#fbbf24' },

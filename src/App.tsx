@@ -9,7 +9,7 @@ import { fetchRgbOccupiedUtxos } from './utils/rgb-fetcher'
 import { getCkBTCBalance } from './utils/icrc1'
 import { convertLBTCtoBTC } from './utils/ckbtc-withdrawal'
 import { getErrorLogs, clearErrorLogs, type ErrorLog } from './utils/error-logger'
-import { getStorageData, setStorageData, removeStorageData, getNetworkAddressKey, getNetworkAssetsKey, testnet3DefaultAssets, mainnetDefaultAssets, type StorageData } from './utils/storage'
+import { getStorageData, setStorageData, removeStorageData, getNetworkAddressKey, getNetworkAssetsKey, getNetworkContractsKey, testnet3DefaultAssets, mainnetDefaultAssets, type StorageData } from './utils/storage'
 import type { Asset } from './utils/storage'
 import { BACKEND_PROFILES, DEFAULT_BACKEND_PROFILE_ID, getBackendProfileById, getDefaultElectrumServer, getDefaultRgbProxy, type BackendProfileId } from './utils/backend-config'
 import { QRCodeSVG } from 'qrcode.react'
@@ -2903,15 +2903,25 @@ function App() {
                     console.log('Selected UTXO for RGB seal:', sealUtxo)
 
                     // 5. Get contract ID for selected asset
-                    // Default contract IDs (you can configure these via storage later)
-                    const defaultContractIds: { [key: string]: string } = {
-                      'puliyal': 'rgb:2ae8d9f1b3c45678901234567890abcd',
-                      'bitcoin': 'rgb:1234567890abcdef1234567890abcdef',
-                      'xiao': 'rgb:fedcba0987654321fedcba0987654321'
+                    // Prefer the per-network storage map so regtest assets can be registered
+                    // without editing the bundle.
+                    const contractsKey = getNetworkContractsKey(selectedNetwork)
+                    const contractSettings = await getStorageData([contractsKey])
+                    const storedContractMapRaw = contractSettings[contractsKey]
+                    const storedContractMap =
+                      typeof storedContractMapRaw === 'string'
+                        ? JSON.parse(storedContractMapRaw) as Record<string, string>
+                        : {}
+
+                    // Backward-compatible examples used when no storage mapping is present.
+                    const defaultContractIds: Record<string, string> = {
+                      puliyal: 'rgb:2ae8d9f1b3c45678901234567890abcd',
+                      bitcoin: 'rgb:1234567890abcdef1234567890abcdef',
+                      xiao: 'rgb:fedcba0987654321fedcba0987654321',
                     }
 
                     const contractId = rgbAsset
-                      ? (defaultContractIds[rgbAsset] || 'rgb:default00000000000000000000')
+                      ? (storedContractMap[rgbAsset] || defaultContractIds[rgbAsset] || 'rgb:default00000000000000000000')
                       : 'rgb:default00000000000000000000' // Generic contract for "any asset"
 
                     // 6. Determine amount (0 for open amount)
