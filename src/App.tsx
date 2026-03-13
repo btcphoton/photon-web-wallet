@@ -1294,7 +1294,7 @@ function App() {
       }
     }
     checkRgbConnection()
-  }, [view])
+  }, [view, selectedNetwork, backendProfileId])
 
   // Auto-calculate destination amount (source - 500 satoshi) and update when source changes
   useEffect(() => {
@@ -2776,7 +2776,7 @@ function App() {
                   <span className="rgb-status-label">Wallet Status</span>
                   <div className="rgb-status-indicator">
                     <span className={`rgb-status-dot ${rgbWalletOnline ? 'online' : 'offline'}`}></span>
-                    <span className="rgb-status-text">{rgbWalletOnline ? 'Online' : 'Connecting...'}</span>
+                    <span className="rgb-status-text">{rgbWalletOnline ? 'Online' : 'Offline'}</span>
                   </div>
                 </div>
 

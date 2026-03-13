@@ -6,8 +6,8 @@ export interface RgbWalletInvoiceResponse {
 }
 
 async function getRegtestRgbApiBase(): Promise<string> {
-    const { resolveBitcoinApiBase } = await import('./backend-config')
-    return await resolveBitcoinApiBase('regtest', 'address')
+    const { PHOTON_REGTEST_API_BASE } = await import('./backend-config')
+    return PHOTON_REGTEST_API_BASE
 }
 
 export async function checkLocalRgbNode(): Promise<boolean> {

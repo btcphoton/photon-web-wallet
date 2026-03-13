@@ -28,7 +28,7 @@ const PUBLIC_ELECTRUM_DEFAULT = 'ssl://electrum.iriswallet.com:50013';
 const PUBLIC_RGB_PROXY_DEFAULT = 'http://89.117.52.115:3000/json-rpc';
 const PHOTON_REGTEST_ELECTRUM = 'ssl://dev-index.photonbolt.xyz:50002';
 const PHOTON_REGTEST_RGB_PROXY = 'https://dev-proxy.photonbolt.xyz/json-rpc';
-const PHOTON_REGTEST_API_BASE = 'https://faucet.photonbolt.xyz/api';
+export const PHOTON_REGTEST_API_BASE = 'https://faucet.photonbolt.xyz/api';
 
 export const getDefaultElectrumServer = (
     network: WalletNetwork,
