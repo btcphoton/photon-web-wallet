@@ -283,6 +283,50 @@ export const signAndSendVanilla = async (
     return psbt.extractTransaction().toHex();
 };
 
+export const signAndUnlockUtxo = async (
+    mnemonic: string,
+    utxo: UTXO,
+    destinationAddress: string,
+    feeRate: number = 2,
+    network: WalletNetwork = 'mainnet'
+): Promise<string> => {
+    const btcNetwork = getBitcoinJsNetwork(network);
+    const seed = await bip39.mnemonicToSeed(mnemonic);
+    const root = BIP32Factory(ecc).fromSeed(seed, btcNetwork);
+    const psbt = new bitcoin.Psbt({ network: btcNetwork });
+
+    const child = root.derivePath(utxo.derivationPath);
+    const internalPubkey = child.publicKey.slice(1, 33);
+
+    psbt.addInput({
+        hash: utxo.txid,
+        index: utxo.vout,
+        witnessUtxo: {
+            value: BigInt(utxo.value),
+            script: bitcoin.address.toOutputScript(utxo.address, btcNetwork),
+        },
+        tapInternalKey: internalPubkey,
+    });
+
+    const fee = estimateFee(1, 1, feeRate);
+    const sendValue = utxo.value - fee;
+
+    if (sendValue <= 546) {
+        throw new Error(`UTXO value ${utxo.value} sats is too small to unlock after paying the network fee.`);
+    }
+
+    psbt.addOutput({
+        address: destinationAddress,
+        value: BigInt(sendValue),
+    });
+
+    const tweak = bitcoin.crypto.taggedHash('TapTweak', internalPubkey);
+    const tweakedSigner = child.tweak(tweak);
+    psbt.signInput(0, tweakedSigner);
+    psbt.finalizeAllInputs();
+    return psbt.extractTransaction().toHex();
+};
+
 /**
  * Broadcast a signed transaction to the network using mempool.space
  * 

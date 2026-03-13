@@ -3,7 +3,7 @@ import './App.css'
 import { generateMnemonic, deriveIdentity, validateMnemonic } from './utils/crypto'
 import { getBtcAddress, getWalletAddress, updateBalance, mapNetworkToCanister, getUtxos, getEstimatedBitcoinFees, sendBitcoin } from './utils/icp'
 import { deriveBitcoinAddress, isLikelyRegtestAddress } from './utils/bitcoin-address'
-import { signAndSendVanilla, broadcastTransaction, fetchUTXOsFromBlockchain, performDiscoveryScan, fetchLiveFees, estimateFee, type UTXO } from './utils/bitcoin-transactions'
+import { signAndSendVanilla, signAndUnlockUtxo, broadcastTransaction, fetchUTXOsFromBlockchain, performDiscoveryScan, fetchLiveFees, estimateFee, type UTXO } from './utils/bitcoin-transactions'
 import type { UtxoWithRgbStatus } from './utils/rgb'
 import { fetchRgbOccupiedUtxos } from './utils/rgb-fetcher'
 import { getCkBTCBalance } from './utils/icrc1'
@@ -239,6 +239,10 @@ function App() {
   const [spendableVanillaUtxos, setSpendableVanillaUtxos] = useState<UTXO[]>([])
   const [utxoTab, setUtxoTab] = useState<'unoccupied' | 'occupied' | 'unlockable'>('unoccupied')
   const [rgbClassificationError, setRgbClassificationError] = useState<string>('')
+  const [showUnlockUtxoModal, setShowUnlockUtxoModal] = useState<boolean>(false)
+  const [selectedUnlockUtxo, setSelectedUnlockUtxo] = useState<UtxoWithRgbStatus | null>(null)
+  const [unlockUtxoProcessing, setUnlockUtxoProcessing] = useState<boolean>(false)
+  const [unlockUtxoError, setUnlockUtxoError] = useState<string>('')
 
   // Scroll container ref for scroll-based UX
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -267,6 +271,57 @@ function App() {
   const truncateAddress = (addr: string) => {
     if (!addr || addr.length < 12) return addr
     return `${addr.slice(0, 8)}...${addr.slice(-4)}`
+  }
+
+  const closeUnlockUtxoModal = () => {
+    if (unlockUtxoProcessing) return
+    setShowUnlockUtxoModal(false)
+    setSelectedUnlockUtxo(null)
+    setUnlockUtxoError('')
+  }
+
+  const handleUnlockUtxo = async () => {
+    if (!selectedUnlockUtxo) return
+
+    setUnlockUtxoProcessing(true)
+    setUnlockUtxoError('')
+
+    try {
+      if (!mainBalanceAddress) {
+        throw new Error('Main balance address is not available.')
+      }
+
+      const feeRate =
+        createUtxoFeeOption === 'custom'
+          ? Math.max(1, Number(createUtxoCustomFee || '2'))
+          : 2
+
+      const txHex = await signAndUnlockUtxo(
+        mnemonic,
+        {
+          txid: selectedUnlockUtxo.txid,
+          vout: selectedUnlockUtxo.vout,
+          value: Number(selectedUnlockUtxo.value),
+          address: selectedUnlockUtxo.address,
+          derivationPath: selectedUnlockUtxo.derivationPath,
+          account: (selectedUnlockUtxo.account || 'vanilla') as 'vanilla' | 'colored',
+          chain: (selectedUnlockUtxo.chain || 0) as 0 | 1,
+          index: selectedUnlockUtxo.index || 0,
+        },
+        mainBalanceAddress,
+        feeRate,
+        selectedNetwork
+      )
+
+      await broadcastTransaction(txHex, selectedNetwork)
+      closeUnlockUtxoModal()
+      await handleViewUtxos()
+    } catch (error: any) {
+      console.error('Failed to unlock RGB UTXO:', error)
+      setUnlockUtxoError(error?.message || 'Failed to unlock UTXO.')
+    } finally {
+      setUnlockUtxoProcessing(false)
+    }
   }
 
   const shouldRegenerateRegtestAddress = (network: Network, address: string) => {
@@ -4457,6 +4512,43 @@ function App() {
         )
       }
 
+      {showUnlockUtxoModal && selectedUnlockUtxo && (
+        <div className="modal-overlay" onClick={closeUnlockUtxoModal}>
+          <div className="notice-modal" onClick={(e) => e.stopPropagation()}>
+            <button
+              className="network-close-btn"
+              onClick={closeUnlockUtxoModal}
+              style={{ position: 'absolute', top: '0.75rem', right: '0.75rem' }}
+            >
+              ×
+            </button>
+            <div className="notice-modal-content">
+              <h3 className="notice-title">Unlock UTXO</h3>
+              <p className="notice-text">
+                UTXO unlocking requires a transaction fee. After unlocking, the available BTC in the original UTXO will be transferred to your BTC balance.
+              </p>
+              <div className="unlock-summary-card">
+                <div className="unlock-summary-label">Unlocking output</div>
+                <div className="unlock-summary-outpoint">
+                  {selectedUnlockUtxo.txid}:{selectedUnlockUtxo.vout}
+                </div>
+                <div className="unlock-summary-amount">
+                  Amount: {(Number(selectedUnlockUtxo.value) / 100000000).toFixed(4)} BTC
+                </div>
+              </div>
+              {unlockUtxoError && (
+                <div className="unlock-error-box">
+                  {unlockUtxoError}
+                </div>
+              )}
+              <button className="btn-primary modal-confirm unlock-confirm-btn" onClick={handleUnlockUtxo} disabled={unlockUtxoProcessing}>
+                {unlockUtxoProcessing ? 'Confirming...' : 'Confirm'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* UTXOs View */}
       {
         view === 'utxos' && (
@@ -4623,11 +4715,57 @@ function App() {
                     )}
 
                     {utxoTab === 'unlockable' && (
-                      <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'rgba(255, 255, 255, 0.4)' }}>
-                        <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔓</div>
-                        <p style={{ fontWeight: 600, marginBottom: '0.5rem' }}>No Unlockable UTXOs</p>
-                        <p style={{ fontSize: '0.85rem', marginTop: '0.5rem', color: 'rgba(255, 255, 255, 0.3)' }}>UTXOs that can be unlocked for spending will appear here</p>
-                      </div>
+                      <>
+                        {bitcoinUtxos.length === 0 ? (
+                          <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'rgba(255, 255, 255, 0.4)' }}>
+                            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔓</div>
+                            <p style={{ fontWeight: 600, marginBottom: '0.5rem' }}>No Unlockable UTXOs</p>
+                            <p style={{ fontSize: '0.85rem', marginTop: '0.5rem', color: 'rgba(255, 255, 255, 0.3)' }}>Unoccupied RGB holder outputs will appear here when they can be returned to your main BTC balance.</p>
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            {bitcoinUtxos.map((utxo) => (
+                              <div key={`${utxo.txid}:${utxo.vout}`} style={{
+                                background: 'rgba(255, 255, 255, 0.04)',
+                                borderRadius: '12px',
+                                padding: '1rem',
+                                border: '1px solid rgba(255, 255, 255, 0.06)',
+                              }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
+                                  <div>
+                                    <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.85rem' }}>Output</span>
+                                    <div style={{ color: '#fff', fontSize: '0.95rem', marginTop: '0.25rem', fontFamily: 'monospace' }}>{utxo.txid.slice(0, 12)}...{utxo.txid.slice(-8)}:{utxo.vout}</div>
+                                  </div>
+                                </div>
+                                <div style={{ marginBottom: '1rem' }}>
+                                  <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.85rem' }}>Available UTXO balance</span>
+                                  <div style={{ color: '#fff', fontSize: '0.95rem', marginTop: '0.25rem', fontWeight: 600 }}>{(Number(utxo.value) / 100000000).toFixed(4)} BTC</div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedUnlockUtxo(utxo)
+                                    setUnlockUtxoError('')
+                                    setShowUnlockUtxoModal(true)
+                                  }}
+                                  style={{
+                                    width: '100%',
+                                    borderRadius: '10px',
+                                    border: '1px solid rgba(255, 255, 255, 0.18)',
+                                    background: 'transparent',
+                                    color: '#fff',
+                                    padding: '0.85rem 1rem',
+                                    fontWeight: 500,
+                                    cursor: 'pointer',
+                                  }}
+                                >
+                                  Unlock UTXO
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </>
                     )}
                   </>
                 )}
