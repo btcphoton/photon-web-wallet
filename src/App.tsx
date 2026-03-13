@@ -14,6 +14,7 @@ import type { Asset } from './utils/storage'
 import { BACKEND_PROFILES, DEFAULT_BACKEND_PROFILE_ID, getBackendProfileById, getDefaultElectrumServer, getDefaultRgbProxy, type BackendProfileId } from './utils/backend-config'
 import { QRCodeSVG } from 'qrcode.react'
 import { generateRgbInvoice, notifyRgbProxy, isValidRgbProxyUrl } from './utils/rgb-invoice'
+import { checkLocalRgbNode, createRegtestRgbInvoice } from './utils/rgb-wallet'
 import { LightningAnimation } from './components/LightningAnimation'
 import { fetchBtcActivities, type BitcoinActivity } from './utils/bitcoin-activities'
 
@@ -1266,6 +1267,13 @@ function App() {
     const checkRgbConnection = async () => {
       if (view === 'receive-rgb') {
         try {
+          if (selectedNetwork === 'regtest') {
+            const localNodeOnline = await checkLocalRgbNode()
+            setRgbWalletOnline(localNodeOnline)
+            console.log('Local RGB node status:', localNodeOnline ? 'online' : 'offline')
+            return
+          }
+
           // Check if RGB Proxy is configured
           const networkSettings = await getStorageData(['rgbProxy'])
           const rgbProxyUrl = networkSettings.rgbProxy as string
@@ -2874,6 +2882,44 @@ function App() {
                   setRgbError('')
 
                   try {
+                    if (selectedNetwork === 'regtest') {
+                      const contractSettingsKey = getNetworkContractsKey(selectedNetwork)
+                      const contractSettings = await getStorageData([contractSettingsKey])
+                      const storedContractMapRaw = contractSettings[contractSettingsKey]
+                      const storedContractMap =
+                        typeof storedContractMapRaw === 'string'
+                          ? JSON.parse(storedContractMapRaw) as Record<string, string>
+                          : {}
+
+                      const assetId = rgbAsset ? storedContractMap[rgbAsset] : undefined
+
+                      if (rgbAsset && !assetId) {
+                        setRgbError('Selected asset is not registered with a regtest RGB contract ID.')
+                        setRgbWalletOnline(false)
+                        setRgbGenerating(false)
+                        return
+                      }
+
+                      const invoiceAmount = openAmount ? undefined : (parseFloat(rgbAmount) || 0)
+                      if (!openAmount && (!invoiceAmount || invoiceAmount <= 0)) {
+                        setRgbError('Enter a valid RGB amount or enable Open Amount.')
+                        setRgbWalletOnline(false)
+                        setRgbGenerating(false)
+                        return
+                      }
+
+                      const invoiceResult = await createRegtestRgbInvoice({
+                        assetId,
+                        amount: invoiceAmount,
+                        openAmount,
+                      })
+
+                      setRgbWalletOnline(true)
+                      setRgbInvoice(invoiceResult.invoice)
+                      setRgbInvoiceStep('invoice')
+                      return
+                    }
+
                     // 1. Check RGB Proxy configuration
                     const networkSettings = await getStorageData(['rgbProxy'])
                     const rgbProxyUrl = networkSettings.rgbProxy as string
