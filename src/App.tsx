@@ -836,8 +836,20 @@ function App() {
     setSelectedNetwork(network)
     setShowNetworkModal(false)
 
+    const networkSwitchUpdate: Record<string, string> = { selectedNetwork: network }
+    if (network === 'regtest') {
+      const nextElectrum = getDefaultElectrumServer(network, 'photon-dev-regtest')
+      const nextRgbProxy = getDefaultRgbProxy(network, 'photon-dev-regtest')
+      networkSwitchUpdate.backendProfileId = 'photon-dev-regtest'
+      networkSwitchUpdate.electrumServer = nextElectrum
+      networkSwitchUpdate.rgbProxy = nextRgbProxy
+      setBackendProfileId('photon-dev-regtest')
+      setElectrumServer(nextElectrum)
+      setRgbProxy(nextRgbProxy)
+    }
+
     // Save selected network to storage
-    await setStorageData({ selectedNetwork: network })
+    await setStorageData(networkSwitchUpdate)
     console.log('Network switched to:', network)
 
     // Check if we have a cached address for this network
@@ -1747,6 +1759,29 @@ function App() {
     setElectrumServer(getDefaultElectrumServer(selectedNetwork, profileId))
     setRgbProxy(getDefaultRgbProxy(selectedNetwork, profileId))
   }
+
+  useEffect(() => {
+    const ensureRegtestBackendProfile = async () => {
+      if (selectedNetwork !== 'regtest' || backendProfileId === 'photon-dev-regtest') {
+        return
+      }
+
+      const nextElectrum = getDefaultElectrumServer('regtest', 'photon-dev-regtest')
+      const nextRgbProxy = getDefaultRgbProxy('regtest', 'photon-dev-regtest')
+
+      setBackendProfileId('photon-dev-regtest')
+      setElectrumServer(nextElectrum)
+      setRgbProxy(nextRgbProxy)
+      await setStorageData({
+        backendProfileId: 'photon-dev-regtest',
+        electrumServer: nextElectrum,
+        rgbProxy: nextRgbProxy
+      })
+      console.log('Auto-switched backend profile to Photon Dev Regtest for regtest network')
+    }
+
+    ensureRegtestBackendProfile()
+  }, [selectedNetwork, backendProfileId])
 
   // Save network settings
   const handleSaveNetworkSettings = async () => {
