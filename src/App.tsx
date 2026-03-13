@@ -43,6 +43,12 @@ interface VerifyWord {
   userInput: string
 }
 
+interface ImportableAsset {
+  asset: Asset
+  aliases: string[]
+  contracts?: Partial<Record<Network, string>>
+}
+
 // Generate 5 random unique positions from 1-12
 const getRandomPositions = (): number[] => {
   const positions: number[] = []
@@ -54,6 +60,29 @@ const getRandomPositions = (): number[] => {
   }
   return positions.sort((a, b) => a - b)
 }
+
+const REGTEST_PHO_CONTRACT_ID = 'rgb:2Mhfmuc0-BqWCUwP-kkJKF_V-F1~L4j6-A1_W6Yy-hK6Z~rA'
+
+const importableAssets: ImportableAsset[] = [
+  {
+    asset: {
+      id: 'pho',
+      name: 'Photon Token',
+      amount: '1000000',
+      unit: 'PHO',
+      color: '#38bdf8',
+    },
+    aliases: [
+      'pho',
+      'photon',
+      'photon token',
+      REGTEST_PHO_CONTRACT_ID.toLowerCase(),
+    ],
+    contracts: {
+      regtest: REGTEST_PHO_CONTRACT_ID,
+    },
+  },
+]
 
 function App() {
   const [view, setView] = useState<View>('welcome')
@@ -122,6 +151,9 @@ function App() {
 
   // Add asset state
   const [tokenInput, setTokenInput] = useState<string>('')
+  const [addAssetError, setAddAssetError] = useState<string>('')
+  const [addAssetSuccess, setAddAssetSuccess] = useState<string>('')
+  const [importingAsset, setImportingAsset] = useState<boolean>(false)
 
   // Balance states for two-address system
   const [btcBalance, setBtcBalance] = useState<string>('0.00000000') // Wallet balance (main)
@@ -216,6 +248,73 @@ function App() {
 
   const shouldRegenerateRegtestAddress = (network: Network, address: string) => {
     return network === 'regtest' && !!address && !isLikelyRegtestAddress(address)
+  }
+
+  const handleImportAsset = async () => {
+    const normalizedInput = tokenInput.trim().toLowerCase()
+
+    if (!normalizedInput) {
+      setAddAssetError('Enter an asset ticker, name, or contract ID.')
+      setAddAssetSuccess('')
+      return
+    }
+
+    setImportingAsset(true)
+    setAddAssetError('')
+    setAddAssetSuccess('')
+
+    try {
+      const matchedAsset = importableAssets.find((entry) =>
+        entry.aliases.includes(normalizedInput)
+      )
+
+      if (!matchedAsset) {
+        setAddAssetError('Asset not found in the local registry for this wallet build.')
+        return
+      }
+
+      const assetsKey = getNetworkAssetsKey(selectedNetwork)
+      const contractsKey = getNetworkContractsKey(selectedNetwork)
+      const storageResult = await getStorageData([assetsKey, contractsKey])
+
+      const storedAssetsRaw = storageResult[assetsKey]
+      const storedContractsRaw = storageResult[contractsKey]
+
+      const storedAssets = typeof storedAssetsRaw === 'string'
+        ? JSON.parse(storedAssetsRaw) as Asset[]
+        : []
+      const storedContracts = typeof storedContractsRaw === 'string'
+        ? JSON.parse(storedContractsRaw) as Record<string, string>
+        : {}
+
+      const alreadyImported = storedAssets.some((asset) => asset.id === matchedAsset.asset.id)
+      const updatedAssets = alreadyImported
+        ? storedAssets
+        : [...storedAssets, matchedAsset.asset]
+
+      const nextContractId = matchedAsset.contracts?.[selectedNetwork]
+      const updatedContracts = nextContractId
+        ? { ...storedContracts, [matchedAsset.asset.id]: nextContractId }
+        : storedContracts
+
+      await setStorageData({
+        [assetsKey]: JSON.stringify(updatedAssets),
+        [contractsKey]: JSON.stringify(updatedContracts),
+      })
+
+      setAssets(updatedAssets)
+      setTokenInput('')
+      setAddAssetSuccess(
+        alreadyImported
+          ? `${matchedAsset.asset.unit} is already available in this network wallet.`
+          : `${matchedAsset.asset.unit} imported successfully.`
+      )
+    } catch (error) {
+      console.error('Failed to import asset:', error)
+      setAddAssetError('Failed to import asset. Please try again.')
+    } finally {
+      setImportingAsset(false)
+    }
   }
 
   const openRegtestFaucet = () => {
@@ -3160,8 +3259,22 @@ function App() {
               className="token-input"
               placeholder="Token contract address, or token name"
               value={tokenInput}
-              onChange={(e) => setTokenInput(e.target.value)}
+              onChange={(e) => {
+                setTokenInput(e.target.value)
+                if (addAssetError) setAddAssetError('')
+                if (addAssetSuccess) setAddAssetSuccess('')
+              }}
             />
+
+            {addAssetError && (
+              <div className="rgb-error-box add-asset-status">
+                <span className="error-text">{addAssetError}</span>
+              </div>
+            )}
+
+            {addAssetSuccess && (
+              <p className="success-text add-asset-status">{addAssetSuccess}</p>
+            )}
 
             <div className="asset-registry-row">
               <span className="registry-text">Display data for all public RGB assets</span>
@@ -3178,9 +3291,10 @@ function App() {
 
           <button
             className="btn-secondary import-btn"
-            disabled={!tokenInput}
+            disabled={!tokenInput.trim() || importingAsset}
+            onClick={handleImportAsset}
           >
-            Import
+            {importingAsset ? 'Importing...' : 'Import'}
           </button>
         </div>
       )}
