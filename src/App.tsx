@@ -14,7 +14,7 @@ import type { Asset } from './utils/storage'
 import { BACKEND_PROFILES, DEFAULT_BACKEND_PROFILE_ID, getBackendProfileById, getDefaultElectrumServer, getDefaultRgbProxy, type BackendProfileId } from './utils/backend-config'
 import { QRCodeSVG } from 'qrcode.react'
 import { generateRgbInvoice, notifyRgbProxy, isValidRgbProxyUrl } from './utils/rgb-invoice'
-import { checkLocalRgbNode, createRegtestRgbInvoice } from './utils/rgb-wallet'
+import { checkLocalRgbNode, createRegtestRgbInvoice, fetchRegtestRgbBalance } from './utils/rgb-wallet'
 import { LightningAnimation } from './components/LightningAnimation'
 import { fetchBtcActivities, type BitcoinActivity } from './utils/bitcoin-activities'
 
@@ -248,6 +248,53 @@ function App() {
 
   const shouldRegenerateRegtestAddress = (network: Network, address: string) => {
     return network === 'regtest' && !!address && !isLikelyRegtestAddress(address)
+  }
+
+  const getRegtestWalletKey = () => {
+    const stableId = principalId || walletAddress || coloredAddress || 'anonymous'
+    return `extension-${stableId}-regtest`
+  }
+
+  const syncRegtestAssetBalances = async (network: Network, sourceAssets: Asset[]) => {
+    if (network !== 'regtest' || sourceAssets.length === 0) {
+      return sourceAssets
+    }
+
+    const contractsKey = getNetworkContractsKey(network)
+    const contractSettings = await getStorageData([contractsKey])
+    const storedContractMapRaw = contractSettings[contractsKey]
+    const storedContractMap =
+      typeof storedContractMapRaw === 'string'
+        ? JSON.parse(storedContractMapRaw) as Record<string, string>
+        : {}
+
+    const walletKey = getRegtestWalletKey()
+
+    const updatedAssets = await Promise.all(
+      sourceAssets.map(async (asset) => {
+        const contractId = storedContractMap[asset.id]
+        if (!contractId) {
+          return asset
+        }
+
+        try {
+          const rgbBalance = await fetchRegtestRgbBalance({
+            assetId: contractId,
+            walletKey,
+          })
+
+          return {
+            ...asset,
+            amount: String(rgbBalance.balance.settled),
+          }
+        } catch (error) {
+          console.error(`[RGB Balance] Failed to sync ${asset.id}:`, error)
+          return asset
+        }
+      })
+    )
+
+    return updatedAssets
   }
 
   const handleImportAsset = async () => {
@@ -791,7 +838,8 @@ function App() {
       // Use cached assets
       try {
         const parsedAssets = JSON.parse(cachedAssets as string)
-        setAssets(parsedAssets)
+        const syncedAssets = await syncRegtestAssetBalances(network, parsedAssets)
+        setAssets(syncedAssets)
         console.log('Loaded cached assets for', network)
 
         // Update ckBTC balance for Lightning BTC asset
@@ -801,7 +849,7 @@ function App() {
             const ckBTCBalance = await getCkBTCBalance(currentMnemonic, canisterNetwork)
             // Store as user_lbtc_balance
             await setStorageData({ user_lbtc_balance: ckBTCBalance })
-            const updatedAssets = parsedAssets.map((asset: Asset) =>
+            const updatedAssets = syncedAssets.map((asset: Asset) =>
               asset.id === 'lightning-btc'
                 ? { ...asset, amount: ckBTCBalance }
                 : asset
@@ -842,8 +890,9 @@ function App() {
       }
     } else if (network === 'testnet3' || network === 'testnet4' || network === 'regtest') {
       // Initialize testnet with default assets
-      setAssets(testnet3DefaultAssets)
-      await setStorageData({ [assetsKey]: JSON.stringify(testnet3DefaultAssets) })
+      const syncedDefaultAssets = await syncRegtestAssetBalances(network, testnet3DefaultAssets)
+      setAssets(syncedDefaultAssets)
+      await setStorageData({ [assetsKey]: JSON.stringify(syncedDefaultAssets) })
       console.log('Initialized', network, 'with default assets')
 
       // Fetch ckBTC balance for Lightning BTC
@@ -853,7 +902,7 @@ function App() {
           const ckBTCBalance = await getCkBTCBalance(currentMnemonic, canisterNetwork)
           // Store as user_lbtc_balance
           await setStorageData({ user_lbtc_balance: ckBTCBalance })
-          const updatedAssets = testnet3DefaultAssets.map(asset =>
+          const updatedAssets = syncedDefaultAssets.map(asset =>
             asset.id === 'lightning-btc'
               ? { ...asset, amount: ckBTCBalance }
               : asset
@@ -1160,6 +1209,7 @@ function App() {
   const handleRefreshBalance = async () => {
     if (!mnemonic || !walletAddress) return
     await fetchBalance(mnemonic, selectedNetwork)
+    await loadAssetsForNetwork(selectedNetwork, mnemonic)
   }
 
   const handleConfirmNotice = async () => {
@@ -3244,7 +3294,7 @@ function App() {
             <button className="back-arrow" onClick={() => setView('dashboard')}>←</button>
             <h2 className="receive-title">Add Assets</h2>
             <a
-              href="https://photon.net/asset/issue"
+              href="https://photonbolt.xyz/asset/issue"
               target="_blank"
               rel="noopener noreferrer"
               className="issue-assets-link"
@@ -3279,7 +3329,7 @@ function App() {
             <div className="asset-registry-row">
               <span className="registry-text">Display data for all public RGB assets</span>
               <a
-                href="https://photon.net/asset/testnet"
+                href="https://photonbolt.xyz/asset/testnet"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="registry-link"

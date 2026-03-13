@@ -36,5 +36,5 @@ The Photon Labs Wallet application interacts with several external servers and s
 
 ## 5. Official Branding & Documentation
 *   **Photon Net**:
-    *   **Domain**: `https://photon.net`
+    *   **Domain**: `https://photonbolt.xyz`
     *   **Purpose**: Links to official resources for asset issuance and network information.

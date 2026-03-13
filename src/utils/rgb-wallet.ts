@@ -5,6 +5,24 @@ export interface RgbWalletInvoiceResponse {
     batch_transfer_idx: number
 }
 
+export interface RgbWalletBalanceResponse {
+    ok: true
+    walletKey: string
+    asset: {
+        assetId: string
+        ticker?: string | null
+        name: string
+        precision: number
+    }
+    balance: {
+        settled: number
+        future: number
+        spendable: number
+        offchain_outbound: number
+        offchain_inbound: number
+    }
+}
+
 async function getRegtestRgbApiBase(): Promise<string> {
     const { PHOTON_REGTEST_API_BASE } = await import('./backend-config')
     return PHOTON_REGTEST_API_BASE
@@ -52,4 +70,38 @@ export async function createRegtestRgbInvoice(params: {
     }
 
     return data as RgbWalletInvoiceResponse
+}
+
+export async function fetchRegtestRgbBalance(params: {
+    assetId: string
+    walletKey?: string
+}): Promise<RgbWalletBalanceResponse> {
+    const apiBase = await getRegtestRgbApiBase()
+    const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+    }
+
+    if (params.walletKey) {
+        headers['x-photon-wallet-key'] = params.walletKey
+    }
+
+    const response = await fetch(`${apiBase}/rgb/balance`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+            assetId: params.assetId,
+        }),
+    })
+
+    if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(errorText || `RGB balance lookup failed with status ${response.status}`)
+    }
+
+    const data = await response.json()
+    if (!data.ok) {
+        throw new Error(data.error || 'RGB balance lookup failed')
+    }
+
+    return data as RgbWalletBalanceResponse
 }
