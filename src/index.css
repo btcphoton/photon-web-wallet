@@ -1570,7 +1570,9 @@ textarea:focus {
   flex: 1;
   padding: 0.75rem 1.5rem 0.5rem;
   background: transparent;
-  overflow: hidden;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 /* RGB Receive Styles - Matching Swap Screen */
@@ -1884,6 +1886,7 @@ textarea:focus {
   flex-direction: column;
   gap: 1.25rem;
   padding: 1rem 0;
+  padding-bottom: 1.5rem;
 }
 
 .rgb-invoice-header {
@@ -1955,10 +1958,18 @@ textarea:focus {
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 1.5rem;
+  width: 100%;
+  padding: 1rem;
   background: #fff;
   border-radius: 16px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  overflow: auto;
+}
+
+.rgb-qr-container svg {
+  width: 100%;
+  max-width: 280px;
+  height: auto;
 }
 
 /* Copy Button */
