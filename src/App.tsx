@@ -1035,7 +1035,11 @@ function App() {
 
       // Update in storage for persistence
       const balanceKey = `MainBalance_${networkId}` as any
-      await setStorageData({ [balanceKey]: formattedBalance })
+      await setStorageData({
+        [balanceKey]: formattedBalance,
+        user_bitcoin_balance: formattedBalance,
+        walletBalance: formattedBalance
+      })
 
       // Also fetch LBTC balance from canister
       try {
@@ -1782,6 +1786,16 @@ function App() {
 
     ensureRegtestBackendProfile()
   }, [selectedNetwork, backendProfileId])
+
+  useEffect(() => {
+    if (!mnemonic) {
+      return
+    }
+
+    if (selectedNetwork === 'regtest' && backendProfileId === 'photon-dev-regtest') {
+      fetchBalance(mnemonic, selectedNetwork)
+    }
+  }, [selectedNetwork, backendProfileId, mnemonic])
 
   // Save network settings
   const handleSaveNetworkSettings = async () => {
