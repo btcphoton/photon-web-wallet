@@ -68,7 +68,7 @@ const importableAssets: ImportableAsset[] = [
     asset: {
       id: 'pho',
       name: 'Photon Token',
-      amount: '1000000',
+      amount: '0',
       unit: 'PHO',
       color: '#38bdf8',
     },
@@ -285,11 +285,14 @@ function App() {
 
           return {
             ...asset,
-            amount: String(rgbBalance.balance.settled),
+            amount: String(rgbBalance.balance.spendable),
           }
         } catch (error) {
           console.error(`[RGB Balance] Failed to sync ${asset.id}:`, error)
-          return asset
+          return {
+            ...asset,
+            amount: '0',
+          }
         }
       })
     )
