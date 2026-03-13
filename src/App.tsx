@@ -19,7 +19,7 @@ import { LightningAnimation } from './components/LightningAnimation'
 import { fetchBtcActivities, type BitcoinActivity } from './utils/bitcoin-activities'
 
 
-type View = 'welcome' | 'unlock' | 'lock' | 'forgot' | 'create' | 'verify' | 'password' | 'restore' | 'dashboard' | 'receive' | 'receive-btc' | 'receive-rgb' | 'convert-lightning' | 'add-assets' | 'settings' | 'user-settings' | 'auto-lock-settings' | 'network-settings' | 'swap' | 'send' | 'send-amount' | 'send-confirm' | 'send-success' | 'utxos' | 'create-rgb-utxo' | 'create-utxo-confirm' | 'faucet' | 'error-logs'
+type View = 'welcome' | 'unlock' | 'lock' | 'forgot' | 'create' | 'verify' | 'password' | 'restore' | 'dashboard' | 'receive' | 'receive-btc' | 'receive-rgb' | 'convert-lightning' | 'add-assets' | 'settings' | 'user-settings' | 'auto-lock-settings' | 'network-settings' | 'swap' | 'send' | 'send-amount' | 'send-confirm' | 'send-success' | 'utxos' | 'create-rgb-utxo' | 'create-utxo-confirm' | 'unlock-rgb-utxo' | 'unlock-utxo-confirm' | 'faucet' | 'error-logs'
 type Tab = 'assets' | 'activities'
 type Network = 'mainnet' | 'testnet3' | 'testnet4' | 'regtest'
 
@@ -243,6 +243,8 @@ function App() {
   const [selectedUnlockUtxo, setSelectedUnlockUtxo] = useState<UtxoWithRgbStatus | null>(null)
   const [unlockUtxoProcessing, setUnlockUtxoProcessing] = useState<boolean>(false)
   const [unlockUtxoError, setUnlockUtxoError] = useState<string>('')
+  const [unlockUtxoFeeOption, setUnlockUtxoFeeOption] = useState<'slow' | 'avg' | 'fast' | 'custom'>('fast')
+  const [unlockUtxoCustomFee, setUnlockUtxoCustomFee] = useState<string>('5')
 
   // Scroll container ref for scroll-based UX
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -276,8 +278,31 @@ function App() {
   const closeUnlockUtxoModal = () => {
     if (unlockUtxoProcessing) return
     setShowUnlockUtxoModal(false)
-    setSelectedUnlockUtxo(null)
     setUnlockUtxoError('')
+  }
+
+  const getUnlockFeeRate = () => {
+    if (unlockUtxoFeeOption === 'custom') {
+      return Math.max(1, Number(unlockUtxoCustomFee || '5'))
+    }
+
+    const feeRateMap = {
+      slow: 3,
+      avg: 3,
+      fast: 5,
+    } as const
+
+    return feeRateMap[unlockUtxoFeeOption]
+  }
+
+  const getUnlockFeeSats = () => {
+    return estimateFee(1, 1, getUnlockFeeRate())
+  }
+
+  const getUnlockSendAmountBtc = () => {
+    if (!selectedUnlockUtxo) return '0.00000000'
+    const sendSats = Math.max(0, Number(selectedUnlockUtxo.value) - getUnlockFeeSats())
+    return (sendSats / 100000000).toFixed(8)
   }
 
   const handleUnlockUtxo = async () => {
@@ -296,10 +321,7 @@ function App() {
         throw new Error('Main balance address is not available.')
       }
 
-      const feeRate =
-        createUtxoFeeOption === 'custom'
-          ? Math.max(1, Number(createUtxoCustomFee || '2'))
-          : 2
+      const feeRate = getUnlockFeeRate()
 
       const txHex = await signAndUnlockUtxo(
         mnemonic,
@@ -319,7 +341,10 @@ function App() {
       )
 
       await broadcastTransaction(txHex, selectedNetwork)
-      closeUnlockUtxoModal()
+      setView('utxos')
+      setShowUnlockUtxoModal(false)
+      setSelectedUnlockUtxo(null)
+      setUnlockUtxoError('')
       await handleViewUtxos()
     } catch (error: any) {
       console.error('Failed to unlock RGB UTXO:', error)
@@ -4546,8 +4571,15 @@ function App() {
                   {unlockUtxoError}
                 </div>
               )}
-              <button className="btn-primary modal-confirm unlock-confirm-btn" onClick={handleUnlockUtxo} disabled={unlockUtxoProcessing}>
-                {unlockUtxoProcessing ? 'Confirming...' : 'Confirm'}
+              <button
+                className="btn-primary modal-confirm unlock-confirm-btn"
+                onClick={() => {
+                  setShowUnlockUtxoModal(false)
+                  setUnlockUtxoError('')
+                  setView('unlock-rgb-utxo')
+                }}
+              >
+                Confirm
               </button>
             </div>
           </div>
@@ -4779,6 +4811,136 @@ function App() {
           </div>
         )
       }
+
+      {view === 'unlock-rgb-utxo' && selectedUnlockUtxo && (
+        <div className="wallet-container" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', height: '100%' }}>
+          <div className="wallet-header">
+            <button className="icon-btn" onClick={() => setView('utxos')}>←</button>
+            <h2 style={{ flex: 1, textAlign: 'center', margin: 0 }}>Unlock RGB UTXO</h2>
+            <button className="icon-btn" style={{ visibility: 'hidden' }}>⋮</button>
+          </div>
+
+          <div style={{ flex: 1, overflow: 'auto', paddingTop: '1rem', paddingBottom: '1rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+              <div>
+                <div style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)', marginBottom: '0.5rem' }}>Unlock UTXO</div>
+                <div style={{ padding: '0.9rem 1rem', background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '12px', color: '#fff', fontFamily: 'monospace', fontSize: '0.82rem', wordBreak: 'break-all' }}>
+                  {selectedUnlockUtxo.txid}:{selectedUnlockUtxo.vout}
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)', marginBottom: '0.5rem' }}>Unlockable amount</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.9rem 1rem', background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '12px', color: '#fff' }}>
+                  <span>{(Number(selectedUnlockUtxo.value) / 100000000).toFixed(4)}</span>
+                  <span style={{ color: 'rgba(255, 255, 255, 0.6)' }}>BTC</span>
+                </div>
+              </div>
+
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                  <span style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)' }}>Fee</span>
+                  <button
+                    type="button"
+                    onClick={() => setUnlockUtxoFeeOption(unlockUtxoFeeOption)}
+                    style={{ background: 'none', border: 'none', color: 'rgba(255, 255, 255, 0.5)', cursor: 'pointer' }}
+                  >
+                    ⟳
+                  </button>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem' }}>
+                  <button onClick={() => setUnlockUtxoFeeOption('slow')} style={{ padding: '0.75rem 0.5rem', background: unlockUtxoFeeOption === 'slow' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: unlockUtxoFeeOption === 'slow' ? '#fff' : 'rgba(255, 255, 255, 0.6)', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem' }}><div style={{ fontWeight: 600 }}>Slow</div><div>3 sat/VB</div><div style={{ fontSize: '0.75rem', opacity: 0.7 }}>≈ 1 hours</div></button>
+                  <button onClick={() => setUnlockUtxoFeeOption('avg')} style={{ padding: '0.75rem 0.5rem', background: unlockUtxoFeeOption === 'avg' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: unlockUtxoFeeOption === 'avg' ? '#fff' : 'rgba(255, 255, 255, 0.6)', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem' }}><div style={{ fontWeight: 600 }}>Avg</div><div>3 sat/VB</div><div style={{ fontSize: '0.75rem', opacity: 0.7 }}>≈ 30 mins</div></button>
+                  <button onClick={() => setUnlockUtxoFeeOption('fast')} style={{ padding: '0.75rem 0.5rem', background: unlockUtxoFeeOption === 'fast' ? '#ff5a1f' : 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: '#fff', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem', fontWeight: unlockUtxoFeeOption === 'fast' ? 600 : 400 }}><div style={{ fontWeight: 600 }}>Fast</div><div>5 sat/VB</div><div style={{ fontSize: '0.75rem', opacity: 0.9 }}>≈ 10 mins</div></button>
+                  <button onClick={() => setUnlockUtxoFeeOption('custom')} style={{ padding: '0.75rem 0.5rem', background: unlockUtxoFeeOption === 'custom' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: unlockUtxoFeeOption === 'custom' ? '#fff' : 'rgba(255, 255, 255, 0.6)', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontWeight: 600 }}>Custom</button>
+                </div>
+                {unlockUtxoFeeOption === 'custom' && (
+                  <input type="number" placeholder="Enter custom fee rate" value={unlockUtxoCustomFee} onChange={(e) => setUnlockUtxoCustomFee(e.target.value)} style={{ width: '100%', padding: '0.75rem 1rem', background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: '#fff', fontSize: '0.9rem', marginTop: '0.75rem', outline: 'none' }} />
+                )}
+              </div>
+            </div>
+
+            <button className="btn-primary" onClick={() => setView('unlock-utxo-confirm')} style={{ width: '100%', marginTop: '2rem', background: '#ff5a1f', padding: '1rem', fontSize: '1rem', fontWeight: 600 }}>Next</button>
+          </div>
+        </div>
+      )}
+
+      {view === 'unlock-utxo-confirm' && selectedUnlockUtxo && (
+        <div className="wallet-container" style={{ padding: '1rem' }}>
+          <div className="wallet-header">
+            <button className="icon-btn" onClick={() => setView('unlock-rgb-utxo')}>←</button>
+            <h2 style={{ flex: 1, textAlign: 'center', margin: 0 }}>Sign Transaction</h2>
+            <button className="icon-btn" style={{ visibility: 'hidden' }}>⋮</button>
+          </div>
+
+          <div style={{ marginTop: '2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            <div style={{ background: 'rgba(255, 255, 255, 0.05)', borderRadius: '12px', padding: '1.25rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.5)', marginBottom: '0.35rem' }}>From</div>
+                  <div style={{ fontSize: '0.9rem', color: '#fff', fontFamily: 'monospace' }}>
+                    {utxoHolderAddress ? `${utxoHolderAddress.slice(0, 7)}...${utxoHolderAddress.slice(-4)}` : selectedNetwork === 'regtest' ? 'bcrt1p...' : 'tb1p...'}
+                  </div>
+                </div>
+                <div style={{ fontSize: '1.5rem', color: 'rgba(255, 255, 255, 0.3)', margin: '0 1rem' }}>→</div>
+                <div style={{ flex: 1, textAlign: 'right' }}>
+                  <div style={{ fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.5)', marginBottom: '0.35rem' }}>Send to</div>
+                  <div style={{ fontSize: '0.9rem', color: '#fff', fontFamily: 'monospace' }}>
+                    {mainBalanceAddress ? `${mainBalanceAddress.slice(0, 7)}...${mainBalanceAddress.slice(-4)}` : walletAddress ? `${walletAddress.slice(0, 7)}...${walletAddress.slice(-4)}` : selectedNetwork === 'regtest' ? 'bcrt1p...' : 'tb1p...'}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ marginTop: '1.5rem', paddingTop: '1.25rem', borderTop: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                <div style={{ fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.5)', marginBottom: '0.5rem' }}>Send Amount</div>
+                <div style={{ fontSize: '2rem', fontWeight: 700, color: '#fff' }}>{getUnlockSendAmountBtc()} BTC</div>
+              </div>
+            </div>
+
+            <div>
+              <div style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)', marginBottom: '0.75rem' }}>Network Fee</div>
+              <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', padding: '0.9rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.95rem', color: '#fff' }}>{(getUnlockFeeSats() / 100000000).toFixed(8)}</span>
+                <span style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.5)' }}>BTC</span>
+              </div>
+            </div>
+
+            <div>
+              <div style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)', marginBottom: '0.75rem' }}>Network Fee Rate</div>
+              <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', padding: '0.9rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.95rem', color: '#fff' }}>{getUnlockFeeRate()}</span>
+                <span style={{ fontSize: '0.85rem', color: 'rgba(59, 130, 246, 0.7)' }}>sat/VB</span>
+              </div>
+            </div>
+
+            {unlockUtxoError && (
+              <div className="unlock-error-box">
+                {unlockUtxoError}
+              </div>
+            )}
+
+            <button
+              className="btn-primary"
+              onClick={handleUnlockUtxo}
+              disabled={unlockUtxoProcessing}
+              style={{
+                width: '100%',
+                marginTop: '1rem',
+                background: '#ff5a1f',
+                padding: '1rem',
+                fontSize: '1rem',
+                fontWeight: 600,
+                borderRadius: '12px',
+                border: 'none',
+                color: '#fff',
+                cursor: 'pointer'
+              }}
+            >
+              {unlockUtxoProcessing ? 'Signing...' : 'Sign & Pay'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Create RGB UTXO View */}
       {
