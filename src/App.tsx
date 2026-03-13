@@ -3081,7 +3081,7 @@ function App() {
                 <div className="rgb-qr-container">
                   <QRCodeSVG
                     value={rgbInvoice}
-                    size={200}
+                    size={120}
                     bgColor="#ffffff"
                     fgColor="#000000"
                     level="M"
