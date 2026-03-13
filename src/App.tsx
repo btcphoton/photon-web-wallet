@@ -537,6 +537,9 @@ function App() {
       setColoredAddress(coloredAddr)
       setLightningAddress(lightningAddr)
       setBtcAddress(vanillaAddr)
+      setMainBalanceAddress(mainBalanceAddr)
+      setUtxoHolderAddress(utxoHolderAddr)
+      setDustHolderAddress(dustHolderAddr)
 
       console.log('Active Colored Address:', coloredAddr)
 
@@ -1365,13 +1368,30 @@ function App() {
         setTestnetCanisterId(result.testnetCanisterId || DEFAULT_TESTNET_CANISTER)
 
         // Load the three addresses for current network
-        setMainBalanceAddress((result[`MainBalance_${selectedNetwork}` as keyof typeof result] as string) || '')
-        setUtxoHolderAddress((result[`UTXOHolder_${selectedNetwork}` as keyof typeof result] as string) || '')
-        setDustHolderAddress((result[`DustHolder_${selectedNetwork}` as keyof typeof result] as string) || '')
+        const nextMainBalanceAddress = ((result[`MainBalance_${selectedNetwork}` as keyof typeof result] as string) || '').trim()
+        const nextUtxoHolderAddress = ((result[`UTXOHolder_${selectedNetwork}` as keyof typeof result] as string) || '').trim()
+        const nextDustHolderAddress = ((result[`DustHolder_${selectedNetwork}` as keyof typeof result] as string) || '').trim()
+
+        const hasInvalidRegtestAuxAddress =
+          selectedNetwork === 'regtest' && (
+            shouldRegenerateRegtestAddress(selectedNetwork, nextMainBalanceAddress) ||
+            shouldRegenerateRegtestAddress(selectedNetwork, nextUtxoHolderAddress) ||
+            shouldRegenerateRegtestAddress(selectedNetwork, nextDustHolderAddress)
+          )
+
+        if (hasInvalidRegtestAuxAddress && mnemonic) {
+          console.log('Cached regtest RGB wallet addresses are invalid, regenerating auxiliary addresses')
+          await fetchAndSaveBtcAddress(mnemonic, selectedNetwork)
+          return
+        }
+
+        setMainBalanceAddress(nextMainBalanceAddress)
+        setUtxoHolderAddress(nextUtxoHolderAddress)
+        setDustHolderAddress(nextDustHolderAddress)
       }
     }
     loadCanisterSettings()
-  }, [view, selectedNetwork])
+  }, [view, selectedNetwork, mnemonic])
 
   // Inactivity tracking for auto-lock
   useEffect(() => {
