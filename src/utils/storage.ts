@@ -97,6 +97,8 @@ export interface StorageData {
     walletBalance?: string
     // Error logs for Admin section
     error_logs?: any[]
+    // Persisted RGB blinded seal secrets and UTXO bindings
+    rgbSealSecrets?: string
 }
 
 // Check if chrome.storage is actually available and functional

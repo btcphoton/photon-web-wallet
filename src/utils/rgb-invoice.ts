@@ -1,158 +1,124 @@
-/**
- * RGB Invoice Generation Utilities
- * 
- * Generates RGB invoices using Web Crypto API (browser-compatible)
- * Integrates with ICP canister for UTXO management and RGB Proxy for blinded UTXO registration
- */
+import { getStorageData, setStorageData } from './storage'
+import { findOrPrepareRgbTaprootUtxo } from './utxoManager'
 
-export interface Utxo {
-    txid: string
-    vout: number
-    value: bigint
+const RGB_TRANSPORT_ENDPOINT = 'https://dev-proxy.photonbolt.xyz'
+
+export interface StoredRgbSealSecret {
+  id: string
+  createdAt: string
+  network: string
+  assetId: string
+  amount: number
+  txid: string
+  vout: number
+  secret: string
+  blindedSeal: string
+  source: 'existing' | 'split'
 }
 
-export interface RgbInvoiceResult {
-    invoice: string
-    blindedUtxo: string
-    salt: string
+export interface GeneratedBlindedSeal {
+  blindedSeal: string
+  secret: string
 }
 
-/**
- * Generate cryptographically secure 8-byte salt
- * @returns BigInt representation of the salt
- */
-function generateSalt(): bigint {
-    const saltArray = new Uint8Array(8)
-    crypto.getRandomValues(saltArray)
-    const dataView = new DataView(saltArray.buffer)
-    return dataView.getBigUint64(0, false) // big-endian
+export interface ClientRgbInvoiceResult {
+  invoice: string
+  blindedSeal: string
+  secret: string
+  txid: string
+  vout: number
+  source: 'existing' | 'split'
 }
 
-/**
- * Generate SHA-256 hash and return as hex string
- * @param input - String to hash
- * @returns Hex string of the hash
- */
+function normalizeAssetId(assetId: string): string {
+  const normalized = assetId.trim()
+  if (!normalized) {
+    throw new Error('An RGB asset contract ID is required.')
+  }
+  return normalized.replace(/^rgb:/i, '')
+}
+
+function createSecret64BitHex(): string {
+  const bytes = new Uint8Array(8)
+  crypto.getRandomValues(bytes)
+  return Array.from(bytes).map((value) => value.toString(16).padStart(2, '0')).join('')
+}
+
 async function sha256Hex(input: string): Promise<string> {
-    const encoder = new TextEncoder()
-    const data = encoder.encode(input)
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data)
-    const hashArray = Array.from(new Uint8Array(hashBuffer))
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+  const encoded = new TextEncoder().encode(input)
+  const hashBuffer = await crypto.subtle.digest('SHA-256', encoded)
+  return Array.from(new Uint8Array(hashBuffer)).map((value) => value.toString(16).padStart(2, '0')).join('')
 }
 
-/**
- * Generate blinded UTXO by hashing txid:vout:salt
- * @param txid - Transaction ID
- * @param vout - Output index
- * @param salt - Random salt
- * @returns Hex string of blinded UTXO
- */
-async function generateBlindedUtxo(
-    txid: string,
-    vout: number,
-    salt: bigint
-): Promise<string> {
-    const input = `${txid}:${vout}:${salt.toString()}`
-    return await sha256Hex(input)
+async function loadStoredSealSecrets(): Promise<StoredRgbSealSecret[]> {
+  const result = await getStorageData(['rgbSealSecrets'])
+  const raw = result.rgbSealSecrets
+
+  if (typeof raw !== 'string' || !raw.trim()) {
+    return []
+  }
+
+  try {
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed as StoredRgbSealSecret[] : []
+  } catch {
+    return []
+  }
 }
 
-/**
- * Generate RGB Invoice URN
- * 
- * Format: urn:rgb:<contractId>/<amount>@<blindedUtxo>?transport=<encodedProxyUrl>
- * 
- * @param txid - Bitcoin TXID of the seal UTXO
- * @param vout - Output index of the UTXO
- * @param contractId - RGB Contract ID (e.g., "rgb:2ae...")
- * @param amount - Amount of the asset (use 0 for open amount)
- * @param proxyUrl - RGB Proxy URL (e.g., "http://89.117.52.115:3000/json-rpc")
- * @returns Invoice URN string, blinded UTXO, and salt
- */
-export async function generateRgbInvoice(
-    txid: string,
-    vout: number,
-    contractId: string,
-    amount: number,
-    proxyUrl: string
-): Promise<RgbInvoiceResult> {
-    // Generate random salt for blinding
-    const salt = generateSalt()
-
-    // Generate blinded UTXO
-    const blindedUtxo = await generateBlindedUtxo(txid, vout, salt)
-
-    // Format the invoice according to LNP/BP standards
-    // Using RGB20 interface for fungible tokens
-    const invoice = `urn:rgb:${contractId}/${amount}@${blindedUtxo}?transport=${encodeURIComponent(proxyUrl)}`
-
-    return {
-        invoice,
-        blindedUtxo,
-        salt: salt.toString()
-    }
+async function persistSealSecret(entry: StoredRgbSealSecret): Promise<void> {
+  const existing = await loadStoredSealSecrets()
+  const next = [entry, ...existing].slice(0, 250)
+  await setStorageData({
+    rgbSealSecrets: JSON.stringify(next),
+  })
 }
 
-/**
- * Notify RGB Proxy about new blinded UTXO
- * 
- * @param proxyUrl - RGB Proxy URL
- * @param blindedUtxo - The blinded UTXO hash
- * @param contractId - RGB Contract ID
- * @param amount - Amount of the asset
- * @returns Response from RGB Proxy
- */
-export async function notifyRgbProxy(
-    proxyUrl: string,
-    blindedUtxo: string,
-    contractId: string,
-    amount: number
-): Promise<any> {
-    try {
-        const response = await fetch(proxyUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                jsonrpc: '2.0',
-                method: 'register_blinded_utxo',
-                params: {
-                    blindedUtxo,
-                    contractId,
-                    amount
-                },
-                id: Date.now()
-            })
-        })
+export async function generateBlindedSeal(txid: string, vout: number): Promise<GeneratedBlindedSeal> {
+  const secret = createSecret64BitHex()
+  const blindedSeal = await sha256Hex(`${txid}:${vout}:${secret}`)
 
-        if (!response.ok) {
-            throw new Error(`RGB Proxy responded with status: ${response.status}`)
-        }
-
-        const data = await response.json()
-
-        if (data.error) {
-            throw new Error(`RGB Proxy error: ${data.error.message || JSON.stringify(data.error)}`)
-        }
-
-        return data.result
-    } catch (error) {
-        console.error('Error notifying RGB Proxy:', error)
-        throw error
-    }
+  return {
+    blindedSeal,
+    secret,
+  }
 }
 
-/**
- * Validate RGB Proxy URL format
- * @param url - URL to validate
- * @returns true if valid
- */
+export async function createRgbInvoice(assetId: string, amount: number): Promise<ClientRgbInvoiceResult> {
+  const normalizedAssetId = normalizeAssetId(assetId)
+  const numericAmount = Number.isFinite(amount) && amount >= 0 ? Math.trunc(amount) : 0
+  const { txid, vout, source } = await findOrPrepareRgbTaprootUtxo()
+  const { blindedSeal, secret } = await generateBlindedSeal(txid, vout)
+  const { selectedNetwork } = await getStorageData(['selectedNetwork'])
+
+  await persistSealSecret({
+    id: `${txid}:${vout}:${secret}`,
+    createdAt: new Date().toISOString(),
+    network: selectedNetwork || 'mainnet',
+    assetId: `rgb:${normalizedAssetId}`,
+    amount: numericAmount,
+    txid,
+    vout,
+    secret,
+    blindedSeal,
+    source,
+  })
+
+  return {
+    invoice: `rgb:${normalizedAssetId}/RGB20/${numericAmount}+bc:utxob:${blindedSeal}?endpoints=${encodeURIComponent(RGB_TRANSPORT_ENDPOINT)}`,
+    blindedSeal,
+    secret,
+    txid,
+    vout,
+    source,
+  }
+}
+
 export function isValidRgbProxyUrl(url: string): boolean {
-    try {
-        const parsed = new URL(url)
-        return parsed.protocol === 'http:' || parsed.protocol === 'https:'
-    } catch {
-        return false
-    }
+  try {
+    const parsed = new URL(url)
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+  } catch {
+    return false
+  }
 }

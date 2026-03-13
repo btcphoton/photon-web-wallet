@@ -13,8 +13,8 @@ import { getStorageData, setStorageData, removeStorageData, getNetworkAddressKey
 import type { Asset } from './utils/storage'
 import { BACKEND_PROFILES, DEFAULT_BACKEND_PROFILE_ID, getBackendProfileById, getDefaultElectrumServer, getDefaultRgbProxy, type BackendProfileId } from './utils/backend-config'
 import { QRCodeSVG } from 'qrcode.react'
-import { generateRgbInvoice, notifyRgbProxy, isValidRgbProxyUrl } from './utils/rgb-invoice'
-import { checkLocalRgbNode, createRegtestRgbInvoice, fetchRegtestRgbBalance, fetchRegtestRgbRegistry } from './utils/rgb-wallet'
+import { createRgbInvoice } from './utils/rgb-invoice'
+import { fetchRegtestRgbBalance, fetchRegtestRgbRegistry } from './utils/rgb-wallet'
 import { LightningAnimation } from './components/LightningAnimation'
 import { fetchBtcActivities, type BitcoinActivity } from './utils/bitcoin-activities'
 
@@ -1471,32 +1471,14 @@ function App() {
     loadSwapBalance()
   }, [view, swapIconRotated])
 
-  // Check RGB wallet connectivity when RGB receive view opens
+  // Check client-side RGB receive readiness when RGB receive view opens
   useEffect(() => {
     const checkRgbConnection = async () => {
       if (view === 'receive-rgb') {
         try {
-          if (selectedNetwork === 'regtest') {
-            console.log('[RGB Receive] Checking regtest RGB backend health')
-            const localNodeOnline = await checkLocalRgbNode()
-            setRgbWalletOnline(localNodeOnline)
-            console.log('[RGB Receive] Regtest RGB backend health result:', localNodeOnline ? 'online' : 'offline')
-            return
-          }
-
-          // Check if RGB Proxy is configured
-          const networkSettings = await getStorageData(['rgbProxy'])
-          const rgbProxyUrl = networkSettings.rgbProxy as string
-
-          if (rgbProxyUrl && isValidRgbProxyUrl(rgbProxyUrl)) {
-            // RGB Proxy is configured - mark as online
-            setRgbWalletOnline(true)
-            console.log('RGB Proxy configured:', rgbProxyUrl)
-          } else {
-            // RGB Proxy not configured
-            setRgbWalletOnline(false)
-            console.log('RGB Proxy not configured')
-          }
+          const hasWalletContext = Boolean(mnemonic && coloredAddress)
+          setRgbWalletOnline(hasWalletContext)
+          console.log('[RGB Receive] Client-side RGB readiness:', hasWalletContext ? 'online' : 'offline')
         } catch (error) {
           console.error('[RGB Receive] Error checking RGB connection:', error)
           setRgbWalletOnline(false)
@@ -1504,7 +1486,7 @@ function App() {
       }
     }
     checkRgbConnection()
-  }, [view, selectedNetwork, backendProfileId])
+  }, [view, selectedNetwork, backendProfileId, mnemonic, coloredAddress])
 
   // Auto-calculate destination amount (source - 500 satoshi) and update when source changes
   useEffect(() => {
@@ -3088,7 +3070,7 @@ function App() {
                 className="btn-primary create-invoice-btn"
                 disabled={rgbGenerating || parseFloat(btcBalance) === 0}
                 onClick={async () => {
-                  console.log('[RGB Receive] Create Invoice clicked', {
+                  console.log('[RGB Receive] Generate Invoice clicked', {
                     network: selectedNetwork,
                     assetKey: rgbAsset || null,
                     openAmount,
@@ -3099,101 +3081,19 @@ function App() {
                   setRgbError('')
 
                   try {
-                    if (selectedNetwork === 'regtest') {
-                      console.log('[RGB Receive] Using Photon backend regtest invoice flow')
-                      const rgbBackendOnline = await checkLocalRgbNode()
-                      setRgbWalletOnline(rgbBackendOnline)
-                      console.log('[RGB Receive] Backend health before invoice request:', rgbBackendOnline)
-
-                      if (!rgbBackendOnline) {
-                        console.warn('[RGB Receive] Aborting invoice creation because backend is offline')
-                        setRgbError('Photon RGB backend is unavailable. Please try again in a moment.')
-                        setRgbGenerating(false)
-                        return
-                      }
-
-                      const contractSettingsKey = getNetworkContractsKey(selectedNetwork)
-                      const contractSettings = await getStorageData([contractSettingsKey])
-                      const storedContractMapRaw = contractSettings[contractSettingsKey]
-                      const storedContractMap =
-                        typeof storedContractMapRaw === 'string'
-                          ? JSON.parse(storedContractMapRaw) as Record<string, string>
-                          : {}
-
-                      const assetId = rgbAsset ? storedContractMap[rgbAsset] : undefined
-                      console.log('[RGB Receive] Resolved regtest asset mapping', {
-                        assetKey: rgbAsset || null,
-                        assetId: assetId || null,
-                      })
-
-                      if (rgbAsset && !assetId) {
-                        console.warn('[RGB Receive] Selected asset has no registered regtest contract ID')
-                        setRgbError('Selected asset is not registered with a regtest RGB contract ID.')
-                        setRgbGenerating(false)
-                        return
-                      }
-
-                      const invoiceAmount = openAmount ? undefined : (parseFloat(rgbAmount) || 0)
-                      console.log('[RGB Receive] Prepared invoice request', {
-                        assetId: assetId || null,
-                        invoiceAmount: invoiceAmount ?? null,
-                        openAmount,
-                      })
-                      if (!openAmount && (!invoiceAmount || invoiceAmount <= 0)) {
-                        console.warn('[RGB Receive] Invalid amount supplied for fixed-amount invoice')
-                        setRgbError('Enter a valid RGB amount or enable Open Amount.')
-                        setRgbGenerating(false)
-                        return
-                      }
-
-                      const invoiceResult = await createRegtestRgbInvoice({
-                        assetId,
-                        amount: invoiceAmount,
-                        openAmount,
-                      })
-                      console.log('[RGB Receive] Invoice created successfully', {
-                        recipientId: invoiceResult.recipient_id,
-                        batchTransferIdx: invoiceResult.batch_transfer_idx,
-                        expirationTimestamp: invoiceResult.expiration_timestamp ?? null,
-                      })
-
-                      setRgbWalletOnline(true)
-                      setRgbInvoice(invoiceResult.invoice)
-                      setRgbInvoiceStep('invoice')
-                      return
-                    }
-
-                    // 1. Check RGB Proxy configuration
-                    const networkSettings = await getStorageData(['rgbProxy'])
-                    const rgbProxyUrl = networkSettings.rgbProxy as string
-
-                    if (!rgbProxyUrl || !isValidRgbProxyUrl(rgbProxyUrl)) {
-                      setRgbError('RGB Proxy not configured. Please configure it in Network Settings.')
-                      setRgbGenerating(false)
-                      return
-                    }
-
-                    // 2. Mark wallet as online
-                    setRgbWalletOnline(true)
-
-                    // 3. Fetch available UTXOs from ICP canister
-                    const canisterNetwork = mapNetworkToCanister(selectedNetwork)
-                    const utxos = await getUtxos(walletAddress, canisterNetwork)
-
-                    if (!utxos || utxos.length === 0) {
-                      setRgbError('No available UTXOs. Please ensure your wallet has Bitcoin funds.')
+                    if (!mnemonic || !coloredAddress) {
                       setRgbWalletOnline(false)
+                      setRgbError('Unlock the wallet and wait for the colored Taproot address before generating an RGB invoice.')
                       setRgbGenerating(false)
                       return
                     }
 
-                    // 4. Select first UTXO as seal
-                    const sealUtxo = utxos[0]
-                    console.log('Selected UTXO for RGB seal:', sealUtxo)
+                    if (!rgbAsset) {
+                      setRgbError('Select an RGB asset before generating a client-side invoice.')
+                      setRgbGenerating(false)
+                      return
+                    }
 
-                    // 5. Get contract ID for selected asset
-                    // Prefer the per-network storage map so regtest assets can be registered
-                    // without editing the bundle.
                     const contractsKey = getNetworkContractsKey(selectedNetwork)
                     const contractSettings = await getStorageData([contractsKey])
                     const storedContractMapRaw = contractSettings[contractsKey]
@@ -3202,57 +3102,53 @@ function App() {
                         ? JSON.parse(storedContractMapRaw) as Record<string, string>
                         : {}
 
-                    // Backward-compatible examples used when no storage mapping is present.
-                    const defaultContractIds: Record<string, string> = {
-                      puliyal: 'rgb:2ae8d9f1b3c45678901234567890abcd',
-                      bitcoin: 'rgb:1234567890abcdef1234567890abcdef',
-                      xiao: 'rgb:fedcba0987654321fedcba0987654321',
+                    const fallbackImportableAsset = importableAssets.find((candidate) => candidate.asset.id === rgbAsset)
+                    const contractId =
+                      storedContractMap[rgbAsset] ||
+                      fallbackImportableAsset?.contracts?.[selectedNetwork] ||
+                      ''
+
+                    console.log('[RGB Receive] Resolved local asset mapping', {
+                      assetKey: rgbAsset,
+                      contractId: contractId || null,
+                    })
+
+                    if (!contractId) {
+                      setRgbError('Selected asset is not registered with an RGB contract ID in this wallet.')
+                      setRgbGenerating(false)
+                      return
                     }
 
-                    const contractId = rgbAsset
-                      ? (storedContractMap[rgbAsset] || defaultContractIds[rgbAsset] || 'rgb:default00000000000000000000')
-                      : 'rgb:default00000000000000000000' // Generic contract for "any asset"
+                    const invoiceAmount = openAmount ? 0 : Math.floor(parseFloat(rgbAmount) || 0)
+                    if (!openAmount && invoiceAmount <= 0) {
+                      console.warn('[RGB Receive] Invalid amount supplied for fixed-amount invoice')
+                      setRgbError('Enter a valid RGB amount or enable Open Amount.')
+                      setRgbGenerating(false)
+                      return
+                    }
 
-                    // 6. Determine amount (0 for open amount)
-                    const invoiceAmount = openAmount ? 0 : (parseFloat(rgbAmount) || 0)
-
-                    // 7. Generate RGB invoice
-                    const invoiceResult = await generateRgbInvoice(
-                      sealUtxo.txid,
-                      sealUtxo.vout,
+                    console.log('[RGB Receive] Prepared client-side invoice request', {
                       contractId,
                       invoiceAmount,
-                      rgbProxyUrl
-                    )
+                      openAmount,
+                    })
 
-                    console.log('Generated RGB Invoice:', invoiceResult)
+                    const invoiceResult = await createRgbInvoice(contractId, invoiceAmount)
+                    console.log('[RGB Receive] Client-side invoice created successfully', {
+                      txid: invoiceResult.txid,
+                      vout: invoiceResult.vout,
+                      source: invoiceResult.source,
+                    })
 
-                    // 8. Notify RGB Proxy about blinded UTXO
-                    try {
-                      await notifyRgbProxy(
-                        rgbProxyUrl,
-                        invoiceResult.blindedUtxo,
-                        contractId,
-                        invoiceAmount
-                      )
-                      console.log('RGB Proxy notified successfully')
-                    } catch (proxyError) {
-                      console.warn('RGB Proxy notification failed:', proxyError)
-                      // Continue anyway - invoice is still valid
-                    }
-
-                    // 9. Display invoice to user
+                    setRgbWalletOnline(true)
                     setRgbInvoice(invoiceResult.invoice)
                     setRgbInvoiceStep('invoice')
                   } catch (error) {
                     console.error('[RGB Receive] Error generating RGB invoice:', error)
-                    const backendStillOnline =
-                      selectedNetwork === 'regtest' ? await checkLocalRgbNode() : false
-                    console.log('[RGB Receive] Backend health after invoice failure:', backendStillOnline)
-                    setRgbWalletOnline(backendStillOnline)
+                    setRgbWalletOnline(Boolean(mnemonic && coloredAddress))
                     setRgbError(`Failed to generate invoice: ${error instanceof Error ? error.message : 'Unknown error'}`)
                   } finally {
-                    console.log('[RGB Receive] Create Invoice flow complete')
+                    console.log('[RGB Receive] Generate Invoice flow complete')
                     setRgbGenerating(false)
                   }
                 }}
@@ -3263,7 +3159,7 @@ function App() {
                     Generating Invoice...
                   </>
                 ) : (
-                  'Create Invoice'
+                  'Generate Invoice'
                 )}
               </button>
             </>
