@@ -236,6 +236,7 @@ function App() {
   const [loadingUtxos, setLoadingUtxos] = useState<boolean>(false)
   const [bitcoinUtxos, setBitcoinUtxos] = useState<UtxoWithRgbStatus[]>([])
   const [rgbUtxos, setRgbUtxos] = useState<UtxoWithRgbStatus[]>([])
+  const [spendableVanillaUtxos, setSpendableVanillaUtxos] = useState<UTXO[]>([])
   const [utxoTab, setUtxoTab] = useState<'unoccupied' | 'occupied' | 'unlockable'>('unoccupied')
   const [rgbClassificationError, setRgbClassificationError] = useState<string>('')
 
@@ -1783,7 +1784,7 @@ function App() {
         // Fetch UTXOs on-demand if not already loaded
         let vanillaUtxos: UTXO[] = [];
 
-        if (bitcoinUtxos.length === 0) {
+        if (spendableVanillaUtxos.length === 0) {
           console.log('[Send] No UTXOs in state, fetching fresh via Discovery Scan...')
           const effectiveIndex = Math.max(addressIndex, changeIndex);
           const { utxos: discoveryUtxos } = await performDiscoveryScan(mnemonic, selectedNetwork, effectiveIndex);
@@ -1802,19 +1803,8 @@ function App() {
               index: u.index as number
             }));
         } else {
-          // Use already-loaded UTXOs from state
-          vanillaUtxos = bitcoinUtxos
-            .filter(u => u.account === 'vanilla' && !u.isLocked)
-            .map(u => ({
-              txid: u.txid,
-              vout: u.vout,
-              value: Number(u.value),
-              address: u.address,
-              derivationPath: u.derivationPath,
-              account: u.account as 'vanilla',
-              chain: u.chain as 0 | 1,
-              index: u.index as number
-            }));
+          // Use already-loaded Vanilla UTXOs from state
+          vanillaUtxos = spendableVanillaUtxos;
         }
 
         if (vanillaUtxos.length === 0) {
@@ -2096,11 +2086,27 @@ function App() {
           ...u,
           value: BigInt(u.value)
         }))
+
+        setSpendableVanillaUtxos(
+          discoveryUtxos
+            .filter((u) => u.account === 'vanilla')
+            .map((u) => ({
+              txid: u.txid,
+              vout: u.vout,
+              value: u.value,
+              address: u.address,
+              derivationPath: u.derivationPath,
+              account: u.account as 'vanilla',
+              chain: u.chain as 0 | 1,
+              index: u.index as number
+            }))
+        )
       } else {
         // ICP mode: Fetch from canister
         console.log('Fetching UTXOs from ICP canister')
         const canisterNetwork = mapNetworkToCanister(selectedNetwork)
         utxos = await getUtxos(walletAddress, canisterNetwork)
+        setSpendableVanillaUtxos([])
       }
 
       console.log('UTXOs received:', utxos?.length || 0)
@@ -2113,27 +2119,46 @@ function App() {
         const storageData = await getStorageData(['rgbProxy'])
         const rgbProxyUrl = (storageData.rgbProxy as string) || 'http://89.117.52.115:3000/json-rpc'
 
+        const rgbDisplayAddress = addressGenerationMethod === 'bitcoin' ? utxoHolderAddress : walletAddress
+
+        if (!rgbDisplayAddress) {
+          throw new Error('RGB UTXO holder address is not available.')
+        }
+
+        const holderCoinType = selectedNetwork === 'mainnet' ? 0 : 1
+        const holderDerivationPath = `m/86'/${holderCoinType}'/0'/100/0`
+        const holderUtxos = await fetchUTXOsFromBlockchain(rgbDisplayAddress, selectedNetwork)
+        const displayUtxos = holderUtxos.map((u) => ({
+          txid: u.txid,
+          vout: u.vout,
+          value: BigInt(u.value),
+          address: rgbDisplayAddress,
+          derivationPath: holderDerivationPath,
+          account: 'vanilla' as const,
+          chain: 0 as const,
+          index: 0,
+        }))
+
         // Fetch RGB UTXOs directly from the proxy
-        const rgbOccupiedUtxos = await fetchRgbOccupiedUtxos(walletAddress, rgbProxyUrl, selectedNetwork)
+        const rgbOccupiedUtxos = await fetchRgbOccupiedUtxos(rgbDisplayAddress, rgbProxyUrl, selectedNetwork)
 
         console.log(`[RGB] Found ${rgbOccupiedUtxos.length} RGB-occupied UTXOs`)
 
         // For Bitcoin UTXOs (unoccupied), filter out the occupied ones
-        if (utxos && utxos.length > 0) {
+        if (displayUtxos.length > 0) {
           const occupiedOutpoints = new Set(
             rgbOccupiedUtxos.map(u => `${u.txid}:${u.vout}`)
           )
 
           // Filter and tag unoccupied UTXOs
-          const unoccupiedUtxos = utxos
+          const unoccupiedUtxos = displayUtxos
             .filter(u => !occupiedOutpoints.has(`${u.txid}:${u.vout}`))
             .map(u => ({
               ...u,
               address: u.address,
               derivationPath: u.derivationPath,
               isOccupied: false,
-              // Isolation Wall: Tag as locked if it belongs to the Colored account
-              isLocked: u.account === 'colored'
+              isLocked: false
             }))
 
           setBitcoinUtxos(unoccupiedUtxos)
@@ -2141,7 +2166,7 @@ function App() {
           // Convert RGB UTXOs to the expected format
           const occupiedUtxos = rgbOccupiedUtxos.map(u => {
             // Find the original UTXO to get account info
-            const originalUtxo = utxos!.find(utxo => utxo.txid === u.txid && utxo.vout === u.vout);
+            const originalUtxo = displayUtxos.find(utxo => utxo.txid === u.txid && utxo.vout === u.vout);
             return {
               txid: u.txid,
               vout: u.vout,
@@ -2150,8 +2175,13 @@ function App() {
               derivationPath: originalUtxo?.derivationPath || '',
               isOccupied: true,
               isLocked: true, // RGB-occupied UTXOs are always locked
-              rgbAssets: u.assets,
-              account: originalUtxo?.account || 'colored'
+              rgbAllocations: u.assets.map((asset) => ({
+                assetId: asset.assetId,
+                amount: BigInt(asset.amount),
+                assetName: asset.name,
+                ticker: asset.ticker,
+              })),
+              account: (originalUtxo?.account || 'colored') as 'vanilla' | 'colored'
             };
           })
 
@@ -2167,11 +2197,20 @@ function App() {
         setRgbClassificationError('RGB proxy unavailable. Showing all UTXOs as unoccupied.')
 
         // Fallback: treat all as unoccupied if RGB fetcher fails
-        if (utxos && utxos.length > 0) {
-          setBitcoinUtxos(utxos.map(u => ({
-            ...u,
-            address: u.address,
-            derivationPath: u.derivationPath,
+        const rgbDisplayAddress = addressGenerationMethod === 'bitcoin' ? utxoHolderAddress : walletAddress
+        if (rgbDisplayAddress) {
+          const holderCoinType = selectedNetwork === 'mainnet' ? 0 : 1
+          const holderDerivationPath = `m/86'/${holderCoinType}'/0'/100/0`
+          const holderUtxos = await fetchUTXOsFromBlockchain(rgbDisplayAddress, selectedNetwork)
+          setBitcoinUtxos(holderUtxos.map(u => ({
+            txid: u.txid,
+            vout: u.vout,
+            value: BigInt(u.value),
+            address: rgbDisplayAddress,
+            derivationPath: holderDerivationPath,
+            account: 'vanilla' as const,
+            chain: 0 as const,
+            index: 0,
             isOccupied: false
           })))
           setRgbUtxos([])
@@ -4742,18 +4781,21 @@ function App() {
                     const amountSats = BigInt(Math.floor(amountBtc * 100000000));
 
                     // Use all discovered Vanilla UTXOs for spending
-                    const vanillaUtxos = bitcoinUtxos
-                      .filter(u => u.account === 'vanilla' && !u.isLocked)
-                      .map(u => ({
-                        txid: u.txid,
-                        vout: u.vout,
-                        value: Number(u.value),
-                        address: u.address,
-                        derivationPath: u.derivationPath,
-                        account: u.account as 'vanilla',
-                        chain: u.chain as 0 | 1,
-                        index: u.index as number
-                      }));
+                    const vanillaUtxos =
+                      spendableVanillaUtxos.length > 0
+                        ? spendableVanillaUtxos
+                        : (await performDiscoveryScan(mnemonic, selectedNetwork, Math.max(addressIndex, changeIndex))).utxos
+                            .filter(u => u.account === 'vanilla')
+                            .map(u => ({
+                              txid: u.txid,
+                              vout: u.vout,
+                              value: u.value,
+                              address: u.address,
+                              derivationPath: u.derivationPath,
+                              account: u.account as 'vanilla',
+                              chain: u.chain as 0 | 1,
+                              index: u.index as number
+                            }));
 
                     if (vanillaUtxos.length === 0) {
                       throw new Error('No spendable Vanilla UTXOs available');
