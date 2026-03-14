@@ -53,6 +53,13 @@ const buildAssetIdFromTicker = (ticker: string) => {
   return ticker.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
 }
 
+const formatBtcAmount = (sats: number | string | bigint, decimals = 6) => {
+  const btc = Number(sats) / 100000000
+  if (Number.isNaN(btc)) return '0'
+  const fixed = btc.toFixed(decimals)
+  return fixed.replace(/\.0+$|0+$/g, '').replace(/\.$/, '')
+}
+
 // Generate 5 random unique positions from 1-12
 const getRandomPositions = (): number[] => {
   const positions: number[] = []
@@ -4675,7 +4682,7 @@ function App() {
                                 </div>
                                 <div>
                                   <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.85rem' }}>{utxo.isLocked ? 'Reserved for RGB' : 'Available for RGB Binding'}</span>
-                                  <div style={{ color: '#fff', fontSize: '0.95rem', marginTop: '0.25rem', fontWeight: 600 }}>{(Number(utxo.value) / 100000000).toFixed(8)} BTC</div>
+                                  <div style={{ color: '#fff', fontSize: '0.95rem', marginTop: '0.25rem', fontWeight: 600 }}>{formatBtcAmount(utxo.value)} BTC</div>
                                 </div>
                               </div>
                             ))}
@@ -4724,7 +4731,7 @@ function App() {
                                 </div>
                                 <div style={{ marginBottom: '0.75rem' }}>
                                   <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.85rem' }}>Bitcoin Value</span>
-                                  <div style={{ color: '#fff', fontSize: '0.95rem', marginTop: '0.25rem', fontWeight: 600 }}>{(Number(utxo.value) / 100000000).toFixed(8)} BTC</div>
+                                  <div style={{ color: '#fff', fontSize: '0.95rem', marginTop: '0.25rem', fontWeight: 600 }}>{formatBtcAmount(utxo.value)} BTC</div>
                                 </div>
                                 {utxo.rgbAllocations && utxo.rgbAllocations.length > 0 && (
                                   <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.1)', paddingTop: '0.75rem' }}>
@@ -4776,7 +4783,7 @@ function App() {
                                 </div>
                                 <div style={{ marginBottom: '1rem' }}>
                                   <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.85rem' }}>Available UTXO balance</span>
-                                  <div style={{ color: '#fff', fontSize: '0.95rem', marginTop: '0.25rem', fontWeight: 600 }}>{(Number(utxo.value) / 100000000).toFixed(4)} BTC</div>
+                                  <div style={{ color: '#fff', fontSize: '0.95rem', marginTop: '0.25rem', fontWeight: 600 }}>{formatBtcAmount(utxo.value)} BTC</div>
                                 </div>
                                 <button
                                   type="button"
