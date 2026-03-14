@@ -19,7 +19,7 @@ import { LightningAnimation } from './components/LightningAnimation'
 import { fetchBtcActivities, type BitcoinActivity } from './utils/bitcoin-activities'
 
 
-type View = 'welcome' | 'unlock' | 'lock' | 'forgot' | 'create' | 'verify' | 'password' | 'restore' | 'dashboard' | 'receive' | 'receive-btc' | 'receive-rgb' | 'convert-lightning' | 'add-assets' | 'settings' | 'user-settings' | 'auto-lock-settings' | 'network-settings' | 'swap' | 'send' | 'send-amount' | 'send-confirm' | 'send-success' | 'utxos' | 'create-rgb-utxo' | 'create-utxo-confirm' | 'unlock-rgb-utxo' | 'unlock-utxo-confirm' | 'faucet' | 'error-logs'
+type View = 'welcome' | 'unlock' | 'lock' | 'forgot' | 'create' | 'verify' | 'password' | 'restore' | 'dashboard' | 'receive' | 'receive-btc' | 'receive-rgb' | 'convert-lightning' | 'add-assets' | 'settings' | 'user-settings' | 'auto-lock-settings' | 'network-settings' | 'swap' | 'send' | 'send-amount' | 'send-confirm' | 'send-success' | 'utxos' | 'create-rgb-utxo' | 'create-utxo-confirm' | 'unlock-rgb-utxo' | 'unlock-utxo-confirm' | 'utxo-action-success' | 'faucet' | 'error-logs'
 type Tab = 'assets' | 'activities'
 type Network = 'mainnet' | 'testnet3' | 'testnet4' | 'regtest'
 
@@ -242,6 +242,8 @@ function App() {
   const [sendLoadingFees, setSendLoadingFees] = useState<boolean>(false)
   const [sendNetworkFee, setSendNetworkFee] = useState<string>('0')
   const [sendTxId, setSendTxId] = useState<string>('')
+  const [utxoActionTxId, setUtxoActionTxId] = useState<string>('')
+  const [utxoActionSuccessLabel, setUtxoActionSuccessLabel] = useState<string>('Transaction complete')
   const [sendProcessing, setSendProcessing] = useState<boolean>(false)
   const [sendError, setSendError] = useState<string>('')
 
@@ -355,8 +357,10 @@ function App() {
         selectedNetwork
       )
 
-      await broadcastTransaction(txHex, selectedNetwork)
-      setView('utxos')
+      const txid = await broadcastTransaction(txHex, selectedNetwork)
+      setUtxoActionTxId(txid)
+      setUtxoActionSuccessLabel('RGB UTXO unlocked')
+      setView('utxo-action-success')
       setShowUnlockUtxoModal(false)
       setSelectedUnlockUtxo(null)
       setUnlockUtxoError('')
@@ -5049,6 +5053,43 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
         </div>
       )}
 
+      {view === 'utxo-action-success' && (
+        <div className="send-container">
+          <div className="send-header">
+            <h2 className="send-title">{utxoActionSuccessLabel}</h2>
+          </div>
+
+          <div className="send-content" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', paddingTop: '3rem' }}>
+            <div style={{ fontSize: '4rem', lineHeight: 1, marginBottom: '1rem' }}>✅</div>
+
+            <p style={{ fontSize: '1rem', color: '#111827', textAlign: 'center', marginBottom: '2rem', maxWidth: '300px', fontWeight: '500' }}>
+              Transaction sent successfully.
+            </p>
+
+            {utxoActionTxId && (
+              <div style={{ backgroundColor: '#f3f4f6', borderRadius: '8px', padding: '1rem', marginBottom: '2rem', maxWidth: '320px' }}>
+                <p style={{ fontSize: '0.7rem', color: '#6b7280', marginBottom: '0.5rem' }}>Transaction ID:</p>
+                <p style={{ fontSize: '0.75rem', color: '#111827', wordBreak: 'break-all', fontFamily: 'monospace' }}>
+                  {utxoActionTxId}
+                </p>
+              </div>
+            )}
+
+            <button
+              className="send-next-btn"
+              onClick={() => {
+                setUtxoActionTxId('')
+                setUtxoActionSuccessLabel('Transaction complete')
+                setUnlockUtxoError('')
+                setView('utxos')
+              }}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Create RGB UTXO View */}
       {
         view === 'create-rgb-utxo' && (
@@ -5287,8 +5328,10 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                           await mineRegtestBlocks(1)
                         }
 
-                        // Refresh UTXOs and return to list
                         await handleViewUtxos();
+                        setUtxoActionTxId(txid)
+                        setUtxoActionSuccessLabel('RGB UTXO created')
+                        setView('utxo-action-success')
                       } catch (error: any) {
                         console.error('Failed to create UTXO:', error);
                         if (String(error?.message || '').includes('txn-mempool-conflict')) {
