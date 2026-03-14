@@ -14,7 +14,7 @@ import type { Asset } from './utils/storage'
 import { BACKEND_PROFILES, DEFAULT_BACKEND_PROFILE_ID, getBackendProfileById, getDefaultElectrumServer, getDefaultRgbProxy, type BackendProfileId } from './utils/backend-config'
 import { QRCodeSVG } from 'qrcode.react'
 import { createRgbInvoice } from './utils/rgb-invoice'
-import { createRegtestRgbInvoice, fetchRegtestRgbBalance, fetchRegtestRgbRegistry, mineRegtestBlocks, registerRgbInvoiceSecret } from './utils/rgb-wallet'
+import { createRegtestRgbInvoice, fetchRegtestRgbBalance, fetchRegtestRgbRegistry, fetchRegtestRgbTransfers, mineRegtestBlocks, registerRgbInvoiceSecret } from './utils/rgb-wallet'
 import { LightningAnimation } from './components/LightningAnimation'
 import { fetchBtcActivities, type BitcoinActivity } from './utils/bitcoin-activities'
 
@@ -2407,8 +2407,131 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
           index: 0,
         }))
 
-        // Fetch RGB UTXOs directly from the proxy
-        const rgbOccupiedUtxos = await fetchRgbOccupiedUtxos(rgbDisplayAddress, rgbProxyUrl, selectedNetwork)
+        let rgbOccupiedUtxos: Array<{
+          txid: string
+          vout: number
+          btcAmount: number
+          assets: Array<{
+            assetId: string
+            name: string
+            amount: number
+            ticker: string
+          }>
+        }> = []
+
+        if (selectedNetwork === 'regtest') {
+          const contractsKey = getNetworkContractsKey(selectedNetwork)
+          const contractSettings = await getStorageData([contractsKey])
+          const storedContractMapRaw = contractSettings[contractsKey]
+          const storedContractMap =
+            typeof storedContractMapRaw === 'string'
+              ? JSON.parse(storedContractMapRaw) as Record<string, string>
+              : {}
+
+          const contractIds = Array.from(
+            new Set(
+              Object.values(storedContractMap).filter(
+                (value): value is string => typeof value === 'string' && value.trim().length > 0
+              )
+            )
+          )
+
+          const assetMetadataByContractId = new Map(
+            assets
+              .map((asset) => {
+                const contractId = storedContractMap[asset.id]
+                if (!contractId) return null
+                return [
+                  contractId,
+                  {
+                    name: asset.name,
+                    ticker: asset.unit,
+                  },
+                ] as const
+              })
+              .filter((entry): entry is readonly [string, { name: string; ticker: string }] => entry !== null)
+          )
+
+          const occupiedOutpointMap = new Map<string, Array<{
+            assetId: string
+            name: string
+            amount: number
+            ticker: string
+          }>>()
+
+          if (contractIds.length > 0) {
+            const walletKey = getRegtestWalletKey()
+            const transferResponses = await Promise.all(
+              contractIds.map(async (assetId) => {
+                try {
+                  return await fetchRegtestRgbTransfers({ assetId, walletKey })
+                } catch (transferError) {
+                  console.error(`[RGB] Failed to fetch wallet-scoped transfers for ${assetId}:`, transferError)
+                  return null
+                }
+              })
+            )
+
+            for (const transferResponse of transferResponses) {
+              if (!transferResponse) continue
+
+              const assetMeta = assetMetadataByContractId.get(transferResponse.assetId)
+              for (const transfer of transferResponse.transfers) {
+                if (transfer.kind !== 'ReceiveBlind' || !transfer.receive_utxo) {
+                  continue
+                }
+
+                if (!['WaitingConfirmations', 'Settled'].includes(transfer.status)) {
+                  continue
+                }
+
+                const [txid, voutRaw] = transfer.receive_utxo.split(':')
+                const vout = Number(voutRaw)
+                if (!txid || Number.isNaN(vout)) {
+                  continue
+                }
+
+                const settledAssignment = Array.isArray(transfer.assignments)
+                  ? transfer.assignments.find((assignment) => assignment.type === 'Fungible')
+                  : null
+                const requestedAssignment = transfer.requested_assignment?.type === 'Fungible'
+                  ? transfer.requested_assignment
+                  : null
+                const amount = Number(
+                  settledAssignment?.value ??
+                  requestedAssignment?.value ??
+                  0
+                )
+
+                if (!Number.isFinite(amount) || amount <= 0) {
+                  continue
+                }
+
+                const outpoint = `${txid}:${vout}`
+                const existingAllocations = occupiedOutpointMap.get(outpoint) || []
+                existingAllocations.push({
+                  assetId: transferResponse.assetId,
+                  name: assetMeta?.name || transferResponse.assetId,
+                  amount,
+                  ticker: assetMeta?.ticker || 'RGB',
+                })
+                occupiedOutpointMap.set(outpoint, existingAllocations)
+              }
+            }
+          }
+
+          rgbOccupiedUtxos = displayUtxos
+            .filter((utxo) => occupiedOutpointMap.has(`${utxo.txid}:${utxo.vout}`))
+            .map((utxo) => ({
+              txid: utxo.txid,
+              vout: utxo.vout,
+              btcAmount: Number(utxo.value),
+              assets: occupiedOutpointMap.get(`${utxo.txid}:${utxo.vout}`) || [],
+            }))
+        } else {
+          // Non-regtest networks still use proxy-based classification.
+          rgbOccupiedUtxos = await fetchRgbOccupiedUtxos(rgbDisplayAddress, rgbProxyUrl, selectedNetwork)
+        }
 
         console.log(`[RGB] Found ${rgbOccupiedUtxos.length} RGB-occupied UTXOs`)
 

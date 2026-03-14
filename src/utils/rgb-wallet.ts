@@ -26,6 +26,32 @@ export interface RgbWalletBalanceResponse {
     }
 }
 
+export interface RgbWalletTransfer {
+    idx: number
+    status: string
+    kind: string
+    txid?: string | null
+    recipient_id?: string | null
+    receive_utxo?: string | null
+    change_utxo?: string | null
+    assignments?: Array<{
+        type: string
+        value: number | string
+    }>
+    requested_assignment?: {
+        type: string
+        value: number | string
+    } | null
+}
+
+export interface RgbWalletTransfersResponse {
+    ok: true
+    walletKey: string
+    assetId: string
+    balance: RgbWalletBalanceResponse['balance']
+    transfers: RgbWalletTransfer[]
+}
+
 export interface RgbInvoiceSecretRegistrationResponse {
     ok: true
     walletKey: string
@@ -179,6 +205,40 @@ export async function fetchRegtestRgbBalance(params: {
     }
 
     return data as RgbWalletBalanceResponse
+}
+
+export async function fetchRegtestRgbTransfers(params: {
+    assetId: string
+    walletKey?: string
+}): Promise<RgbWalletTransfersResponse> {
+    const apiBase = await getRegtestRgbApiBase()
+    const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+    }
+
+    if (params.walletKey) {
+        headers['x-photon-wallet-key'] = params.walletKey
+    }
+
+    const response = await fetch(`${apiBase}/rgb/transfers`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+            assetId: params.assetId,
+        }),
+    })
+
+    if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(errorText || `RGB transfer lookup failed with status ${response.status}`)
+    }
+
+    const data = await response.json()
+    if (!data.ok) {
+        throw new Error(data.error || 'RGB transfer lookup failed')
+    }
+
+    return data as RgbWalletTransfersResponse
 }
 
 export async function fetchRegtestRgbRegistry(): Promise<RgbRegistryAsset[]> {
