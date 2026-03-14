@@ -14,7 +14,7 @@ import type { Asset } from './utils/storage'
 import { BACKEND_PROFILES, DEFAULT_BACKEND_PROFILE_ID, getBackendProfileById, getDefaultElectrumServer, getDefaultRgbProxy, type BackendProfileId } from './utils/backend-config'
 import { QRCodeSVG } from 'qrcode.react'
 import { createRgbInvoice } from './utils/rgb-invoice'
-import { createRegtestRgbInvoice, fetchRegtestRgbBalance, fetchRegtestRgbRegistry, fetchRegtestRgbTransfers, mineRegtestBlocks, registerRgbInvoiceSecret } from './utils/rgb-wallet'
+import { createRegtestRgbInvoice, decodeRegtestRgbInvoice, fetchRegtestRgbBalance, fetchRegtestRgbRegistry, fetchRegtestRgbTransfers, mineRegtestBlocks, registerRgbInvoiceSecret, sendRegtestRgbInvoice } from './utils/rgb-wallet'
 import { LightningAnimation } from './components/LightningAnimation'
 import { fetchBtcActivities, type BitcoinActivity } from './utils/bitcoin-activities'
 
@@ -304,6 +304,9 @@ function App() {
   const [swapSuccess, setSwapSuccess] = useState<string>('')
   const [sendReceiverAddress, setSendReceiverAddress] = useState<string>('')
   const [sendAmount, setSendAmount] = useState<string>('')
+  const [sendMode, setSendMode] = useState<'btc' | 'rgb'>('btc')
+  const [sendRgbAssetId, setSendRgbAssetId] = useState<string>('')
+  const [sendRgbAssetLabel, setSendRgbAssetLabel] = useState<string>('RGB Asset')
   const [maxSendableAmount, setMaxSendableAmount] = useState<string>('0.00000000')
   const [sendFeeOption, setSendFeeOption] = useState<'slow' | 'avg' | 'fast' | 'custom'>('fast')
   const [sendUserBalance, setSendUserBalance] = useState<string>('0.00000000')
@@ -491,6 +494,29 @@ function App() {
   const getBackendWalletKey = (network: Network) => {
     const stableId = principalId || walletAddress || coloredAddress || 'anonymous'
     return `extension-${stableId}-${network}`
+  }
+
+  const resolveAssetDisplayMeta = async (contractId: string, network: Network) => {
+    const contractsKey = getNetworkContractsKey(network)
+    const assetsKey = getNetworkAssetsKey(network)
+    const storedData = await getStorageData([contractsKey, assetsKey])
+    const storedContractMapRaw = storedData[contractsKey]
+    const storedAssetsRaw = storedData[assetsKey]
+
+    const storedContractMap =
+      typeof storedContractMapRaw === 'string'
+        ? JSON.parse(storedContractMapRaw) as Record<string, string>
+        : {}
+    const storedAssets =
+      typeof storedAssetsRaw === 'string'
+        ? JSON.parse(storedAssetsRaw) as Asset[]
+        : []
+
+    const matchingAsset = storedAssets.find((asset) => storedContractMap[asset.id] === contractId)
+    return {
+      label: matchingAsset?.name || contractId,
+      unit: matchingAsset?.unit || 'RGB',
+    }
   }
 
   const syncRegtestAssetBalances = async (network: Network, sourceAssets: Asset[]) => {
@@ -1847,6 +1873,10 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
 
   // Calculate maximum sendable amount (balance - fee)
   const handleMaxAmount = async () => {
+    if (sendMode === 'rgb') {
+      return
+    }
+
     if (!mnemonic || !walletAddress) {
       setSendAmount(btcBalance)
       return
@@ -1935,14 +1965,23 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
         } finally {
           setSendLoadingFees(false)
         }
+
+        if (sendMode === 'rgb') {
+          setMaxSendableAmount(sendAmount || '0')
+        }
       }
     }
     loadSendBalance()
-  }, [view, mnemonic, selectedNetwork])
+  }, [view, mnemonic, selectedNetwork, sendMode, sendAmount])
 
   // Calculate max sendable amount whenever relevant state changes
   useEffect(() => {
     const calculateMax = async () => {
+      if (view === 'send-amount' && sendMode === 'rgb') {
+        setMaxSendableAmount(sendAmount || '0')
+        return
+      }
+
       if (view === 'send-amount' && mnemonic && walletAddress) {
         try {
           const feeRateMap = { slow: 0, avg: 1, fast: 2, custom: 2 }
@@ -1970,12 +2009,65 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
       }
     }
     calculateMax()
-  }, [view, btcBalance, sendEstimatedFees, sendFeeOption, walletAddress, selectedNetwork])
+  }, [view, btcBalance, sendEstimatedFees, sendFeeOption, walletAddress, selectedNetwork, sendMode, sendAmount])
 
   // Navigate to send confirm screen
+  const handleSendEntryNext = async () => {
+    const trimmedInput = sendReceiverAddress.trim()
+    if (!trimmedInput) {
+      setSendError('Please enter a receiver address or RGB invoice')
+      return
+    }
+
+    setSendError('')
+    setSendTxId('')
+
+    if (trimmedInput.toLowerCase().startsWith('rgb:')) {
+      if (selectedNetwork !== 'regtest') {
+        setSendError('RGB send is currently enabled for regtest only')
+        return
+      }
+
+      try {
+        const decoded = await decodeRegtestRgbInvoice({ invoice: trimmedInput })
+        const amountValue = Number(decoded.decoded.assignment?.value || 0)
+        if (!Number.isFinite(amountValue) || amountValue <= 0) {
+          throw new Error('RGB invoice amount is missing or invalid')
+        }
+
+        const assetMeta = await resolveAssetDisplayMeta(decoded.decoded.asset_id, selectedNetwork)
+        setSendMode('rgb')
+        setSendRgbAssetId(decoded.decoded.asset_id)
+        setSendRgbAssetLabel(assetMeta.label)
+        setSendAmount(String(amountValue))
+        setSendUserBalance('0.00000000')
+        setSendNetworkFee('TBD')
+        setView('send-amount')
+      } catch (error: any) {
+        console.error('Error decoding RGB invoice:', error)
+        setSendError(error.message || 'Failed to decode RGB invoice')
+      }
+      return
+    }
+
+    setSendMode('btc')
+    setSendRgbAssetId('')
+    setSendRgbAssetLabel('RGB Asset')
+    setSendAmount('')
+    setSendNetworkFee('0')
+    setView('send-amount')
+  }
+
   const handleSendNext = async () => {
     if (!sendAmount || parseFloat(sendAmount) === 0) {
       setSendError('Please enter a valid amount')
+      return
+    }
+
+    if (sendMode === 'rgb') {
+      setSendNetworkFee('TBD')
+      setSendError('')
+      setView('send-confirm')
       return
     }
 
@@ -2023,6 +2115,47 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
 
   // Execute Bitcoin send transaction
   const handleSendBitcoin = async () => {
+    if (sendMode === 'rgb') {
+      if (!sendReceiverAddress) {
+        setSendError('Missing RGB invoice')
+        return
+      }
+
+      setSendProcessing(true)
+      setSendError('')
+
+      try {
+        const feeRateMap = { slow: 0, avg: 1, fast: 2, custom: 2 }
+        const feeIndex = feeRateMap[sendFeeOption as 'slow' | 'avg' | 'fast' | 'custom'] || 2
+        const feeRate = Number(sendEstimatedFees[feeIndex] || 5n)
+        const walletKey = getRegtestWalletKey()
+        const result = await sendRegtestRgbInvoice({
+          invoice: sendReceiverAddress.trim(),
+          feeRate,
+          minConfirmations: 1,
+          walletKey,
+        })
+
+        setSendTxId(result.txid || '')
+        setView('send-success')
+
+        setTimeout(async () => {
+          try {
+            await handleRefreshBalance()
+            await handleViewUtxos()
+          } catch (refreshError) {
+            console.error('Error refreshing wallet after RGB send:', refreshError)
+          }
+        }, 1500)
+      } catch (error: any) {
+        console.error('Send RGB error:', error)
+        setSendError(error.message || 'Failed to send RGB asset')
+      } finally {
+        setSendProcessing(false)
+      }
+      return
+    }
+
     if (!mnemonic || !sendReceiverAddress || !sendAmount) {
       setSendError('Missing required information')
       return
@@ -4619,8 +4752,8 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
             <div className="send-content send-entry-content">
               <div className="flow-intro-card">
                 <div className="flow-kicker">Transfer</div>
-                <div className="flow-intro-title">Broadcast Bitcoin from Photon</div>
-                <div className="flow-intro-copy">Paste a Bitcoin address or invoice to prepare the transaction review.</div>
+                <div className="flow-intro-title">Send BTC or PHO from Photon</div>
+                <div className="flow-intro-copy">Paste a Bitcoin address for BTC, or paste an RGB invoice to send PHO on regtest.</div>
               </div>
 
 	              <div className="send-input-group send-surface-card">
@@ -4639,7 +4772,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               <button
                 className="send-next-btn"
                 disabled={!sendReceiverAddress}
-                onClick={() => setView('send-amount')}
+                onClick={handleSendEntryNext}
               >
                 Next
               </button>
@@ -4655,7 +4788,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
           <div className="send-container">
             <div className="send-header">
               <button className="send-back" onClick={() => setView('send')}>←</button>
-              <h2 className="send-title">Send BTC</h2>
+              <h2 className="send-title">{sendMode === 'rgb' ? `Send ${sendRgbAssetLabel}` : 'Send BTC'}</h2>
             </div>
 
             <div className="send-content">
@@ -4676,15 +4809,21 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                 <div className="send-section-block">
                   <div className="send-amount-header">
                     <label className="send-label">Amount</label>
-                    <span className="send-balance-label">Balance: {sendUserBalance} BTC</span>
+                    <span className="send-balance-label">
+                      {sendMode === 'rgb' ? `Asset: ${sendRgbAssetLabel}` : `Balance: ${sendUserBalance} BTC`}
+                    </span>
                   </div>
                   <div className="send-amount-input-container">
                     <input
                       type="text"
                       className="send-amount-input"
-                      placeholder="0.000000"
+                      placeholder={sendMode === 'rgb' ? '0' : '0.000000'}
                       value={sendAmount}
+                      readOnly={sendMode === 'rgb'}
                       onChange={(e) => {
+                        if (sendMode === 'rgb') {
+                          return
+                        }
                         const val = e.target.value;
                         if (val === '' || /^\d*\.?\d*$/.test(val)) {
                           const numVal = parseFloat(val);
@@ -4698,11 +4837,15 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                       }}
                     />
                     <div className="send-amount-suffix">
-                      <span className="send-amount-unit">BTC</span>
-                      <button className="send-max-btn" onClick={handleMaxAmount}>Max</button>
+                      <span className="send-amount-unit">{sendMode === 'rgb' ? (sendRgbAssetLabel || 'RGB') : 'BTC'}</span>
+                      {sendMode !== 'rgb' && <button className="send-max-btn" onClick={handleMaxAmount}>Max</button>}
                     </div>
                   </div>
-                  <div className="send-helper-copy">Maximum sendable: {maxSendableAmount} BTC</div>
+                  <div className="send-helper-copy">
+                    {sendMode === 'rgb'
+                      ? `Invoice amount: ${sendAmount} ${sendRgbAssetLabel}`
+                      : `Maximum sendable: ${maxSendableAmount} BTC`}
+                  </div>
                 </div>
               </div>
 
@@ -4768,7 +4911,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
           <div className="send-container">
             <div className="send-header">
               <button className="send-back" onClick={() => setView('send-amount')}>←</button>
-              <h2 className="send-title">Sign Transaction</h2>
+              <h2 className="send-title">{sendMode === 'rgb' ? 'Send RGB Asset' : 'Sign Transaction'}</h2>
             </div>
 
             <div className="send-content">
@@ -4780,23 +4923,25 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                   </div>
                   <div className="send-confirm-arrow">→</div>
                   <div className="send-confirm-party align-right">
-                    <div className="send-confirm-label">Send to</div>
+                    <div className="send-confirm-label">{sendMode === 'rgb' ? 'Invoice' : 'Send to'}</div>
                     <div className="send-confirm-address">{truncateAddress(sendReceiverAddress)}</div>
                   </div>
                 </div>
 
                 <div className="send-confirm-total">
                   <div className="send-confirm-label">Send Amount</div>
-                  <div className="send-confirm-amount">{sendAmount} BTC</div>
-                  <div className="send-confirm-fiat">{calculateUsdValue(sendAmount)}</div>
+                  <div className="send-confirm-amount">{sendAmount} {sendMode === 'rgb' ? sendRgbAssetLabel : 'BTC'}</div>
+                  <div className="send-confirm-fiat">
+                    {sendMode === 'rgb' ? `Asset ID: ${truncateAddress(sendRgbAssetId)}` : calculateUsdValue(sendAmount)}
+                  </div>
                 </div>
               </div>
 
               <div className="send-input-group">
-                <label className="send-label">Network Fee</label>
+                <label className="send-label">{sendMode === 'rgb' ? 'Estimated BTC Fee' : 'Network Fee'}</label>
                 <div className="send-metric-card">
                   <span className="send-metric-value">{sendNetworkFee}</span>
-                  <span className="send-metric-unit">BTC</span>
+                  <span className="send-metric-unit">{sendMode === 'rgb' ? '' : 'BTC'}</span>
                 </div>
               </div>
 
@@ -4823,7 +4968,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                 onClick={handleSendBitcoin}
                 disabled={sendProcessing}
               >
-                {sendProcessing ? 'Sending...' : 'Sign & Pay'}
+                {sendProcessing ? 'Sending...' : sendMode === 'rgb' ? 'Send PHO' : 'Sign & Pay'}
               </button>
             </div>
           </div>
@@ -4835,7 +4980,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
         view === 'send-success' && (
           <div className="send-container">
             <div className="send-header">
-              <h2 className="send-title">Sign Transaction</h2>
+              <h2 className="send-title">{sendMode === 'rgb' ? 'RGB Transfer Sent' : 'Sign Transaction'}</h2>
             </div>
 
             <div className="send-content send-success-screen">
@@ -4846,7 +4991,9 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               </div>
 
               <p className="send-success-copy">
-                Payment of {sendAmount} BTC successfully!
+                {sendMode === 'rgb'
+                  ? `Transfer of ${sendAmount} ${sendRgbAssetLabel} submitted successfully!`
+                  : `Payment of ${sendAmount} BTC successfully!`}
               </p>
 
               {sendTxId && (

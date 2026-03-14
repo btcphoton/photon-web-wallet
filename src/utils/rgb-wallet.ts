@@ -44,6 +44,20 @@ export interface RgbWalletTransfer {
     } | null
 }
 
+export interface DecodedRgbInvoice {
+    recipient_id: string
+    recipient_type?: string
+    asset_schema?: string
+    asset_id: string
+    assignment?: {
+        type: string
+        value: number | string
+    }
+    network?: string
+    expiration_timestamp?: number | null
+    transport_endpoints?: string[]
+}
+
 export interface RgbWalletTransfersResponse {
     ok: true
     walletKey: string
@@ -59,6 +73,21 @@ export interface RgbInvoiceSecretRegistrationResponse {
     consignmentId?: string | null
     recipientId: string
     blindingSecretStatus: 'active'
+}
+
+export interface RgbWalletDecodeInvoiceResponse {
+    ok: true
+    decoded: DecodedRgbInvoice
+}
+
+export interface RgbWalletSendResponse {
+    ok: true
+    walletKey: string
+    assetId: string
+    txid?: string | null
+    decoded: DecodedRgbInvoice
+    balance: RgbWalletBalanceResponse['balance']
+    transfer?: RgbWalletTransfer | null
 }
 
 export interface RgbRegistryAsset {
@@ -239,6 +268,71 @@ export async function fetchRegtestRgbTransfers(params: {
     }
 
     return data as RgbWalletTransfersResponse
+}
+
+export async function decodeRegtestRgbInvoice(params: {
+    invoice: string
+}): Promise<RgbWalletDecodeInvoiceResponse> {
+    const apiBase = await getRegtestRgbApiBase()
+    const response = await fetch(`${apiBase}/rgb/decode-invoice`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            invoice: params.invoice,
+        }),
+    })
+
+    if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(errorText || `RGB invoice decode failed with status ${response.status}`)
+    }
+
+    const data = await response.json()
+    if (!data.ok) {
+        throw new Error(data.error || 'RGB invoice decode failed')
+    }
+
+    return data as RgbWalletDecodeInvoiceResponse
+}
+
+export async function sendRegtestRgbInvoice(params: {
+    invoice: string
+    feeRate?: number
+    minConfirmations?: number
+    walletKey?: string
+}): Promise<RgbWalletSendResponse> {
+    const apiBase = await getRegtestRgbApiBase()
+    const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+    }
+
+    if (params.walletKey) {
+        headers['x-photon-wallet-key'] = params.walletKey
+    }
+
+    const response = await fetch(`${apiBase}/rgb/send`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+            invoice: params.invoice,
+            feeRate: params.feeRate ?? 5,
+            minConfirmations: params.minConfirmations ?? 1,
+        }),
+    })
+
+    if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(errorText || `RGB send failed with status ${response.status}`)
+    }
+
+    const data = await response.json()
+    if (!data.ok) {
+        throw new Error(data.error || 'RGB send failed')
+    }
+
+    return data as RgbWalletSendResponse
 }
 
 export async function fetchRegtestRgbRegistry(): Promise<RgbRegistryAsset[]> {
