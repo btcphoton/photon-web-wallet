@@ -982,6 +982,12 @@ body {
   color: rgba(255, 255, 255, 0.5);
 }
 
+.asset-lock-note {
+  font-size: 0.72rem;
+  color: #ffbe70;
+  font-weight: 600;
+}
+
 .asset-arrow {
   display: flex;
   align-items: center;

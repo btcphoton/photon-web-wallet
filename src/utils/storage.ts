@@ -7,6 +7,8 @@ export interface Asset {
     amount: string
     unit: string
     color: string
+    rgbLockReason?: string
+    rgbSpendabilityStatus?: string
 }
 
 export interface StorageData {

@@ -15,12 +15,24 @@ export interface RgbWalletBalanceResponse {
         precision: number
     }
     balance: {
-        settled: number
-        future: number
-        spendable: number
-        offchain_outbound: number
-        offchain_inbound: number
+        settled: number | string
+        future: number | string
+        spendable: number | string
+        offchain_outbound: number | string
+        offchain_inbound: number | string
+        locked_missing_secret?: number | string
+        locked_unconfirmed?: number | string
+        spendability_status?: string
     }
+}
+
+export interface RgbInvoiceSecretRegistrationResponse {
+    ok: true
+    walletKey: string
+    invoiceId?: string | null
+    consignmentId?: string | null
+    recipientId: string
+    blindingSecretStatus: 'active'
 }
 
 export interface RgbRegistryAsset {
@@ -82,6 +94,50 @@ export async function createRegtestRgbInvoice(params: {
     }
 
     return data as RgbWalletInvoiceResponse
+}
+
+export async function registerRgbInvoiceSecret(params: {
+    walletKey?: string
+    network?: string
+    assetId: string
+    amount: number
+    invoice: string
+    recipientId: string
+    blindingSecret: string
+}): Promise<RgbInvoiceSecretRegistrationResponse> {
+    const apiBase = await getRegtestRgbApiBase()
+    const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+    }
+
+    if (params.walletKey) {
+        headers['x-photon-wallet-key'] = params.walletKey
+    }
+
+    const response = await fetch(`${apiBase}/rgb/invoice/register`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+            network: params.network || 'regtest',
+            assetId: params.assetId,
+            amount: params.amount,
+            invoice: params.invoice,
+            recipientId: params.recipientId,
+            blindingSecret: params.blindingSecret,
+        }),
+    })
+
+    if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(errorText || `RGB invoice secret registration failed with status ${response.status}`)
+    }
+
+    const data = await response.json()
+    if (!data.ok) {
+        throw new Error(data.error || 'RGB invoice secret registration failed')
+    }
+
+    return data as RgbInvoiceSecretRegistrationResponse
 }
 
 export async function fetchRegtestRgbBalance(params: {

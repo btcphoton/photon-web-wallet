@@ -14,7 +14,7 @@ import type { Asset } from './utils/storage'
 import { BACKEND_PROFILES, DEFAULT_BACKEND_PROFILE_ID, getBackendProfileById, getDefaultElectrumServer, getDefaultRgbProxy, type BackendProfileId } from './utils/backend-config'
 import { QRCodeSVG } from 'qrcode.react'
 import { createRgbInvoice } from './utils/rgb-invoice'
-import { createRegtestRgbInvoice, fetchRegtestRgbBalance, fetchRegtestRgbRegistry, mineRegtestBlocks } from './utils/rgb-wallet'
+import { createRegtestRgbInvoice, fetchRegtestRgbBalance, fetchRegtestRgbRegistry, mineRegtestBlocks, registerRgbInvoiceSecret } from './utils/rgb-wallet'
 import { LightningAnimation } from './components/LightningAnimation'
 import { fetchBtcActivities, type BitcoinActivity } from './utils/bitcoin-activities'
 
@@ -488,6 +488,11 @@ function App() {
     return `extension-${stableId}-regtest`
   }
 
+  const getBackendWalletKey = (network: Network) => {
+    const stableId = principalId || walletAddress || coloredAddress || 'anonymous'
+    return `extension-${stableId}-${network}`
+  }
+
   const syncRegtestAssetBalances = async (network: Network, sourceAssets: Asset[]) => {
     if (network !== 'regtest' || sourceAssets.length === 0) {
       return sourceAssets
@@ -518,13 +523,22 @@ function App() {
 
           return {
             ...asset,
-            amount: String(rgbBalance.balance.spendable),
+            amount: String(rgbBalance.balance.settled),
+            rgbLockReason:
+              Number(rgbBalance.balance.locked_missing_secret || 0) > 0
+                ? 'Locked (Missing Secret)'
+                : Number(rgbBalance.balance.locked_unconfirmed || 0) > 0
+                  ? 'Locked (Awaiting Confirmations)'
+                  : undefined,
+            rgbSpendabilityStatus: rgbBalance.balance.spendability_status,
           }
         } catch (error) {
           console.error(`[RGB Balance] Failed to sync ${asset.id}:`, error)
           return {
             ...asset,
             amount: '0',
+            rgbLockReason: undefined,
+            rgbSpendabilityStatus: undefined,
           }
         }
       })
@@ -3108,6 +3122,11 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                             <span className="asset-amount">
                               {asset.amount} {asset.unit}
                             </span>
+                            {asset.rgbLockReason && (
+                              <span className="asset-lock-note">
+                                {asset.rgbLockReason}
+                              </span>
+                            )}
                           </div>
                         </div>
                         <div className="asset-arrow">
@@ -3565,6 +3584,15 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                       setRgbInvoiceStep('invoice')
                     } else {
                       const invoiceResult = await createRgbInvoice(contractId, invoiceAmount)
+                      await registerRgbInvoiceSecret({
+                        walletKey: getBackendWalletKey(selectedNetwork),
+                        network: selectedNetwork,
+                        assetId: contractId,
+                        amount: invoiceAmount,
+                        invoice: invoiceResult.invoice,
+                        recipientId: `bcrt:utxob:${invoiceResult.blindedSeal}`,
+                        blindingSecret: invoiceResult.secret,
+                      })
 
                       console.log('[RGB Receive] Client-side invoice created successfully', {
                         txid: invoiceResult.txid,
