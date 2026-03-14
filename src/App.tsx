@@ -4924,7 +4924,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
             <button className="icon-btn" style={{ visibility: 'hidden' }}>⋮</button>
           </div>
 
-          <div style={{ flex: 1, overflow: 'auto', paddingTop: '1rem', paddingBottom: '1rem' }}>
+          <div style={{ flex: 1, overflowY: 'auto', paddingTop: '1rem', paddingBottom: '1rem', minHeight: 0 }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
               <div>
                 <div style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)', marginBottom: '0.5rem' }}>Unlock UTXO</div>
@@ -4964,20 +4964,22 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               </div>
             </div>
 
-            <button className="btn-primary" onClick={() => setView('unlock-utxo-confirm')} style={{ width: '100%', marginTop: '2rem', background: '#ff5a1f', padding: '1rem', fontSize: '1rem', fontWeight: 600 }}>Next</button>
+            <div style={{ position: 'sticky', bottom: 0, paddingTop: '1rem', background: 'linear-gradient(180deg, rgba(10, 10, 10, 0) 0%, #131313 35%)' }}>
+              <button className="btn-primary" onClick={() => setView('unlock-utxo-confirm')} style={{ width: '100%', background: '#ff5a1f', padding: '1rem', fontSize: '1rem', fontWeight: 600 }}>Next</button>
+            </div>
           </div>
         </div>
       )}
 
       {view === 'unlock-utxo-confirm' && selectedUnlockUtxo && (
-        <div className="wallet-container" style={{ padding: '1rem' }}>
+        <div className="wallet-container" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', height: '100%' }}>
           <div className="wallet-header">
             <button className="icon-btn" onClick={() => setView('unlock-rgb-utxo')}>←</button>
             <h2 style={{ flex: 1, textAlign: 'center', margin: 0 }}>Sign Transaction</h2>
             <button className="icon-btn" style={{ visibility: 'hidden' }}>⋮</button>
           </div>
 
-          <div style={{ marginTop: '2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', marginTop: '2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem', paddingBottom: '1rem' }}>
             <div style={{ background: 'rgba(255, 255, 255, 0.05)', borderRadius: '12px', padding: '1.25rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
                 <div style={{ flex: 1 }}>
@@ -5023,25 +5025,26 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               </div>
             )}
 
-            <button
-              className="btn-primary"
-              onClick={handleUnlockUtxo}
-              disabled={unlockUtxoProcessing}
-              style={{
-                width: '100%',
-                marginTop: '1rem',
-                background: '#ff5a1f',
-                padding: '1rem',
-                fontSize: '1rem',
-                fontWeight: 600,
-                borderRadius: '12px',
-                border: 'none',
-                color: '#fff',
-                cursor: 'pointer'
-              }}
-            >
-              {unlockUtxoProcessing ? 'Signing...' : 'Sign & Pay'}
-            </button>
+            <div style={{ position: 'sticky', bottom: 0, paddingTop: '1rem', background: 'linear-gradient(180deg, rgba(10, 10, 10, 0) 0%, #131313 35%)' }}>
+              <button
+                className="btn-primary"
+                onClick={handleUnlockUtxo}
+                disabled={unlockUtxoProcessing}
+                style={{
+                  width: '100%',
+                  background: '#ff5a1f',
+                  padding: '1rem',
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  borderRadius: '12px',
+                  border: 'none',
+                  color: '#fff',
+                  cursor: 'pointer'
+                }}
+              >
+                {unlockUtxoProcessing ? 'Signing...' : 'Sign & Pay'}
+              </button>
+            </div>
           </div>
         </div>
       )}
