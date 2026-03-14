@@ -60,6 +60,13 @@ const formatBtcAmount = (sats: number | string | bigint, decimals = 6) => {
   return fixed.replace(/\.0+$|0+$/g, '').replace(/\.$/, '')
 }
 
+const formatBtcValue = (btcAmount: number | string, decimals = 8) => {
+  const btc = Number(btcAmount)
+  if (Number.isNaN(btc)) return '0'
+  const fixed = btc.toFixed(decimals)
+  return fixed.replace(/\.0+$|0+$/g, '').replace(/\.$/, '')
+}
+
 // Generate 5 random unique positions from 1-12
 const getRandomPositions = (): number[] => {
   const positions: number[] = []
@@ -261,6 +268,7 @@ function App() {
   const [createUtxoAmount, setCreateUtxoAmount] = useState<string>('')
   const [createUtxoFeeOption, setCreateUtxoFeeOption] = useState<'slow' | 'avg' | 'fast' | 'custom'>('fast')
   const [createUtxoCustomFee, setCreateUtxoCustomFee] = useState<string>('2')
+  const [createUtxoProcessing, setCreateUtxoProcessing] = useState<boolean>(false)
 
 
   // User Settings states
@@ -1555,6 +1563,33 @@ function App() {
     }
   }, [view, lastActivityTimestamp, autoLockMinutes])
 
+  // Keep the BTC/USD rate fresh for fiat conversions across the wallet.
+  useEffect(() => {
+    let cancelled = false
+
+    const loadBtcPrice = async () => {
+      try {
+        const response = await fetch('https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT')
+        const data = await response.json()
+        const price = Number(data?.price)
+
+        if (!cancelled && Number.isFinite(price) && price > 0) {
+          setBtcPrice(price)
+        }
+      } catch (error) {
+        console.error('Error fetching BTC price from Binance:', error)
+      }
+    }
+
+    loadBtcPrice()
+    const intervalId = window.setInterval(loadBtcPrice, 60000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(intervalId)
+    }
+  }, [])
+
   // Load user balance when swap view opens
   useEffect(() => {
     const loadSwapBalance = async () => {
@@ -1568,17 +1603,6 @@ function App() {
         // Rotated: LBTC → BTC (use LBTC balance)
         setSwapUserBalance(swapIconRotated ? lbtcBalance : btcBalance)
         console.log('Swap balances loaded - BTC:', btcBalance, 'LBTC:', lbtcBalance)
-
-        // Fetch BTC price from CoinGecko API
-        try {
-          const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd')
-          const data = await response.json()
-          if (data.bitcoin && data.bitcoin.usd) {
-            setBtcPrice(data.bitcoin.usd)
-          }
-        } catch (error) {
-          console.error('Error fetching BTC price:', error)
-        }
       }
     }
     loadSwapBalance()
@@ -1614,13 +1638,33 @@ function App() {
   }, [swapFromAmount])
 
   // Calculate USD value
-  const calculateUsdValue = (btcAmount: string): string => {
-    if (!btcAmount || btcAmount === '' || parseFloat(btcAmount) === 0) return '$0.00'
-    if (!btcPrice || btcPrice === 0) return '$0.00'
-    const usdValue = parseFloat(btcAmount) * btcPrice
-    if (isNaN(usdValue)) return '$0.00'
-    return `$${usdValue.toFixed(2)}`
-  }
+const calculateUsdValue = (btcAmount: string): string => {
+  if (!btcAmount || btcAmount === '' || parseFloat(btcAmount) === 0) return '$0.00'
+  if (!btcPrice || btcPrice === 0) return '$0.00'
+  const usdValue = parseFloat(btcAmount) * btcPrice
+  if (isNaN(usdValue)) return '$0.00'
+  return `$${usdValue.toFixed(2)}`
+}
+
+const createUtxoBaseAmountBtc = (mode: 'default' | 'custom', input: string) => {
+  const val = mode === 'default' ? 0.0003 : Number(input || '0.0003')
+  return Number.isNaN(val) ? 0 : val
+}
+
+const deriveCreateUtxoFeeRate = (
+  option: 'slow' | 'avg' | 'fast' | 'custom',
+  custom: string,
+  estimatedFees: Array<number | bigint> = []
+) => {
+  if (option === 'custom') return custom || '2'
+  const feeRateMap = { slow: 0, avg: 1, fast: 2 }
+  const idx = feeRateMap[option] ?? 2
+  const fallback = option === 'fast' ? 2 : option === 'avg' ? 1 : 0
+  const val = estimatedFees[idx] ?? estimatedFees[fallback] ?? 2
+  return String(Number(val))
+}
+
+const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
 
   // Handle percentage button clicks for swap
   const handleSwapPercentage = (percentage: number) => {
@@ -4959,67 +5003,78 @@ function App() {
               <button className="icon-btn" style={{ visibility: 'hidden' }}>⋮</button>
             </div>
 
-            <div style={{ flex: 1, overflow: 'auto', paddingBottom: '1rem' }}>
-              {/* Mode Tabs */}
-              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem', marginBottom: '1rem' }}>
-                <button onClick={() => setCreateUtxoMode('default')} style={{ flex: 1, background: createUtxoMode === 'default' ? 'rgba(255, 255, 255, 0.1)' : 'transparent', border: `1px solid ${createUtxoMode === 'default' ? 'rgba(255, 255, 255, 0.3)' : 'rgba(255, 255, 255, 0.1)'}`, borderRadius: '8px', padding: '0.75rem', color: createUtxoMode === 'default' ? '#fff' : 'rgba(255, 255, 255, 0.5)', cursor: 'pointer', fontWeight: 600, fontSize: '0.95rem' }}>Default</button>
-                <button onClick={() => setCreateUtxoMode('custom')} style={{ flex: 1, background: createUtxoMode === 'custom' ? 'rgba(255, 255, 255, 0.1)' : 'transparent', border: `1px solid ${createUtxoMode === 'custom' ? 'rgba(255, 255, 255, 0.3)' : 'rgba(255, 255, 255, 0.1)'}`, borderRadius: '8px', padding: '0.75rem', color: createUtxoMode === 'custom' ? '#fff' : 'rgba(255, 255, 255, 0.5)', cursor: 'pointer', fontWeight: 600, fontSize: '0.95rem' }}>Custom</button>
-              </div>
+            {(() => {
+              const slowFeeRate = Number(sendEstimatedFees?.[0] ?? 2)
+              const avgFeeRate = Number(sendEstimatedFees?.[1] ?? slowFeeRate)
+              const fastFeeRate = Number(sendEstimatedFees?.[2] ?? avgFeeRate)
+              const currentFeeRate = Number(deriveCreateUtxoFeeRate(createUtxoFeeOption, createUtxoCustomFee, sendEstimatedFees))
+              const estimatedNetworkFee = (currentFeeRate * DEFAULT_CREATE_UTXO_TX_VBYTES) / 100000000
 
-              {/* Info Text */}
-              <div style={{ padding: '1rem', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '8px', marginBottom: '1.5rem' }}>
-                <p style={{ margin: 0, fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)', lineHeight: 1.5 }}>Move BTC to pre-fund UTXO for RGB20 transaction fees.</p>
-              </div>
+              return (
+                <div style={{ flex: 1, overflow: 'auto', paddingBottom: '1rem' }}>
+                  {/* Mode Tabs */}
+                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem', marginBottom: '1rem' }}>
+                    <button onClick={() => setCreateUtxoMode('default')} style={{ flex: 1, background: createUtxoMode === 'default' ? 'rgba(255, 255, 255, 0.1)' : 'transparent', border: `1px solid ${createUtxoMode === 'default' ? 'rgba(255, 255, 255, 0.3)' : 'rgba(255, 255, 255, 0.1)'}`, borderRadius: '8px', padding: '0.75rem', color: createUtxoMode === 'default' ? '#fff' : 'rgba(255, 255, 255, 0.5)', cursor: 'pointer', fontWeight: 600, fontSize: '0.95rem' }}>Default</button>
+                    <button onClick={() => setCreateUtxoMode('custom')} style={{ flex: 1, background: createUtxoMode === 'custom' ? 'rgba(255, 255, 255, 0.1)' : 'transparent', border: `1px solid ${createUtxoMode === 'custom' ? 'rgba(255, 255, 255, 0.3)' : 'rgba(255, 255, 255, 0.1)'}`, borderRadius: '8px', padding: '0.75rem', color: createUtxoMode === 'custom' ? '#fff' : 'rgba(255, 255, 255, 0.5)', cursor: 'pointer', fontWeight: 600, fontSize: '0.95rem' }}>Custom</button>
+                  </div>
 
-              {/* Default Mode */}
-              {createUtxoMode === 'default' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                  <div>
-                    <div style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)', marginBottom: '0.5rem' }}>The UTXO creation amount</div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: '1.2rem', fontWeight: 600, color: '#fff' }}>0.0003 BTC</span>
-                      <span style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.5)' }}>Balance: {btcBalance} BTC</span>
+                  {/* Info Text */}
+                  <div style={{ padding: '1rem', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '8px', marginBottom: '1.5rem' }}>
+                    <p style={{ margin: 0, fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)', lineHeight: 1.5 }}>Move BTC to pre-fund UTXO for RGB20 transaction fees.</p>
+                  </div>
+
+                  {/* Default Mode */}
+                  {createUtxoMode === 'default' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                      <div>
+                        <div style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)', marginBottom: '0.5rem' }}>The UTXO creation amount</div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: '1.2rem', fontWeight: 600, color: '#fff' }}>0.0003 BTC</span>
+                          <span style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.5)' }}>Balance: {btcBalance} BTC</span>
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)', marginBottom: '0.5rem' }}>Fee</div>
+                        <div style={{ fontSize: '1.1rem', fontWeight: 600, color: '#fff' }}>{currentFeeRate} sat/VB</div>
+                      </div>
+                      <div style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.6)' }}>Est. network fee: {formatBtcValue(estimatedNetworkFee, 8)} BTC</div>
                     </div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)', marginBottom: '0.5rem' }}>Fee</div>
-                    <div style={{ fontSize: '1.1rem', fontWeight: 600, color: '#fff' }}>2 sat/VB</div>
-                  </div>
+                  )}
+
+                  {/* Custom Mode */}
+                  {createUtxoMode === 'custom' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                      <div>
+                        <div style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)', marginBottom: '0.5rem' }}>Available BTC</div>
+                        <div style={{ fontSize: '0.95rem', color: 'rgba(255, 255,  255, 0.6)' }}>Balance: {btcBalance} BTC</div>
+                      </div>
+                      <div>
+                        <input type="text" placeholder="Enter BTC amount for creating UTXO" value={createUtxoAmount} onChange={(e) => setCreateUtxoAmount(e.target.value)} style={{ width: '100%', padding: '0.9rem 1rem', background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: '#fff', fontSize: '0.95rem', outline: 'none' }} />
+                        <div style={{ textAlign: 'right', marginTop: '0.5rem' }}><span style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.6)' }}>BTC</span></div>
+                      </div>
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                          <span style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)' }}>Fee</span>
+                          <button style={{ background: 'none', border: 'none', color: 'rgba(255, 255, 255, 0.5)', cursor: 'pointer' }}>⟳</button>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem' }}>
+                          <button onClick={() => setCreateUtxoFeeOption('slow')} style={{ padding: '0.75rem 0.5rem', background: createUtxoFeeOption === 'slow' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: createUtxoFeeOption === 'slow' ? '#fff' : 'rgba(255, 255, 255, 0.6)', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem' }}><div style={{ fontWeight: 600 }}>Slow</div><div>{slowFeeRate} sat/VB</div><div style={{ fontSize: '0.75rem', opacity: 0.7 }}>≈ 1 hours</div></button>
+                          <button onClick={() => setCreateUtxoFeeOption('avg')} style={{ padding: '0.75rem 0.5rem', background: createUtxoFeeOption === 'avg' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: createUtxoFeeOption === 'avg' ? '#fff' : 'rgba(255, 255, 255, 0.6)', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem' }}><div style={{ fontWeight: 600 }}>Avg</div><div>{avgFeeRate} sat/VB</div><div style={{ fontSize: '0.75rem', opacity: 0.7 }}>≈ 30 mins</div></button>
+                          <button onClick={() => setCreateUtxoFeeOption('fast')} style={{ padding: '0.75rem 0.5rem', background: createUtxoFeeOption === 'fast' ? '#f7931a' : 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: '#fff', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem', fontWeight: createUtxoFeeOption === 'fast' ? 600 : 400 }}><div style={{ fontWeight: 600 }}>Fast</div><div>{fastFeeRate} sat/VB</div><div style={{ fontSize: '0.75rem', opacity: 0.9 }}>≈ 10 mins</div></button>
+                          <button onClick={() => setCreateUtxoFeeOption('custom')} style={{ padding: '0.75rem 0.5rem', background: createUtxoFeeOption === 'custom' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: createUtxoFeeOption === 'custom' ? '#fff' : 'rgba(255, 255, 255, 0.6)', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontWeight: 600 }}>Custom</button>
+                        </div>
+                        {createUtxoFeeOption === 'custom' && (
+                          <input type="number" placeholder="Enter custom fee rate" value={createUtxoCustomFee} onChange={(e) => setCreateUtxoCustomFee(e.target.value)} style={{ width: '100%', padding: '0.75rem 1rem', background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: '#fff', fontSize: '0.9rem', marginTop: '0.75rem', outline: 'none' }} />
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Next Button */}
+                  <button className="btn-primary" onClick={() => setView('create-utxo-confirm')} style={{ width: '100%', marginTop: '2rem', background: '#f7931a', padding: '1rem', fontSize: '1rem', fontWeight: 600 }}>Next</button>
                 </div>
-              )}
-
-              {/* Custom Mode */}
-              {createUtxoMode === 'custom' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                  <div>
-                    <div style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)', marginBottom: '0.5rem' }}>Available BTC</div>
-                    <div style={{ fontSize: '0.95rem', color: 'rgba(255, 255,  255, 0.6)' }}>Balance: {btcBalance} BTC</div>
-                  </div>
-                  <div>
-                    <input type="text" placeholder="Enter BTC amount for creating UTXO" value={createUtxoAmount} onChange={(e) => setCreateUtxoAmount(e.target.value)} style={{ width: '100%', padding: '0.9rem 1rem', background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: '#fff', fontSize: '0.95rem', outline: 'none' }} />
-                    <div style={{ textAlign: 'right', marginTop: '0.5rem' }}><span style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.6)' }}>BTC</span></div>
-                  </div>
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                      <span style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)' }}>Fee</span>
-                      <button style={{ background: 'none', border: 'none', color: 'rgba(255, 255, 255, 0.5)', cursor: 'pointer' }}>⟳</button>
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem' }}>
-                      <button onClick={() => setCreateUtxoFeeOption('slow')} style={{ padding: '0.75rem 0.5rem', background: createUtxoFeeOption === 'slow' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: createUtxoFeeOption === 'slow' ? '#fff' : 'rgba(255, 255, 255, 0.6)', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem' }}><div style={{ fontWeight: 600 }}>Slow</div><div>2 sat/VB</div><div style={{ fontSize: '0.75rem', opacity: 0.7 }}>≈ 1 hours</div></button>
-                      <button onClick={() => setCreateUtxoFeeOption('avg')} style={{ padding: '0.75rem 0.5rem', background: createUtxoFeeOption === 'avg' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: createUtxoFeeOption === 'avg' ? '#fff' : 'rgba(255, 255, 255, 0.6)', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem' }}><div style={{ fontWeight: 600 }}>Avg</div><div>2 sat/VB</div><div style={{ fontSize: '0.75rem', opacity: 0.7 }}>≈ 30 mins</div></button>
-                      <button onClick={() => setCreateUtxoFeeOption('fast')} style={{ padding: '0.75rem 0.5rem', background: createUtxoFeeOption === 'fast' ? '#f7931a' : 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: '#fff', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem', fontWeight: createUtxoFeeOption === 'fast' ? 600 : 400 }}><div style={{ fontWeight: 600 }}>Fast</div><div>2 sat/VB</div><div style={{ fontSize: '0.75rem', opacity: 0.9 }}>≈ 10 mins</div></button>
-                      <button onClick={() => setCreateUtxoFeeOption('custom')} style={{ padding: '0.75rem 0.5rem', background: createUtxoFeeOption === 'custom' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: createUtxoFeeOption === 'custom' ? '#fff' : 'rgba(255, 255, 255, 0.6)', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontWeight: 600 }}>Custom</button>
-                    </div>
-                    {createUtxoFeeOption === 'custom' && (
-                      <input type="number" placeholder="Enter custom fee rate" value={createUtxoCustomFee} onChange={(e) => setCreateUtxoCustomFee(e.target.value)} style={{ width: '100%', padding: '0.75rem 1rem', background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: '#fff', fontSize: '0.9rem', marginTop: '0.75rem', outline: 'none' }} />
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Next Button */}
-              <button className="btn-primary" onClick={() => setView('create-utxo-confirm')} style={{ width: '100%', marginTop: '2rem', background: '#f7931a', padding: '1rem', fontSize: '1rem', fontWeight: 600 }}>Next</button>
-            </div>
+              )
+            })()}
           </div>
         )
       }
@@ -5027,159 +5082,153 @@ function App() {
       {/* Create UTXO Confirmation - Sign Transaction */}
       {
         view === 'create-utxo-confirm' && (
-          <div className="wallet-container" style={{ padding: '1rem' }}>
+          <div className="wallet-container utxo-confirm-shell">
             <div className="wallet-header">
               <button className="icon-btn" onClick={() => setView('create-rgb-utxo')}>←</button>
               <h2 style={{ flex: 1, textAlign: 'center', margin: 0 }}>Sign Transaction</h2>
               <button className="icon-btn" style={{ visibility: 'hidden' }}>⋮</button>
             </div>
 
-            <div style={{ marginTop: '2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-              {/* From/To Addresses Box */}
-              <div style={{ background: 'rgba(255, 255, 255, 0.05)', borderRadius: '12px', padding: '1.25rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.5)', marginBottom: '0.35rem' }}>From</div>
-                    <div style={{ fontSize: '0.9rem', color: '#fff', fontFamily: 'monospace' }}>
-                      {mainBalanceAddress ? `${mainBalanceAddress.slice(0, 7)}...${mainBalanceAddress.slice(-4)}` : walletAddress ? `${walletAddress.slice(0, 7)}...${walletAddress.slice(-4)}` : selectedNetwork === 'regtest' ? 'bcrt1p...' : 'tb1p...'}
-                    </div>
+            {(() => {
+              const amountBtc = createUtxoBaseAmountBtc(createUtxoMode, createUtxoAmount)
+              const feeRateDisplay = deriveCreateUtxoFeeRate(createUtxoFeeOption, createUtxoCustomFee, sendEstimatedFees)
+              const feeRateValue = Number(feeRateDisplay) || 0
+              const networkFeeBtc = (feeRateValue * DEFAULT_CREATE_UTXO_TX_VBYTES) / 100000000
+              const totalBtc = amountBtc + networkFeeBtc
+              const fromLabel = mainBalanceAddress ? `${mainBalanceAddress.slice(0, 7)}...${mainBalanceAddress.slice(-4)}` : walletAddress ? `${walletAddress.slice(0, 7)}...${walletAddress.slice(-4)}` : selectedNetwork === 'regtest' ? 'bcrt1p...' : 'tb1p...'
+              const toLabel = utxoHolderAddress ? `${utxoHolderAddress.slice(0, 7)}...${utxoHolderAddress.slice(-4)}` : selectedNetwork === 'regtest' ? 'bcrt1p...pxak' : 'tb1p...pxak'
+
+              return (
+                <div className="utxo-confirm-body">
+                  <div className="utxo-card">
+                    <div className="utxo-chip">SENDING</div>
+                    <div className="utxo-amount">{formatBtcValue(amountBtc, 8)} BTC</div>
+                    <div className="utxo-sub">{calculateUsdValue(String(amountBtc))}</div>
+                    <div className="utxo-divider" />
+                    <div className="utxo-route">{fromLabel} → {toLabel}</div>
                   </div>
-                  <div style={{ fontSize: '1.5rem', color: 'rgba(255, 255, 255, 0.3)', margin: '0 1rem' }}>→</div>
-                  <div style={{ flex: 1, textAlign: 'right' }}>
-                    <div style={{ fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.5)', marginBottom: '0.35rem' }}>Send to</div>
-                    <div style={{ fontSize: '0.9rem', color: '#fff', fontFamily: 'monospace' }}>
-                      {utxoHolderAddress ? `${utxoHolderAddress.slice(0, 7)}...${utxoHolderAddress.slice(-4)}` : selectedNetwork === 'regtest' ? 'bcrt1p...pxak' : 'tb1p...pxak'}
-                    </div>
+
+                  <div className="utxo-row">
+                    <span className="utxo-label">Network Fee</span>
+                    <span className="utxo-value">{formatBtcValue(networkFeeBtc, 8)} BTC</span>
                   </div>
-                </div>
 
-                {/* Send Amount */}
-                <div style={{ marginTop: '1.5rem', paddingTop: '1.25rem', borderTop: '1px solid rgba(255, 255, 255, 0.1)' }}>
-                  <div style={{ fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.5)', marginBottom: '0.5rem' }}>Send Amount</div>
-                  <div style={{ fontSize: '2rem', fontWeight: 600, color: '#fff' }}>
-                    {createUtxoMode === 'default' ? '0.0003' : createUtxoAmount || '0.0003'} BTC
+                  <div className="utxo-row">
+                    <span className="utxo-label">Fee Rate</span>
+                    <span className="utxo-pill">{feeRateDisplay} sat/vB</span>
                   </div>
-                </div>
-              </div>
 
-              {/* Network Fee */}
-              <div>
-                <div style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)', marginBottom: '0.75rem' }}>Network Fee</div>
-                <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', padding: '0.9rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '0.95rem', color: '#fff' }}>0.00000425</span>
-                  <span style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.5)' }}>BTC</span>
-                </div>
-              </div>
+                  <div className="utxo-divider full" />
 
-              {/* Network Fee Rate */}
-              <div>
-                <div style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)', marginBottom: '0.75rem' }}>Network Fee Rate</div>
-                <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', padding: '0.9rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '0.95rem', color: '#fff' }}>
-                    {createUtxoFeeOption === 'custom' ? createUtxoCustomFee : '2'}
-                  </span>
-                  <span style={{ fontSize: '0.85rem', color: 'rgba(59, 130, 246, 0.7)' }}>sat/VB</span>
-                </div>
-              </div>
+                  <div className="utxo-row total">
+                    <span className="utxo-label">Total to be deducted</span>
+                    <span className="utxo-value bold">{formatBtcValue(totalBtc, 8)} BTC</span>
+                  </div>
 
-              {/* Sign & Pay Button */}
-              <button
-                className="btn-primary"
-                onClick={async () => {
-                  try {
-                    console.log('Signing and broadcasting transaction to UTXO Holder address...');
+                  <button
+                    className="btn-primary utxo-submit"
+                    disabled={createUtxoProcessing}
+                    onClick={async () => {
+                      if (createUtxoProcessing) return
 
-                    const derivedUtxoHolderAddress =
-                      addressGenerationMethod === 'bitcoin'
-                        ? await deriveBitcoinAddress(mnemonic, selectedNetwork, 86, 0, 100, 0)
-                        : utxoHolderAddress
+                      setCreateUtxoProcessing(true)
 
-                    if (!derivedUtxoHolderAddress) {
-                      throw new Error('UTXO holder address is not available.');
-                    }
+                      try {
+                        console.log('Signing and broadcasting transaction to UTXO Holder address...');
 
-                    const amountBtc = createUtxoMode === 'default' ? 0.0003 : parseFloat(createUtxoAmount || '0.0003');
-                    const amountSats = BigInt(Math.floor(amountBtc * 100000000));
+                        const derivedUtxoHolderAddress =
+                          addressGenerationMethod === 'bitcoin'
+                            ? await deriveBitcoinAddress(mnemonic, selectedNetwork, 86, 0, 100, 0)
+                            : utxoHolderAddress
 
-                    // Use all discovered Vanilla UTXOs for spending
-                    const vanillaUtxos =
-                      spendableVanillaUtxos.length > 0
-                        ? spendableVanillaUtxos
-                        : (await performDiscoveryScan(mnemonic, selectedNetwork, Math.max(addressIndex, changeIndex))).utxos
-                            .filter(u => u.account === 'vanilla')
-                            .map(u => ({
-                              txid: u.txid,
-                              vout: u.vout,
-                              value: u.value,
-                              address: u.address,
-                              derivationPath: u.derivationPath,
-                              account: u.account as 'vanilla',
-                              chain: u.chain as 0 | 1,
-                              index: u.index as number
-                            }));
+                        if (!derivedUtxoHolderAddress) {
+                          throw new Error('UTXO holder address is not available.');
+                        }
 
-                    if (vanillaUtxos.length === 0) {
-                      throw new Error('No spendable Vanilla UTXOs available');
-                    }
+                        const amountSats = BigInt(Math.floor(amountBtc * 100000000));
 
-                    // Get fee rate
-                    let feeRate = 2;
-                    if (createUtxoMode === 'custom') {
-                      if (createUtxoFeeOption === 'custom') {
-                        feeRate = Number(createUtxoCustomFee);
-                      } else {
-                        const feeRateMap = { slow: 0, avg: 1, fast: 2 };
-                        const feeIndex = feeRateMap[createUtxoFeeOption as 'slow' | 'avg' | 'fast'] || 2;
-                        feeRate = Number(sendEstimatedFees[feeIndex]);
+                        // Always refresh spendable Vanilla UTXOs before signing to avoid
+                        // selecting inputs already consumed by another unconfirmed tx.
+                        const { utxos: discoveryUtxos } = await performDiscoveryScan(
+                          mnemonic,
+                          selectedNetwork,
+                          Math.max(addressIndex, changeIndex)
+                        )
+
+                        const vanillaUtxos = discoveryUtxos
+                          .filter(u => u.account === 'vanilla')
+                          .map(u => ({
+                            txid: u.txid,
+                            vout: u.vout,
+                            value: u.value,
+                            address: u.address,
+                            derivationPath: u.derivationPath,
+                            account: u.account as 'vanilla',
+                            chain: u.chain as 0 | 1,
+                            index: u.index as number
+                          }))
+
+                        setSpendableVanillaUtxos(vanillaUtxos)
+
+                        if (vanillaUtxos.length === 0) {
+                          throw new Error('No spendable Vanilla UTXOs available');
+                        }
+
+                        // Get fee rate
+                        let feeRate = 2;
+                        if (createUtxoMode === 'custom') {
+                          if (createUtxoFeeOption === 'custom') {
+                            feeRate = Number(createUtxoCustomFee);
+                          } else {
+                            const feeRateMap = { slow: 0, avg: 1, fast: 2 };
+                            const feeIndex = feeRateMap[createUtxoFeeOption as 'slow' | 'avg' | 'fast'] || 2;
+                            feeRate = Number(sendEstimatedFees[feeIndex]);
+                          }
+                        }
+
+                        // Sign transaction locally
+                        const txHex = await signAndSendVanilla(
+                          mnemonic,
+                          vanillaUtxos,
+                          derivedUtxoHolderAddress,
+                          amountSats,
+                          feeRate,
+                          selectedNetwork,
+                          changeIndex
+                        )
+                          ;
+
+                        // Increment and save change index
+                        const nextChangeIndex = changeIndex + 1;
+                        setChangeIndex(nextChangeIndex);
+                        const changeIndexKey = `changeIndex_${selectedNetwork}` as any;
+                        await setStorageData({ [changeIndexKey]: nextChangeIndex });
+                        console.log(`[ChangeIndex] Incremented to ${nextChangeIndex} for ${selectedNetwork}`);
+
+                        // Broadcast to network
+                        const txid = await broadcastTransaction(txHex, selectedNetwork);
+                        console.log('UTXO creation transaction broadcast:', txid);
+
+                        // Refresh UTXOs and return to list
+                        await handleViewUtxos();
+                      } catch (error: any) {
+                        console.error('Failed to create UTXO:', error);
+                        if (String(error?.message || '').includes('txn-mempool-conflict')) {
+                          await handleViewUtxos()
+                          alert('Failed to create UTXO: one of the selected inputs is already used by an unconfirmed transaction. The wallet refreshed its UTXOs. Please try again.')
+                        } else {
+                          alert(`Failed to create UTXO: ${error.message}`);
+                        }
+                      } finally {
+                        setCreateUtxoProcessing(false)
                       }
-                    }
-
-                    // Sign transaction locally
-                    const txHex = await signAndSendVanilla(
-                      mnemonic,
-                      vanillaUtxos,
-                      derivedUtxoHolderAddress,
-                      amountSats,
-                      feeRate,
-                      selectedNetwork,
-                      changeIndex
-                    )
-                      ;
-
-                    // Increment and save change index
-                    const nextChangeIndex = changeIndex + 1;
-                    setChangeIndex(nextChangeIndex);
-                    const changeIndexKey = `changeIndex_${selectedNetwork}` as any;
-                    await setStorageData({ [changeIndexKey]: nextChangeIndex });
-                    console.log(`[ChangeIndex] Incremented to ${nextChangeIndex} for ${selectedNetwork}`);
-
-                    // Broadcast to network
-                    const txid = await broadcastTransaction(txHex, selectedNetwork);
-                    console.log('UTXO creation transaction broadcast:', txid);
-
-                    // Refresh UTXOs and return to list
-                    await handleViewUtxos();
-                  } catch (error: any) {
-                    console.error('Failed to create UTXO:', error);
-                    alert(`Failed to create UTXO: ${error.message}`);
-                  }
-                }}
-                style={{
-                  width: '100%',
-                  marginTop: '1rem',
-                  background: '#f7931a',
-                  padding: '1rem',
-                  fontSize: '1rem',
-                  fontWeight: 600,
-                  borderRadius: '12px',
-                  border: 'none',
-                  color: '#fff',
-                  cursor: 'pointer'
-                }}
-              >
-                Sign & Pay
-              </button>
-            </div>
+                    }}
+                  >
+                    {createUtxoProcessing ? 'Signing...' : 'Sign & Pay'}
+                  </button>
+                </div>
+              )
+            })()}
           </div>
         )
       }

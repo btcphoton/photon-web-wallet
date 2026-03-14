@@ -3043,3 +3043,128 @@ textarea:focus {
 .send-fee-btn.active .send-fee-time {
   color: #fff;
 }
+
+/* Create UTXO Confirm */
+.utxo-confirm-shell {
+  padding: 1rem;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.utxo-confirm-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding-bottom: 3.5rem;
+  flex: 1;
+}
+
+.utxo-card {
+  background: #0f172a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 1.25rem;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+.utxo-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.35rem 0.75rem;
+  background: rgba(247, 147, 26, 0.15);
+  color: #f7931a;
+  border: 1px solid rgba(247, 147, 26, 0.35);
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 0.75rem;
+  letter-spacing: 0.02em;
+}
+
+.utxo-amount {
+  margin-top: 0.75rem;
+  font-size: 2rem;
+  font-weight: 800;
+  color: #fff;
+}
+
+.utxo-sub {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.95rem;
+  margin-top: 0.25rem;
+}
+
+.utxo-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 1rem 0;
+}
+
+.utxo-divider.full {
+  margin: 0.25rem 0 0.5rem;
+}
+
+.utxo-route {
+  color: rgba(255, 255, 255, 0.7);
+  font-family: 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-size: 0.9rem;
+  word-break: break-all;
+}
+
+.utxo-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.utxo-row.total {
+  margin-top: 0.5rem;
+}
+
+.utxo-label {
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 0.95rem;
+}
+
+.utxo-value {
+  color: #fff;
+  font-size: 0.95rem;
+  font-family: 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+}
+
+.utxo-value.bold {
+  font-weight: 700;
+}
+
+.utxo-pill {
+  padding: 0.35rem 0.75rem;
+  background: rgba(44, 44, 46, 0.6);
+  border: 1px solid rgba(88, 166, 255, 0.4);
+  color: #58a6ff;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.utxo-submit {
+  width: 100%;
+  margin-top: auto;
+  background: linear-gradient(135deg, #f7931a, #e67e00);
+  padding: 1rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  border-radius: 16px;
+  border: none;
+  color: #0b0b0b;
+  cursor: pointer;
+  position: sticky;
+  bottom: 0;
+  box-shadow: 0 -8px 28px rgba(0, 0, 0, 0.45);
+}
+
+.utxo-submit:hover {
+  background: linear-gradient(135deg, #ff9f26, #f07f00);
+  transform: translateY(-1px);
+}
