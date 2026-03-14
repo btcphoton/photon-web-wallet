@@ -373,6 +373,43 @@ function App() {
     return network === 'regtest' && !!address && !isLikelyRegtestAddress(address)
   }
 
+  const syncAuxiliaryBitcoinAddresses = async (
+    mnemonicPhrase: string,
+    network: Network = selectedNetwork,
+    nextAddressIndex: number = addressIndex
+  ) => {
+    if (addressGenerationMethod !== 'bitcoin' || !mnemonicPhrase) {
+      return null
+    }
+
+    const derivedMainBalanceAddress = await deriveBitcoinAddress(mnemonicPhrase, network, 86, 0, 0, nextAddressIndex)
+    const derivedUtxoHolderAddress = await deriveBitcoinAddress(mnemonicPhrase, network, 86, 0, 100, 0)
+    const derivedDustHolderAddress = await deriveBitcoinAddress(mnemonicPhrase, network, 86, 0, 999, 0)
+
+    const hasAddressDrift =
+      mainBalanceAddress !== derivedMainBalanceAddress ||
+      utxoHolderAddress !== derivedUtxoHolderAddress ||
+      dustHolderAddress !== derivedDustHolderAddress
+
+    if (hasAddressDrift) {
+      setMainBalanceAddress(derivedMainBalanceAddress)
+      setUtxoHolderAddress(derivedUtxoHolderAddress)
+      setDustHolderAddress(derivedDustHolderAddress)
+
+      await setStorageData({
+        [`MainBalance_${network}`]: derivedMainBalanceAddress,
+        [`UTXOHolder_${network}`]: derivedUtxoHolderAddress,
+        [`DustHolder_${network}`]: derivedDustHolderAddress
+      })
+    }
+
+    return {
+      mainBalanceAddress: derivedMainBalanceAddress,
+      utxoHolderAddress: derivedUtxoHolderAddress,
+      dustHolderAddress: derivedDustHolderAddress
+    }
+  }
+
   const getRegtestWalletKey = () => {
     const stableId = principalId || walletAddress || coloredAddress || 'anonymous'
     return `extension-${stableId}-regtest`
@@ -2255,7 +2292,15 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
         const storageData = await getStorageData(['rgbProxy'])
         const rgbProxyUrl = (storageData.rgbProxy as string) || 'http://89.117.52.115:3000/json-rpc'
 
-        const rgbDisplayAddress = addressGenerationMethod === 'bitcoin' ? utxoHolderAddress : walletAddress
+        const syncedAuxiliaryAddresses =
+          addressGenerationMethod === 'bitcoin'
+            ? await syncAuxiliaryBitcoinAddresses(mnemonic, selectedNetwork)
+            : null
+
+        const rgbDisplayAddress =
+          addressGenerationMethod === 'bitcoin'
+            ? (syncedAuxiliaryAddresses?.utxoHolderAddress || utxoHolderAddress)
+            : walletAddress
 
         if (!rgbDisplayAddress) {
           throw new Error('RGB UTXO holder address is not available.')
@@ -2333,7 +2378,15 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
         setRgbClassificationError('RGB proxy unavailable. Showing all UTXOs as unoccupied.')
 
         // Fallback: treat all as unoccupied if RGB fetcher fails
-        const rgbDisplayAddress = addressGenerationMethod === 'bitcoin' ? utxoHolderAddress : walletAddress
+        const syncedAuxiliaryAddresses =
+          addressGenerationMethod === 'bitcoin'
+            ? await syncAuxiliaryBitcoinAddresses(mnemonic, selectedNetwork)
+            : null
+
+        const rgbDisplayAddress =
+          addressGenerationMethod === 'bitcoin'
+            ? (syncedAuxiliaryAddresses?.utxoHolderAddress || utxoHolderAddress)
+            : walletAddress
         if (rgbDisplayAddress) {
           const holderCoinType = selectedNetwork === 'mainnet' ? 0 : 1
           const holderDerivationPath = `m/86'/${holderCoinType}'/0'/100/0`
