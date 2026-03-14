@@ -2884,21 +2884,6 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                   </div>
                 </>
               )}
-              <div className="dashboard-metrics">
-                <div className="dashboard-metric-card">
-                  <span className="dashboard-metric-label">Available</span>
-                  <span className="dashboard-metric-value">{formatBtcValue(btcBalance, 8)} BTC</span>
-                </div>
-                <div className="dashboard-metric-card">
-                  <span className="dashboard-metric-label">Pending</span>
-                  <span className="dashboard-metric-value">{formatBtcValue(pendingBalance, 8)} BTC</span>
-                </div>
-                <div className="dashboard-metric-card">
-                  <span className="dashboard-metric-label">Assets</span>
-                  <span className="dashboard-metric-value">{assets.length}</span>
-                </div>
-              </div>
-
               <div className="identity-stack">
                 <div className="identity-card">
                   <div className="identity-card-header">
@@ -2945,24 +2930,6 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                   </div>
                 </div>
 
-                <div className="identity-card principal-row">
-                  <div className="identity-card-header">
-                    <span className="address-badge principal-badge">ICP</span>
-                    <span className="identity-card-label">Principal ID</span>
-                  </div>
-                  <div className="identity-card-value" title={principalId}>
-                    <span className="address-text">{truncateAddress(principalId) || 'No Principal'}</span>
-                  </div>
-                  <div className="identity-card-actions">
-                    <button
-                      className="icon-btn-sm"
-                      onClick={copyPrincipal}
-                      title={copiedPrincipal ? 'Copied!' : 'Copy Principal ID'}
-                    >
-                      {copiedPrincipal ? '✓' : '⧉'}
-                    </button>
-                  </div>
-                </div>
               </div>
             </div>
 
@@ -3613,6 +3580,37 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
           </div>
 
           <div className="settings-content">
+            <div className="settings-section">
+              <h3 className="settings-section-title">Reference</h3>
+              <p className="settings-info">Wallet identifiers and developer-facing values for troubleshooting.</p>
+            </div>
+
+            <div className="input-group">
+              <label className="input-label">Principal ID</label>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.75rem',
+                  padding: '0.9rem 1rem',
+                  background: 'rgba(255, 255, 255, 0.04)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  borderRadius: '12px'
+                }}
+              >
+                <div style={{ flex: 1, fontSize: '0.9rem', color: '#fff', fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                  {principalId || 'No Principal'}
+                </div>
+                <button
+                  className="icon-btn-sm"
+                  onClick={copyPrincipal}
+                  title={copiedPrincipal ? 'Copied!' : 'Copy Principal ID'}
+                >
+                  {copiedPrincipal ? '✓' : '⧉'}
+                </button>
+              </div>
+            </div>
+
             <div className="settings-section">
               <h3 className="settings-section-title">Canister Configuration</h3>
               <p className="settings-info">Configure custom canister IDs for wallet address and balance retrieval.</p>
@@ -4768,30 +4766,6 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
 
             {/* Scrollable Content Container */}
             <div className="wallet-scroll-container">
-              <div className="utxo-hero">
-                <div className="utxo-hero-copy">
-                  <div className="section-eyebrow">RGB workspace</div>
-                  <h3 className="section-title">Dedicated holder outputs</h3>
-                  <p className="section-inline-note">
-                    Unoccupied outputs can receive RGB assets, occupied outputs are asset-bound, and unlockable outputs can be returned to main BTC balance.
-                  </p>
-                </div>
-                <div className="utxo-hero-stats">
-                  <div className="utxo-stat-card">
-                    <span className="utxo-stat-label">Unoccupied</span>
-                    <span className="utxo-stat-value">{bitcoinUtxos.length}</span>
-                  </div>
-                  <div className="utxo-stat-card">
-                    <span className="utxo-stat-label">Occupied</span>
-                    <span className="utxo-stat-value">{rgbUtxos.length}</span>
-                  </div>
-                  <div className="utxo-stat-card">
-                    <span className="utxo-stat-label">Holder</span>
-                    <span className="utxo-stat-address">{utxoHolderAddress ? `${utxoHolderAddress.slice(0, 10)}...${utxoHolderAddress.slice(-6)}` : 'Unavailable'}</span>
-                  </div>
-                </div>
-              </div>
-
               {/* Tabs */}
               <div className="utxos-tabs">
                 <button className={`utxo-tab-btn ${utxoTab === 'unoccupied' ? 'active' : ''}`} onClick={() => setUtxoTab('unoccupied')}>Unoccupied</button>

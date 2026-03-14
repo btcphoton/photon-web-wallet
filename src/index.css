@@ -327,38 +327,6 @@ body {
   color: #fff;
 }
 
-.dashboard-metrics {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.7rem;
-  margin: 1rem 0;
-}
-
-.dashboard-metric-card {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  padding: 0.85rem 0.9rem;
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(10px);
-}
-
-.dashboard-metric-label {
-  font-size: 0.72rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.48);
-}
-
-.dashboard-metric-value {
-  font-size: 0.98rem;
-  font-weight: 700;
-  color: #fff;
-  line-height: 1.2;
-}
-
 .identity-stack {
   display: flex;
   flex-direction: column;
@@ -750,47 +718,6 @@ body {
 
 .activity-status-new.pending {
   color: #f59e0b;
-}
-
-.utxo-hero {
-  display: grid;
-  gap: 1rem;
-  padding: 0 1rem 1rem;
-}
-
-.utxo-hero-stats {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.75rem;
-}
-
-.utxo-stat-card {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  padding: 0.95rem 1rem;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.utxo-stat-label {
-  font-size: 0.72rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.46);
-}
-
-.utxo-stat-value {
-  font-size: 1.15rem;
-  font-weight: 800;
-  color: #fff;
-}
-
-.utxo-stat-address {
-  font-size: 0.78rem;
-  color: rgba(255, 255, 255, 0.7);
-  font-family: 'Monaco', 'Menlo', monospace;
 }
 
 .utxos-tabs {
