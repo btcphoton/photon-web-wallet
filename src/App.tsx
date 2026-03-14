@@ -81,6 +81,7 @@ const getRandomPositions = (): number[] => {
 
 const REGTEST_PHO_CONTRACT_ID = 'rgb:2Mhfmuc0-BqWCUwP-kkJKF_V-F1~L4j6-A1_W6Yy-hK6Z~rA'
 const REGTEST_LIGHT_CONTRACT_ID = 'rgb:WDJM8Vmw-Gnipws~-5i7T1Hh-~v028f1-FUW_OqC-1ClqyPk'
+const PHOTON_PRICE_API = 'https://faucet.photonbolt.xyz/api/market/btc-usd'
 
 const importableAssets: ImportableAsset[] = [
   {
@@ -1610,15 +1611,15 @@ function App() {
 
     const loadBtcPrice = async () => {
       try {
-        const response = await fetch('https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT')
+        const response = await fetch(PHOTON_PRICE_API)
         const data = await response.json()
-        const price = Number(data?.price)
+        const price = Number(data?.priceUsd)
 
         if (!cancelled && Number.isFinite(price) && price > 0) {
           setBtcPrice(price)
         }
       } catch (error) {
-        console.error('Error fetching BTC price from Binance:', error)
+        console.error('Error fetching BTC price from Photon wrapper:', error)
       }
     }
 
@@ -2825,7 +2826,8 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
           <div className="wallet-scroll-container" ref={scrollContainerRef}>
             {/* Balance Section */}
             <div className="balance-section">
-              <div className="network-label">{networks.find(n => n.id === selectedNetwork)?.name.replace('Bitcoin ', '') || 'Mainnet'}</div>
+              <div className="network-pill">{networks.find(n => n.id === selectedNetwork)?.name.replace('Bitcoin ', '') || 'Mainnet'}</div>
+              <div className="balance-caption">Total Bitcoin</div>
               <div className="balance-row">
                 {loadingBalance ? (
                   <div className="skeleton-loader"></div>
@@ -2836,6 +2838,13 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                 )}
                 <span className="balance-currency">BTC</span>
                 <button className="info-btn" onClick={() => setShowBalanceInfo(!showBalanceInfo)}>ⓘ</button>
+              </div>
+              <div className="balance-subtitle">
+                {calculateUsdValue(String(parseFloat(btcBalance) + pendingBalance))} total
+              </div>
+              <div className="balance-subtitle">
+                Main balance {formatBtcValue(btcBalance, 8)} BTC
+                {pendingBalance > 0 ? ` + ${formatBtcValue(pendingBalance, 8)} pending` : ''}
               </div>
 
               {/* Balance Error Display */}
@@ -2875,74 +2884,110 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                   </div>
                 </>
               )}
-              <div className="address-row">
-                <span className="address-badge">BTC</span>
-                {loadingAddress ? (
-                  <span className="address-text">Loading...</span>
-                ) : loadingExpand ? (
-                  <div className="wave-loader">
-                    <div className="wave-dot"></div>
-                    <div className="wave-dot"></div>
-                    <div className="wave-dot"></div>
-                  </div>
-                ) : (
-                  <span className="address-text" title={walletAddress || btcAddress}>
-                    {truncateAddress(walletAddress || btcAddress) || 'No address'}
-                  </span>
-                )}
-                <button
-                  className="icon-btn-sm"
-                  onClick={() => {
-                    navigator.clipboard.writeText(walletAddress || btcAddress)
-                    setCopied(true)
-                    setTimeout(() => setCopied(false), 2000)
-                  }}
-                  title={copied ? 'Copied!' : 'Copy address'}
-                >
-                  {copied ? '✓' : '⧉'}
-                </button>
-                <button
-                  className="icon-btn-sm"
-                  onClick={handleExpandAddress}
-                  title={addressGenerationMethod === 'bitcoin' ? 'Expand disabled in Bitcoin mode' : 'Expand - Fetch from canister'}
-                  disabled={addressGenerationMethod === 'bitcoin'}
-                  style={{
-                    opacity: addressGenerationMethod === 'bitcoin' ? 0.5 : 1,
-                    cursor: addressGenerationMethod === 'bitcoin' ? 'not-allowed' : 'pointer'
-                  }}
-                >
-                  ⊡
-                </button>
+              <div className="dashboard-metrics">
+                <div className="dashboard-metric-card">
+                  <span className="dashboard-metric-label">Available</span>
+                  <span className="dashboard-metric-value">{formatBtcValue(btcBalance, 8)} BTC</span>
+                </div>
+                <div className="dashboard-metric-card">
+                  <span className="dashboard-metric-label">Pending</span>
+                  <span className="dashboard-metric-value">{formatBtcValue(pendingBalance, 8)} BTC</span>
+                </div>
+                <div className="dashboard-metric-card">
+                  <span className="dashboard-metric-label">Assets</span>
+                  <span className="dashboard-metric-value">{assets.length}</span>
+                </div>
               </div>
-              {/* Principal ID Row */}
-              <div className="address-row principal-row">
-                <span className="address-badge principal-badge">ICP</span>
-                <span className="address-text" title={principalId}>
-                  {truncateAddress(principalId) || 'No Principal'}
-                </span>
-                <button
-                  className="icon-btn-sm"
-                  onClick={copyPrincipal}
-                  title={copiedPrincipal ? 'Copied!' : 'Copy Principal ID'}
-                >
-                  {copiedPrincipal ? '✓' : '⧉'}
-                </button>
+
+              <div className="identity-stack">
+                <div className="identity-card">
+                  <div className="identity-card-header">
+                    <span className="address-badge">BTC</span>
+                    <span className="identity-card-label">Primary wallet address</span>
+                  </div>
+                  <div className="identity-card-value" title={walletAddress || btcAddress}>
+                    {loadingAddress ? (
+                      <span className="address-text">Loading...</span>
+                    ) : loadingExpand ? (
+                      <div className="wave-loader">
+                        <div className="wave-dot"></div>
+                        <div className="wave-dot"></div>
+                        <div className="wave-dot"></div>
+                      </div>
+                    ) : (
+                      <span className="address-text">{truncateAddress(walletAddress || btcAddress) || 'No address'}</span>
+                    )}
+                  </div>
+                  <div className="identity-card-actions">
+                    <button
+                      className="icon-btn-sm"
+                      onClick={() => {
+                        navigator.clipboard.writeText(walletAddress || btcAddress)
+                        setCopied(true)
+                        setTimeout(() => setCopied(false), 2000)
+                      }}
+                      title={copied ? 'Copied!' : 'Copy address'}
+                    >
+                      {copied ? '✓' : '⧉'}
+                    </button>
+                    <button
+                      className="icon-btn-sm"
+                      onClick={handleExpandAddress}
+                      title={addressGenerationMethod === 'bitcoin' ? 'Expand disabled in Bitcoin mode' : 'Expand - Fetch from canister'}
+                      disabled={addressGenerationMethod === 'bitcoin'}
+                      style={{
+                        opacity: addressGenerationMethod === 'bitcoin' ? 0.5 : 1,
+                        cursor: addressGenerationMethod === 'bitcoin' ? 'not-allowed' : 'pointer'
+                      }}
+                    >
+                      ⊡
+                    </button>
+                  </div>
+                </div>
+
+                <div className="identity-card principal-row">
+                  <div className="identity-card-header">
+                    <span className="address-badge principal-badge">ICP</span>
+                    <span className="identity-card-label">Principal ID</span>
+                  </div>
+                  <div className="identity-card-value" title={principalId}>
+                    <span className="address-text">{truncateAddress(principalId) || 'No Principal'}</span>
+                  </div>
+                  <div className="identity-card-actions">
+                    <button
+                      className="icon-btn-sm"
+                      onClick={copyPrincipal}
+                      title={copiedPrincipal ? 'Copied!' : 'Copy Principal ID'}
+                    >
+                      {copiedPrincipal ? '✓' : '⧉'}
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
 
             {/* Action Buttons */}
+            <div className="section-header">
+              <div>
+                <div className="section-eyebrow">Wallet actions</div>
+                <h3 className="section-title">Move and manage funds</h3>
+              </div>
+            </div>
             <div className="action-buttons">
               <button className="action-btn" onClick={() => setView('receive')}>
                 <div className="action-icon receive">↓</div>
                 <span className="action-label">Receive</span>
+                <span className="action-subtext">Address and invoice flows</span>
               </button>
               <button className="action-btn" onClick={() => setView('send')}>
                 <div className="action-icon send">↗</div>
                 <span className="action-label">Send</span>
+                <span className="action-subtext">Bitcoin transfer</span>
               </button>
               <button className="action-btn" onClick={handleViewUtxos}>
                 <div className="action-icon utxos">▤</div>
                 <span className="action-label">UTXOs</span>
+                <span className="action-subtext">RGB holder outputs</span>
               </button>
             </div>
 
@@ -2965,6 +3010,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
             {/* Asset List */}
             {activeTab === 'assets' && (
               <div className="asset-list">
+                <div className="section-inline-note">Tracked assets for {networks.find(n => n.id === selectedNetwork)?.name.replace('Bitcoin ', '') || 'Mainnet'}.</div>
                 {assets.length === 0 ? (
                   <div className="assets-empty">
                     <div className="empty-icon">📦</div>
@@ -3004,6 +3050,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
 
             {activeTab === 'activities' && (
               <div className="activities-list">
+                <div className="section-inline-note">Recent wallet activity and settlement status.</div>
                 {loadingActivities ? (
                   <div className="activities-loading">
                     <div className="skeleton-loader"></div>
@@ -4721,11 +4768,35 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
 
             {/* Scrollable Content Container */}
             <div className="wallet-scroll-container">
+              <div className="utxo-hero">
+                <div className="utxo-hero-copy">
+                  <div className="section-eyebrow">RGB workspace</div>
+                  <h3 className="section-title">Dedicated holder outputs</h3>
+                  <p className="section-inline-note">
+                    Unoccupied outputs can receive RGB assets, occupied outputs are asset-bound, and unlockable outputs can be returned to main BTC balance.
+                  </p>
+                </div>
+                <div className="utxo-hero-stats">
+                  <div className="utxo-stat-card">
+                    <span className="utxo-stat-label">Unoccupied</span>
+                    <span className="utxo-stat-value">{bitcoinUtxos.length}</span>
+                  </div>
+                  <div className="utxo-stat-card">
+                    <span className="utxo-stat-label">Occupied</span>
+                    <span className="utxo-stat-value">{rgbUtxos.length}</span>
+                  </div>
+                  <div className="utxo-stat-card">
+                    <span className="utxo-stat-label">Holder</span>
+                    <span className="utxo-stat-address">{utxoHolderAddress ? `${utxoHolderAddress.slice(0, 10)}...${utxoHolderAddress.slice(-6)}` : 'Unavailable'}</span>
+                  </div>
+                </div>
+              </div>
+
               {/* Tabs */}
-              <div className="utxos-tabs" style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', borderBottom: '1px solid rgba(255, 255, 255, 0.1)', paddingBottom: '0.5rem', padding: '0 1rem 0.5rem 1rem' }}>
-                <button onClick={() => setUtxoTab('unoccupied')} style={{ background: utxoTab === 'unoccupied' ? 'rgba(247, 147, 26, 0.2)' : 'transparent', color: utxoTab === 'unoccupied' ? '#f7931a' : 'rgba(255, 255, 255, 0.6)', border: 'none', padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem', transition: 'all 0.2s ease' }}>Unoccupied</button>
-                <button onClick={() => setUtxoTab('occupied')} style={{ background: utxoTab === 'occupied' ? 'rgba(247, 147, 26, 0.2)' : 'transparent', color: utxoTab === 'occupied' ? '#f7931a' : 'rgba(255, 255, 255, 0.6)', border: 'none', padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem', transition: 'all 0.2s ease' }}>Occupied</button>
-                <button onClick={() => setUtxoTab('unlockable')} style={{ background: utxoTab === 'unlockable' ? 'rgba(247, 147, 26, 0.2)' : 'transparent', color: utxoTab === 'unlockable' ? '#f7931a' : 'rgba(255, 255, 255, 0.6)', border: 'none', padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem', transition: 'all 0.2s ease' }}>Unlockable</button>
+              <div className="utxos-tabs">
+                <button className={`utxo-tab-btn ${utxoTab === 'unoccupied' ? 'active' : ''}`} onClick={() => setUtxoTab('unoccupied')}>Unoccupied</button>
+                <button className={`utxo-tab-btn ${utxoTab === 'occupied' ? 'active' : ''}`} onClick={() => setUtxoTab('occupied')}>Occupied</button>
+                <button className={`utxo-tab-btn ${utxoTab === 'unlockable' ? 'active' : ''}`} onClick={() => setUtxoTab('unlockable')}>Unlockable</button>
               </div>
 
               {/* RGB Classification Error Warning */}
@@ -4784,6 +4855,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                                 <div>
                                   <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.85rem' }}>{utxo.isLocked ? 'Reserved for RGB' : 'Available for RGB Binding'}</span>
                                   <div style={{ color: '#fff', fontSize: '0.95rem', marginTop: '0.25rem', fontWeight: 600 }}>{formatBtcAmount(utxo.value)} BTC</div>
+                                  <div style={{ color: 'rgba(255, 255, 255, 0.42)', fontSize: '0.8rem', marginTop: '0.2rem' }}>{calculateUsdValue(formatBtcAmount(utxo.value, 8))}</div>
                                 </div>
                               </div>
                             ))}
@@ -4833,6 +4905,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                                 <div style={{ marginBottom: '0.75rem' }}>
                                   <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.85rem' }}>Bitcoin Value</span>
                                   <div style={{ color: '#fff', fontSize: '0.95rem', marginTop: '0.25rem', fontWeight: 600 }}>{formatBtcAmount(utxo.value)} BTC</div>
+                                  <div style={{ color: 'rgba(255, 255, 255, 0.42)', fontSize: '0.8rem', marginTop: '0.2rem' }}>{calculateUsdValue(formatBtcAmount(utxo.value, 8))}</div>
                                 </div>
                                 {utxo.rgbAllocations && utxo.rgbAllocations.length > 0 && (
                                   <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.1)', paddingTop: '0.75rem' }}>
@@ -4885,6 +4958,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                                 <div style={{ marginBottom: '1rem' }}>
                                   <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '0.85rem' }}>Available UTXO balance</span>
                                   <div style={{ color: '#fff', fontSize: '0.95rem', marginTop: '0.25rem', fontWeight: 600 }}>{formatBtcAmount(utxo.value)} BTC</div>
+                                  <div style={{ color: 'rgba(255, 255, 255, 0.42)', fontSize: '0.8rem', marginTop: '0.2rem' }}>{calculateUsdValue(formatBtcAmount(utxo.value, 8))}</div>
                                 </div>
                                 <button
                                   type="button"
