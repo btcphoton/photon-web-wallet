@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, type ReactNode } from 'react'
 import './App.css'
 import { generateMnemonic, deriveIdentity, validateMnemonic } from './utils/crypto'
 import { getBtcAddress, getWalletAddress, updateBalance, mapNetworkToCanister, getUtxos, getEstimatedBitcoinFees, sendBitcoin } from './utils/icp'
@@ -14,7 +14,7 @@ import type { Asset } from './utils/storage'
 import { BACKEND_PROFILES, DEFAULT_BACKEND_PROFILE_ID, getBackendProfileById, getDefaultElectrumServer, getDefaultRgbProxy, type BackendProfileId } from './utils/backend-config'
 import { QRCodeSVG } from 'qrcode.react'
 import { createRgbInvoice } from './utils/rgb-invoice'
-import { fetchRegtestRgbBalance, fetchRegtestRgbRegistry, mineRegtestBlocks } from './utils/rgb-wallet'
+import { createRegtestRgbInvoice, fetchRegtestRgbBalance, fetchRegtestRgbRegistry, mineRegtestBlocks } from './utils/rgb-wallet'
 import { LightningAnimation } from './components/LightningAnimation'
 import { fetchBtcActivities, type BitcoinActivity } from './utils/bitcoin-activities'
 
@@ -120,6 +120,74 @@ const importableAssets: ImportableAsset[] = [
     },
   },
 ]
+
+function WalletHeaderButton({
+  ariaLabel,
+  onClick,
+  children,
+  className = '',
+  title,
+}: {
+  ariaLabel: string
+  onClick: () => void
+  children: ReactNode
+  className?: string
+  title?: string
+}) {
+  return (
+    <button
+      className={`wallet-header-btn ${className}`.trim()}
+      onClick={onClick}
+      aria-label={ariaLabel}
+      title={title || ariaLabel}
+      type="button"
+    >
+      {children}
+    </button>
+  )
+}
+
+function WalletStatCard({
+  label,
+  value,
+  tone = 'default',
+}: {
+  label: string
+  value: string
+  tone?: 'default' | 'positive' | 'warning'
+}) {
+  return (
+    <div className={`wallet-stat-card wallet-stat-${tone}`}>
+      <span className="wallet-stat-label">{label}</span>
+      <span className="wallet-stat-value">{value}</span>
+    </div>
+  )
+}
+
+function WalletIdentityCard({
+  badge,
+  label,
+  value,
+  actions,
+}: {
+  badge: string
+  label: string
+  value: ReactNode
+  actions?: ReactNode
+}) {
+  return (
+    <div className="wallet-identity-card">
+      <div className="wallet-identity-top">
+        <div className="wallet-identity-meta">
+          <span className={`wallet-identity-badge ${badge === 'ICP' ? 'wallet-identity-badge-icp' : ''}`}>{badge}</span>
+          <span className="wallet-identity-label">{label}</span>
+        </div>
+        {actions && <div className="wallet-identity-actions">{actions}</div>}
+      </div>
+      <div className="wallet-identity-value">{value}</div>
+    </div>
+  )
+}
 
 function App() {
   const [view, setView] = useState<View>('welcome')
@@ -2737,22 +2805,37 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
 
       {view === 'dashboard' && (
         <div className="wallet-wrapper" onDoubleClick={() => balanceError && setBalanceError('')}>
-          {/* Header - Fixed at top */}
-          <div className="wallet-header">
-            <div className="brand">
-              <span className="brand-icon">⚡</span>
-              <span className="brand-name">PHOTON</span>
+          <div className="photon-dashboard-header">
+            <div className="photon-brand-lockup">
+              <div className="photon-brand-mark">⚡</div>
+              <div className="photon-brand-copy">
+                <span className="photon-brand-name">PHOTON</span>
+                <span className="photon-brand-subtitle">Bitcoin + RGB wallet</span>
+              </div>
             </div>
-            <div className="header-actions">
-              <button className="icon-btn network-btn" onClick={() => setShowNetworkModal(true)}>
+            <div className="photon-header-actions">
+              <WalletHeaderButton
+                ariaLabel="Select network"
+                onClick={() => setShowNetworkModal(true)}
+                className="wallet-network-trigger"
+              >
                 <span
-                  className="network-icon"
+                  className="wallet-network-symbol"
                   style={{ color: networks.find(n => n.id === selectedNetwork)?.color || '#f7931a' }}
-                >₿</span>
-                <span className="dropdown-arrow">▾</span>
-              </button>
-              <button className="icon-btn" onClick={handleRefreshBalance} title="Refresh balance">↻</button>
-              <button className="icon-btn" onClick={() => setShowMenu(!showMenu)}>≡</button>
+                >
+                  ₿
+                </span>
+                <span className="wallet-network-name">
+                  {(networks.find((n) => n.id === selectedNetwork)?.name || 'Bitcoin').replace('Bitcoin ', '')}
+                </span>
+                <span className="wallet-network-caret">▾</span>
+              </WalletHeaderButton>
+              <WalletHeaderButton ariaLabel="Refresh balance" onClick={handleRefreshBalance} title="Refresh balance">
+                ↻
+              </WalletHeaderButton>
+              <WalletHeaderButton ariaLabel="Open menu" onClick={() => setShowMenu(!showMenu)} title="Open menu">
+                ≡
+              </WalletHeaderButton>
             </div>
           </div>
 
@@ -2822,32 +2905,30 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
             </div>
           )}
 
-          {/* Scrollable Content Container - Everything scrolls together */}
-          <div className="wallet-scroll-container" ref={scrollContainerRef}>
-            {/* Balance Section */}
-            <div className="balance-section">
-              <div className="network-pill">{networks.find(n => n.id === selectedNetwork)?.name.replace('Bitcoin ', '') || 'Mainnet'}</div>
-              <div className="balance-caption">Total Bitcoin</div>
-              <div className="balance-row">
+          <div className="wallet-scroll-container photon-dashboard-scroll" ref={scrollContainerRef}>
+            <section className="photon-balance-panel">
+              <div className="photon-balance-topline">
+                <span className="photon-balance-kicker">Portfolio value</span>
+                <button className="photon-info-trigger" onClick={() => setShowBalanceInfo(!showBalanceInfo)} aria-label="Show balance details" type="button">ⓘ</button>
+              </div>
+
+              <div className="photon-balance-amount-row">
                 {loadingBalance ? (
                   <div className="skeleton-loader"></div>
                 ) : (
-                  <span className="balance-amount">
-                    {(parseFloat(btcBalance) + pendingBalance).toFixed(8)}
-                  </span>
+                  <>
+                    <span className="photon-balance-amount">{(parseFloat(btcBalance) + pendingBalance).toFixed(8)}</span>
+                    <span className="photon-balance-unit">BTC</span>
+                  </>
                 )}
-                <span className="balance-currency">BTC</span>
-                <button className="info-btn" onClick={() => setShowBalanceInfo(!showBalanceInfo)}>ⓘ</button>
               </div>
-              <div className="balance-subtitle">
-                {calculateUsdValue(String(parseFloat(btcBalance) + pendingBalance))} total
-              </div>
-              <div className="balance-subtitle">
+
+              <div className="photon-balance-fiat">{calculateUsdValue(String(parseFloat(btcBalance) + pendingBalance))}</div>
+              <div className="photon-balance-caption">
                 Main balance {formatBtcValue(btcBalance, 8)} BTC
                 {pendingBalance > 0 ? ` + ${formatBtcValue(pendingBalance, 8)} pending` : ''}
               </div>
 
-              {/* Balance Error Display */}
               {balanceError && (
                 <div className="balance-error">
                   <span className="error-icon">⚠️</span>
@@ -2855,7 +2936,6 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                 </div>
               )}
 
-              {/* Balance Info Popup */}
               {showBalanceInfo && (
                 <>
                   <div className="balance-popup-overlay" onClick={() => setShowBalanceInfo(false)}></div>
@@ -2863,103 +2943,127 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                     <div className="balance-popup-row">
                       <span className="balance-popup-label">Available</span>
                       <div className="balance-popup-value">
-                        <span className="balance-popup-btc">0 BTC</span>
-                        <span className="balance-popup-sats">0 sats</span>
+                        <span className="balance-popup-btc">{formatBtcValue(btcBalance, 8)} BTC</span>
                       </div>
                     </div>
                     <div className="balance-popup-row">
                       <span className="balance-popup-label">Unconfirmed</span>
                       <div className="balance-popup-value">
-                        <span className="balance-popup-btc">0 BTC</span>
-                        <span className="balance-popup-sats">0 sats</span>
+                        <span className="balance-popup-btc">{formatBtcValue(pendingBalance, 8)} BTC</span>
                       </div>
                     </div>
                     <div className="balance-popup-row">
-                      <span className="balance-popup-label">UTXO Locked</span>
+                      <span className="balance-popup-label">Assets tracked</span>
                       <div className="balance-popup-value">
-                        <span className="balance-popup-btc">0 BTC</span>
-                        <span className="balance-popup-sats">0 sats</span>
+                        <span className="balance-popup-btc">{assets.length}</span>
                       </div>
                     </div>
                   </div>
                 </>
               )}
-              <div className="identity-stack">
-                <div className="identity-card">
-                  <div className="identity-card-header">
-                    <span className="address-badge">BTC</span>
-                    <span className="identity-card-label">Primary wallet address</span>
-                  </div>
-                  <div className="identity-card-value" title={walletAddress || btcAddress}>
-                    {loadingAddress ? (
-                      <span className="address-text">Loading...</span>
-                    ) : loadingExpand ? (
-                      <div className="wave-loader">
-                        <div className="wave-dot"></div>
-                        <div className="wave-dot"></div>
-                        <div className="wave-dot"></div>
-                      </div>
-                    ) : (
-                      <span className="address-text">{truncateAddress(walletAddress || btcAddress) || 'No address'}</span>
-                    )}
-                  </div>
-                  <div className="identity-card-actions">
+
+              <div className="photon-stats-grid">
+                <WalletStatCard label="Available" value={`${formatBtcValue(btcBalance, 8)} BTC`} tone="positive" />
+                <WalletStatCard label="Pending" value={`${formatBtcValue(pendingBalance, 8)} BTC`} tone="warning" />
+                <WalletStatCard label="Assets" value={String(assets.length)} />
+              </div>
+            </section>
+
+            <section className="photon-identity-grid">
+              <WalletIdentityCard
+                badge="BTC"
+                label="Primary wallet address"
+                value={
+                  loadingAddress ? (
+                    <span className="address-text">Loading...</span>
+                  ) : loadingExpand ? (
+                    <div className="wave-loader">
+                      <div className="wave-dot"></div>
+                      <div className="wave-dot"></div>
+                      <div className="wave-dot"></div>
+                    </div>
+                  ) : (
+                    <span className="address-text" title={walletAddress || btcAddress}>
+                      {truncateAddress(walletAddress || btcAddress) || 'No address'}
+                    </span>
+                  )
+                }
+                actions={
+                  <>
                     <button
-                      className="icon-btn-sm"
+                      className="wallet-inline-action"
                       onClick={() => {
                         navigator.clipboard.writeText(walletAddress || btcAddress)
                         setCopied(true)
                         setTimeout(() => setCopied(false), 2000)
                       }}
                       title={copied ? 'Copied!' : 'Copy address'}
+                      type="button"
                     >
                       {copied ? '✓' : '⧉'}
                     </button>
                     <button
-                      className="icon-btn-sm"
+                      className="wallet-inline-action"
                       onClick={handleExpandAddress}
                       title={addressGenerationMethod === 'bitcoin' ? 'Expand disabled in Bitcoin mode' : 'Expand - Fetch from canister'}
                       disabled={addressGenerationMethod === 'bitcoin'}
-                      style={{
-                        opacity: addressGenerationMethod === 'bitcoin' ? 0.5 : 1,
-                        cursor: addressGenerationMethod === 'bitcoin' ? 'not-allowed' : 'pointer'
-                      }}
+                      type="button"
                     >
                       ⊡
                     </button>
-                  </div>
+                  </>
+                }
+              />
+
+              <WalletIdentityCard
+                badge="ICP"
+                label="Principal ID"
+                value={
+                  <span className="address-text" title={principalId}>
+                    {truncateAddress(principalId) || 'No Principal'}
+                  </span>
+                }
+                actions={
+                  <button
+                    className="wallet-inline-action"
+                    onClick={copyPrincipal}
+                    title={copiedPrincipal ? 'Copied!' : 'Copy Principal ID'}
+                    type="button"
+                  >
+                    {copiedPrincipal ? '✓' : '⧉'}
+                  </button>
+                }
+              />
+            </section>
+
+            <section className="dashboard-section">
+              <div className="dashboard-section-header">
+                <div>
+                  <div className="section-eyebrow">Quick actions</div>
+                  <h3 className="section-title">Move and manage funds</h3>
                 </div>
-
               </div>
-            </div>
-
-            {/* Action Buttons */}
-            <div className="section-header">
-              <div>
-                <div className="section-eyebrow">Wallet actions</div>
-                <h3 className="section-title">Move and manage funds</h3>
+              <div className="photon-actions-grid">
+                <button className="photon-action-card" onClick={() => setView('receive')}>
+                  <div className="action-icon receive">↓</div>
+                  <span className="action-label">Receive</span>
+                  <span className="action-subtext">Bitcoin address and RGB invoices</span>
+                </button>
+                <button className="photon-action-card" onClick={() => setView('send')}>
+                  <div className="action-icon send">↗</div>
+                  <span className="action-label">Send</span>
+                  <span className="action-subtext">Broadcast Bitcoin transactions</span>
+                </button>
+                <button className="photon-action-card" onClick={handleViewUtxos}>
+                  <div className="action-icon utxos">▤</div>
+                  <span className="action-label">UTXOs</span>
+                  <span className="action-subtext">Manage RGB holder outputs</span>
+                </button>
               </div>
-            </div>
-            <div className="action-buttons">
-              <button className="action-btn" onClick={() => setView('receive')}>
-                <div className="action-icon receive">↓</div>
-                <span className="action-label">Receive</span>
-                <span className="action-subtext">Address and invoice flows</span>
-              </button>
-              <button className="action-btn" onClick={() => setView('send')}>
-                <div className="action-icon send">↗</div>
-                <span className="action-label">Send</span>
-                <span className="action-subtext">Bitcoin transfer</span>
-              </button>
-              <button className="action-btn" onClick={handleViewUtxos}>
-                <div className="action-icon utxos">▤</div>
-                <span className="action-label">UTXOs</span>
-                <span className="action-subtext">RGB holder outputs</span>
-              </button>
-            </div>
+            </section>
 
-            {/* Tabs */}
-            <div className="tabs-container">
+            <section className="dashboard-section dashboard-content-panel">
+              <div className="tabs-container photon-dashboard-tabs">
               <button
                 className={`tab-btn ${activeTab === 'assets' ? 'active' : ''}`}
                 onClick={() => setActiveTab('assets')}
@@ -2974,10 +3078,9 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               </button>
             </div>
 
-            {/* Asset List */}
             {activeTab === 'assets' && (
               <div className="asset-list">
-                <div className="section-inline-note">Tracked assets for {networks.find(n => n.id === selectedNetwork)?.name.replace('Bitcoin ', '') || 'Mainnet'}.</div>
+                <div className="section-inline-note">Tracked assets for {(networks.find((n) => n.id === selectedNetwork)?.name || 'Bitcoin').replace('Bitcoin ', '')}.</div>
                 {assets.length === 0 ? (
                   <div className="assets-empty">
                     <div className="empty-icon">📦</div>
@@ -3089,6 +3192,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                 )}
               </div>
             )}
+            </section>
           </div>
         </div>
       )}
@@ -3355,7 +3459,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                     }
 
                     if (!rgbAsset) {
-                      setRgbError('Select an RGB asset before generating a client-side invoice.')
+                      setRgbError('Select an RGB asset before generating an invoice.')
                       setRgbGenerating(false)
                       return
                     }
@@ -3393,22 +3497,43 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                       return
                     }
 
-                    console.log('[RGB Receive] Prepared client-side invoice request', {
+                    const isRegtestRgbInvoice = selectedNetwork === 'regtest'
+
+                    console.log('[RGB Receive] Prepared invoice request', {
+                      mode: isRegtestRgbInvoice ? 'backend-regtest' : 'client-side',
                       contractId,
                       invoiceAmount,
                       openAmount,
                     })
 
-                    const invoiceResult = await createRgbInvoice(contractId, invoiceAmount)
-                    console.log('[RGB Receive] Client-side invoice created successfully', {
-                      txid: invoiceResult.txid,
-                      vout: invoiceResult.vout,
-                      source: invoiceResult.source,
-                    })
+                    if (isRegtestRgbInvoice) {
+                      const invoiceResult = await createRegtestRgbInvoice({
+                        assetId: contractId,
+                        amount: invoiceAmount,
+                        openAmount,
+                      })
 
-                    setRgbWalletOnline(true)
-                    setRgbInvoice(invoiceResult.invoice)
-                    setRgbInvoiceStep('invoice')
+                      console.log('[RGB Receive] Backend regtest invoice created successfully', {
+                        recipientId: invoiceResult.recipient_id,
+                        batchTransferIndex: invoiceResult.batch_transfer_idx,
+                      })
+
+                      setRgbWalletOnline(true)
+                      setRgbInvoice(invoiceResult.invoice)
+                      setRgbInvoiceStep('invoice')
+                    } else {
+                      const invoiceResult = await createRgbInvoice(contractId, invoiceAmount)
+
+                      console.log('[RGB Receive] Client-side invoice created successfully', {
+                        txid: invoiceResult.txid,
+                        vout: invoiceResult.vout,
+                        source: invoiceResult.source,
+                      })
+
+                      setRgbWalletOnline(true)
+                      setRgbInvoice(invoiceResult.invoice)
+                      setRgbInvoiceStep('invoice')
+                    }
                   } catch (error) {
                     console.error('[RGB Receive] Error generating RGB invoice:', error)
                     setRgbWalletOnline(Boolean(mnemonic && coloredAddress))

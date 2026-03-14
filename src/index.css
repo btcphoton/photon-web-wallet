@@ -37,6 +37,387 @@ body {
   overflow-x: hidden;
 }
 
+.photon-dashboard-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.85rem 0.95rem 0.65rem;
+  background:
+    linear-gradient(180deg, rgba(10, 10, 10, 0.98) 0%, rgba(19, 19, 19, 0.92) 100%);
+  position: sticky;
+  top: 0;
+  z-index: 110;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(18px);
+}
+
+.photon-brand-lockup {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-width: 0;
+}
+
+.photon-brand-mark {
+  width: 2.2rem;
+  height: 2.2rem;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: linear-gradient(160deg, rgba(247, 147, 26, 0.28), rgba(247, 147, 26, 0.08));
+  color: #ffb257;
+  box-shadow: inset 0 0 0 1px rgba(247, 147, 26, 0.18), 0 10px 22px rgba(247, 147, 26, 0.16);
+  font-size: 1.1rem;
+}
+
+.photon-brand-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.photon-brand-name {
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: #fff5e8;
+}
+
+.photon-brand-subtitle {
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.46);
+  white-space: nowrap;
+}
+
+.photon-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-shrink: 0;
+}
+
+.wallet-header-btn {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.82);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 2.35rem;
+  border-radius: 14px;
+  padding: 0.55rem 0.7rem;
+  cursor: pointer;
+  transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+  backdrop-filter: blur(12px);
+}
+
+.wallet-header-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.14);
+  transform: translateY(-1px);
+}
+
+.wallet-network-trigger {
+  padding-inline: 0.7rem 0.75rem;
+  max-width: 10rem;
+}
+
+.wallet-network-symbol {
+  font-weight: 800;
+}
+
+.wallet-network-name {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.86);
+  white-space: nowrap;
+}
+
+.wallet-network-caret {
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.54);
+}
+
+.photon-dashboard-scroll {
+  padding: 0 0 1.1rem;
+}
+
+.photon-balance-panel {
+  margin: 0.9rem 0.9rem 0.8rem;
+  padding: 1rem 1rem 0.95rem;
+  border-radius: 24px;
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at top right, rgba(247, 147, 26, 0.22), transparent 34%),
+    linear-gradient(180deg, rgba(32, 23, 15, 0.96) 0%, rgba(17, 17, 17, 0.98) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 24px 44px rgba(0, 0, 0, 0.34);
+}
+
+.photon-balance-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.08), transparent 30%),
+    url('/dashboard-bg.svg') center/cover no-repeat;
+  opacity: 0.38;
+  pointer-events: none;
+}
+
+.photon-balance-panel > * {
+  position: relative;
+  z-index: 1;
+}
+
+.photon-balance-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.55rem;
+}
+
+.photon-balance-kicker {
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.54);
+}
+
+.photon-info-trigger {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.44);
+  cursor: pointer;
+  font-size: 0.95rem;
+}
+
+.photon-balance-amount-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.4rem;
+}
+
+.photon-balance-amount {
+  font-size: 2.45rem;
+  line-height: 0.95;
+  font-weight: 900;
+  letter-spacing: -0.06em;
+  color: #fff;
+}
+
+.photon-balance-unit {
+  font-size: 1rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.58);
+  padding-bottom: 0.22rem;
+}
+
+.photon-balance-fiat {
+  margin-top: 0.45rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #ffcf94;
+}
+
+.photon-balance-caption {
+  margin-top: 0.4rem;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.83rem;
+}
+
+.photon-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.6rem;
+  margin-top: 0.9rem;
+}
+
+.wallet-stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.8rem 0.85rem;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(10px);
+}
+
+.wallet-stat-label {
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.48);
+}
+
+.wallet-stat-value {
+  font-size: 0.92rem;
+  line-height: 1.25;
+  font-weight: 800;
+  color: #fff;
+}
+
+.wallet-stat-positive .wallet-stat-value {
+  color: #eafaf0;
+}
+
+.wallet-stat-warning .wallet-stat-value {
+  color: #ffe4b8;
+}
+
+.photon-identity-grid {
+  display: grid;
+  gap: 0.7rem;
+  padding: 0 0.9rem;
+}
+
+.wallet-identity-card {
+  border-radius: 20px;
+  padding: 0.9rem 0.95rem;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.03));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.wallet-identity-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+  margin-bottom: 0.65rem;
+}
+
+.wallet-identity-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.wallet-identity-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.2rem;
+  height: 1.5rem;
+  padding: 0 0.55rem;
+  border-radius: 999px;
+  background: rgba(247, 147, 26, 0.16);
+  color: #f7a84a;
+  border: 1px solid rgba(247, 147, 26, 0.18);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.wallet-identity-badge-icp {
+  background: rgba(99, 102, 241, 0.16);
+  color: #aeb4ff;
+  border-color: rgba(99, 102, 241, 0.18);
+}
+
+.wallet-identity-label {
+  font-size: 0.76rem;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.wallet-identity-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.wallet-identity-value {
+  min-width: 0;
+}
+
+.wallet-identity-value .address-text {
+  display: block;
+  font-family: 'Monaco', 'Menlo', monospace;
+  color: #edf3f9;
+  font-size: 0.88rem;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wallet-inline-action {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.82);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.wallet-inline-action:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.dashboard-section {
+  padding: 0 0.9rem;
+  margin-top: 0.95rem;
+}
+
+.dashboard-section-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.photon-actions-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.photon-action-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.42rem;
+  min-height: 8.35rem;
+  padding: 0.95rem 0.9rem;
+  text-align: left;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.03));
+  color: inherit;
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+}
+
+.photon-action-card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(255, 255, 255, 0.14);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.065), rgba(255, 255, 255, 0.04));
+}
+
+.dashboard-content-panel {
+  margin-top: 1rem;
+  padding-top: 0.95rem;
+  padding-bottom: 0.15rem;
+  border-radius: 24px 24px 0 0;
+  background: rgba(255, 255, 255, 0.02);
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.photon-dashboard-tabs {
+  padding-top: 0;
+}
+
 /* Wallet Container - Wrapper for scroll-based UX */
 .wallet-wrapper {
   display: flex;
