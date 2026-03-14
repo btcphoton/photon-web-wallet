@@ -134,3 +134,26 @@ export async function fetchRegtestRgbRegistry(): Promise<RgbRegistryAsset[]> {
 
     return Array.isArray(data.assets) ? data.assets as RgbRegistryAsset[] : []
 }
+
+export async function mineRegtestBlocks(blocks: number = 1): Promise<void> {
+    const apiBase = await getRegtestRgbApiBase()
+    const response = await fetch(`${apiBase}/regtest/mine`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            blocks: Math.max(1, Math.trunc(blocks || 1)),
+        }),
+    })
+
+    if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(errorText || `Regtest mining failed with status ${response.status}`)
+    }
+
+    const data = await response.json()
+    if (!data.ok) {
+        throw new Error(data.error || 'Regtest mining failed')
+    }
+}

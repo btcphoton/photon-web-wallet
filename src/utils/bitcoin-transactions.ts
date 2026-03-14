@@ -111,9 +111,10 @@ export const fetchUTXOsFromBlockchain = async (
     network: WalletNetwork = 'mainnet'
 ): Promise<UTXO[]> => {
     const baseUrl = await resolveBitcoinApiBase(network, 'utxo');
+    const includeMempool = network === 'regtest' ? '?include_mempool=1' : ''
 
     try {
-        const response = await fetch(`${baseUrl}/address/${address}/utxo`);
+        const response = await fetch(`${baseUrl}/address/${address}/utxo${includeMempool}`);
 
         if (!response.ok) {
             const errorText = await response.text();

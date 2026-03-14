@@ -14,7 +14,7 @@ import type { Asset } from './utils/storage'
 import { BACKEND_PROFILES, DEFAULT_BACKEND_PROFILE_ID, getBackendProfileById, getDefaultElectrumServer, getDefaultRgbProxy, type BackendProfileId } from './utils/backend-config'
 import { QRCodeSVG } from 'qrcode.react'
 import { createRgbInvoice } from './utils/rgb-invoice'
-import { fetchRegtestRgbBalance, fetchRegtestRgbRegistry } from './utils/rgb-wallet'
+import { fetchRegtestRgbBalance, fetchRegtestRgbRegistry, mineRegtestBlocks } from './utils/rgb-wallet'
 import { LightningAnimation } from './components/LightningAnimation'
 import { fetchBtcActivities, type BitcoinActivity } from './utils/bitcoin-activities'
 
@@ -5222,6 +5222,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                       } finally {
                         setCreateUtxoProcessing(false)
                       }
+<<<<<<< HEAD
                     }}
                   >
                     {createUtxoProcessing ? 'Signing...' : 'Sign & Pay'}
@@ -5229,6 +5230,78 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                 </div>
               )
             })()}
+=======
+                    }
+
+                    // Sign transaction locally
+                    const txHex = await signAndSendVanilla(
+                      mnemonic,
+                      vanillaUtxos,
+                      derivedUtxoHolderAddress,
+                      amountSats,
+                      feeRate,
+                      selectedNetwork,
+                      changeIndex
+                    )
+                      ;
+
+                    // Increment and save change index
+                    const nextChangeIndex = changeIndex + 1;
+                    setChangeIndex(nextChangeIndex);
+                    const changeIndexKey = `changeIndex_${selectedNetwork}` as any;
+                    await setStorageData({ [changeIndexKey]: nextChangeIndex });
+                    console.log(`[ChangeIndex] Incremented to ${nextChangeIndex} for ${selectedNetwork}`);
+
+                    // Broadcast to network
+                    const txid = await broadcastTransaction(txHex, selectedNetwork);
+                    console.log('UTXO creation transaction broadcast:', txid);
+
+                    const createdHolderUtxo: UtxoWithRgbStatus = {
+                      txid,
+                      vout: 0,
+                      value: amountSats,
+                      address: derivedUtxoHolderAddress,
+                      derivationPath: `m/86'/${selectedNetwork === 'mainnet' ? 0 : 1}'/0'/100/0`,
+                      isOccupied: false,
+                      isLocked: false,
+                      account: 'vanilla',
+                      chain: 0,
+                      index: 0,
+                    }
+
+                    setBitcoinUtxos((previous) => {
+                      const next = previous.filter((utxo) => !(utxo.txid === txid && utxo.vout === 0))
+                      return [createdHolderUtxo, ...next]
+                    })
+
+                    if (selectedNetwork === 'regtest') {
+                      await mineRegtestBlocks(1)
+                    }
+
+                    // Refresh UTXOs and return to list
+                    await handleViewUtxos();
+                  } catch (error: any) {
+                    console.error('Failed to create UTXO:', error);
+                    alert(`Failed to create UTXO: ${error.message}`);
+                  }
+                }}
+                style={{
+                  width: '100%',
+                  marginTop: '1rem',
+                  background: '#f7931a',
+                  padding: '1rem',
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  borderRadius: '12px',
+                  border: 'none',
+                  color: '#fff',
+                  cursor: 'pointer'
+                }}
+              >
+                Sign & Pay
+              </button>
+            </div>
+>>>>>>> 0511c37 (Changes)
           </div>
         )
       }
