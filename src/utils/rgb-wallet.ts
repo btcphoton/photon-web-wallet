@@ -67,6 +67,7 @@ export async function createRegtestRgbInvoice(params: {
     amount?: number
     openAmount: boolean
     durationSeconds?: number
+    walletKey?: string
 }): Promise<RgbWalletInvoiceResponse> {
     const payload = {
         assetId: params.assetId || null,
@@ -75,11 +76,17 @@ export async function createRegtestRgbInvoice(params: {
     }
 
     const apiBase = await getRegtestRgbApiBase()
+    const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+    }
+
+    if (params.walletKey) {
+        headers['x-photon-wallet-key'] = params.walletKey
+    }
+
     const response = await fetch(`${apiBase}/rgb/invoice`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify(payload),
     })
 

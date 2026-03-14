@@ -3568,10 +3568,12 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                     })
 
                     if (isRegtestRgbInvoice) {
+                      const walletKey = getRegtestWalletKey()
                       const invoiceResult = await createRegtestRgbInvoice({
                         assetId: contractId,
                         amount: invoiceAmount,
                         openAmount,
+                        walletKey,
                       })
 
                       console.log('[RGB Receive] Backend regtest invoice created successfully', {
