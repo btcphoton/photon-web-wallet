@@ -486,8 +486,9 @@ function App() {
     }
   }
 
-  const getRegtestWalletKey = () => {
-    const stableId = principalId || walletAddress || coloredAddress || 'anonymous'
+  const getRegtestWalletKey = async () => {
+    const storedIdentity = await getStorageData(['principalId'])
+    const stableId = storedIdentity.principalId || principalId || walletAddress || coloredAddress || 'anonymous'
     return `extension-${stableId}-regtest`
   }
 
@@ -532,7 +533,7 @@ function App() {
         ? JSON.parse(storedContractMapRaw) as Record<string, string>
         : {}
 
-    const walletKey = getRegtestWalletKey()
+    const walletKey = await getRegtestWalletKey()
 
     const updatedAssets = await Promise.all(
       sourceAssets.map(async (asset) => {
@@ -2128,7 +2129,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
         const feeRateMap = { slow: 0, avg: 1, fast: 2, custom: 2 }
         const feeIndex = feeRateMap[sendFeeOption as 'slow' | 'avg' | 'fast' | 'custom'] || 2
         const feeRate = Number(sendEstimatedFees[feeIndex] || 5n)
-        const walletKey = getRegtestWalletKey()
+        const walletKey = await getRegtestWalletKey()
         const result = await sendRegtestRgbInvoice({
           invoice: sendReceiverAddress.trim(),
           feeRate,
@@ -2593,7 +2594,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
           }>>()
 
           if (contractIds.length > 0) {
-            const walletKey = getRegtestWalletKey()
+            const walletKey = await getRegtestWalletKey()
             const transferResponses = await Promise.all(
               contractIds.map(async (assetId) => {
                 try {
@@ -3824,7 +3825,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                     })
 
                     if (isRegtestRgbInvoice) {
-                      const walletKey = getRegtestWalletKey()
+                      const walletKey = await getRegtestWalletKey()
                       const invoiceResult = await createRegtestRgbInvoice({
                         assetId: contractId,
                         amount: invoiceAmount,
