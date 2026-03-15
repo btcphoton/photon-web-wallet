@@ -1088,6 +1088,16 @@ body {
   background: #6366f1; /* Indigo/Blue */
 }
 
+.activity-icon-circle.lightning {
+  background: linear-gradient(135deg, #f59e0b, #f97316);
+  box-shadow: 0 10px 24px rgba(245, 158, 11, 0.28);
+}
+
+.activity-lightning-icon {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
 .activity-info {
   display: flex;
   flex-direction: column;
@@ -1115,6 +1125,11 @@ body {
 .activity-link-icon {
   font-size: 0.8rem;
   color: rgba(255, 255, 255, 0.4);
+}
+
+.activity-note {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.45);
 }
 
 .activity-right {
@@ -3679,6 +3694,45 @@ textarea:focus {
   margin-top: 1rem;
 }
 
+.send-instant-balance-card {
+  margin-bottom: 1rem;
+  padding: 1rem;
+  border-radius: 18px;
+  border: 1px solid rgba(245, 158, 11, 0.22);
+  background:
+    radial-gradient(circle at top right, rgba(245, 158, 11, 0.18), transparent 42%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.025));
+}
+
+.send-instant-kicker {
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.52);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.send-instant-amount {
+  margin-top: 0.35rem;
+  font-size: 2rem;
+  font-weight: 800;
+  color: #fff7ed;
+}
+
+.send-instant-amount span {
+  color: #f59e0b;
+  font-size: 1.15rem;
+}
+
+.send-instant-meta {
+  margin-top: 0.4rem;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.64);
+}
+
 .send-input-group {
   flex: 1;
 }
@@ -3712,6 +3766,44 @@ textarea:focus {
   outline: none;
   border-color: #f7931a;
   background: rgba(255, 255, 255, 0.08);
+}
+
+.send-route-card {
+  margin-top: 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.85rem 0.95rem;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.send-route-card.lightning {
+  background: radial-gradient(circle at top right, rgba(245, 158, 11, 0.18), transparent 45%), rgba(255, 255, 255, 0.04);
+  border-color: rgba(245, 158, 11, 0.24);
+}
+
+.send-route-card.rgb-onchain {
+  border-color: rgba(56, 189, 248, 0.22);
+}
+
+.send-route-pill {
+  align-self: flex-start;
+  padding: 0.3rem 0.65rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.send-route-copy {
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 0.82rem;
+  line-height: 1.45;
 }
 
 .send-next-btn {

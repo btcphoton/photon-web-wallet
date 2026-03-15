@@ -4,11 +4,16 @@ import { resolveBitcoinApiBase, type WalletNetwork } from './backend-config';
 
 export interface BitcoinActivity {
     type: 'Receive' | 'Send';
-    txid: string;
+    txid: string | null;
     amount: number;
     status: 'Confirmed' | 'Pending';
     date: string;
     blockHeight?: number;
+    timestamp?: number;
+    unit?: string;
+    route?: 'onchain' | 'lightning';
+    settlementLabel?: string;
+    note?: string;
 }
 
 export const fetchBtcActivities = async (
@@ -66,7 +71,10 @@ export const fetchBtcActivities = async (
                 date: tx.status?.block_time
                     ? new Date(tx.status.block_time * 1000).toLocaleDateString()
                     : 'Pending',
-                blockHeight: tx.status?.block_height
+                blockHeight: tx.status?.block_height,
+                timestamp: tx.status?.block_time || 0,
+                unit: 'BTC',
+                route: 'onchain'
             };
         }).filter(Boolean); // Remove any null entries from invalid transactions
     } catch (error) {

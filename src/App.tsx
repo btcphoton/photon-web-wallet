@@ -14,7 +14,7 @@ import type { Asset } from './utils/storage'
 import { BACKEND_PROFILES, DEFAULT_BACKEND_PROFILE_ID, getBackendProfileById, getDefaultElectrumServer, getDefaultRgbProxy, type BackendProfileId } from './utils/backend-config'
 import { QRCodeSVG } from 'qrcode.react'
 import { createRgbInvoice } from './utils/rgb-invoice'
-import { createRegtestRgbInvoice, decodeRegtestRgbInvoice, fetchRegtestRgbBalance, fetchRegtestRgbRegistry, fetchRegtestRgbTransfers, mineRegtestBlocks, registerRgbInvoiceSecret, sendRegtestRgbInvoice } from './utils/rgb-wallet'
+import { createRegtestRgbInvoice, decodeRegtestLightningInvoice, decodeRegtestRgbInvoice, fetchRegtestRgbBalance, fetchRegtestRgbRegistry, fetchRegtestRgbTransfers, mineRegtestBlocks, payRegtestLightningInvoice, registerRgbInvoiceSecret, sendRegtestRgbInvoice } from './utils/rgb-wallet'
 import { LightningAnimation } from './components/LightningAnimation'
 import { fetchBtcActivities, type BitcoinActivity } from './utils/bitcoin-activities'
 
@@ -66,6 +66,10 @@ const formatBtcValue = (btcAmount: number | string, decimals = 8) => {
   const fixed = btc.toFixed(decimals)
   return fixed.replace(/\.0+$|0+$/g, '').replace(/\.$/, '')
 }
+
+const isLightningInvoice = (value: string) => /^ln/i.test(value.trim())
+const isRgbInvoice = (value: string) => /^rgb:/i.test(value.trim())
+const isBlindSealReference = (value: string) => /^bcrt:utxob:/i.test(value.trim())
 
 // Generate 5 random unique positions from 1-12
 const getRandomPositions = (): number[] => {
@@ -304,9 +308,16 @@ function App() {
   const [swapSuccess, setSwapSuccess] = useState<string>('')
   const [sendReceiverAddress, setSendReceiverAddress] = useState<string>('')
   const [sendAmount, setSendAmount] = useState<string>('')
-  const [sendMode, setSendMode] = useState<'btc' | 'rgb'>('btc')
+  const [sendMode, setSendMode] = useState<'btc' | 'rgb' | 'lightning'>('btc')
   const [sendRgbAssetId, setSendRgbAssetId] = useState<string>('')
   const [sendRgbAssetLabel, setSendRgbAssetLabel] = useState<string>('RGB Asset')
+  const [sendRoute, setSendRoute] = useState<'bitcoin' | 'rgb-onchain' | 'lightning' | null>(null)
+  const [sendRouteHint, setSendRouteHint] = useState<string>('')
+  const [sendOffchainOutbound, setSendOffchainOutbound] = useState<string>('0')
+  const [sendOffchainInbound, setSendOffchainInbound] = useState<string>('0')
+  const [sendTotalSpendingPower, setSendTotalSpendingPower] = useState<string>('0')
+  const [sendLightningMsats, setSendLightningMsats] = useState<number>(0)
+  const [sendPaymentHash, setSendPaymentHash] = useState<string>('')
   const [maxSendableAmount, setMaxSendableAmount] = useState<string>('0.00000000')
   const [sendFeeOption, setSendFeeOption] = useState<'slow' | 'avg' | 'fast' | 'custom'>('fast')
   const [sendUserBalance, setSendUserBalance] = useState<string>('0.00000000')
@@ -548,9 +559,13 @@ function App() {
             walletKey,
           })
 
+          const spendable = Number(rgbBalance.balance.spendable || 0)
+          const offchainOutbound = Number(rgbBalance.balance.offchain_outbound || 0)
+          const totalSpendingPower = spendable + offchainOutbound
+
           return {
             ...asset,
-            amount: String(rgbBalance.balance.settled),
+            amount: String(totalSpendingPower),
             rgbLockReason:
               Number(rgbBalance.balance.locked_missing_secret || 0) > 0
                 ? 'Locked (Missing Secret)'
@@ -558,6 +573,9 @@ function App() {
                   ? 'Locked (Awaiting Confirmations)'
                   : undefined,
             rgbSpendabilityStatus: rgbBalance.balance.spendability_status,
+            rgbOffchainOutbound: String(rgbBalance.balance.offchain_outbound || 0),
+            rgbOffchainInbound: String(rgbBalance.balance.offchain_inbound || 0),
+            rgbSpendingPower: String(totalSpendingPower),
           }
         } catch (error) {
           console.error(`[RGB Balance] Failed to sync ${asset.id}:`, error)
@@ -566,6 +584,9 @@ function App() {
             amount: '0',
             rgbLockReason: undefined,
             rgbSpendabilityStatus: undefined,
+            rgbOffchainOutbound: '0',
+            rgbOffchainInbound: '0',
+            rgbSpendingPower: '0',
           }
         }
       })
@@ -1256,8 +1277,84 @@ function App() {
       ].filter(Boolean);
 
       const btcActivities = await fetchBtcActivities(walletAddress, selectedNetwork, walletAddresses)
-      setActivities(btcActivities)
-      console.log(`Loaded ${btcActivities.length} activities`)
+      let nextActivities: BitcoinActivity[] = [...btcActivities]
+
+      if (selectedNetwork === 'regtest') {
+        try {
+          const contractsKey = getNetworkContractsKey(selectedNetwork)
+          const contractsResult = await getStorageData([contractsKey])
+          const storedContractsRaw = contractsResult[contractsKey]
+          const storedContracts =
+            typeof storedContractsRaw === 'string'
+              ? JSON.parse(storedContractsRaw) as Record<string, string>
+              : {}
+
+          const walletKey = await getRegtestWalletKey()
+          const rgbActivities = await Promise.all(
+            Object.entries(storedContracts).map(async ([assetKey, contractId]) => {
+              const assetMeta = assets.find((asset) => asset.id === assetKey)
+              if (!contractId || !assetMeta) {
+                return []
+              }
+
+              const response = await fetchRegtestRgbTransfers({ assetId: contractId, walletKey })
+              return response.transfers
+                .filter((transfer) => {
+                  if (transfer.kind === 'Issuance') return false
+                  if (transfer.kind === 'Send' || transfer.kind?.startsWith('Receive')) return true
+                  return transfer.kind?.startsWith('Lightning') || transfer.txid === null
+                })
+                .map((transfer) => {
+                  const assignmentValue = Number(
+                    transfer.assignments?.[0]?.value ??
+                    transfer.requested_assignment?.value ??
+                    0
+                  )
+                  const metadataTimestamp =
+                    typeof transfer.metadata?.created_at === 'number'
+                      ? transfer.metadata.created_at
+                      : typeof transfer.metadata?.updated_at === 'number'
+                        ? transfer.metadata.updated_at
+                        : null
+                  const timestamp = metadataTimestamp || Math.floor(Date.now() / 1000)
+                  const isReceive =
+                    transfer.kind?.startsWith('Receive') ||
+                    transfer.kind === 'LightningReceive'
+                  const isLightning = transfer.kind?.startsWith('Lightning') || transfer.txid === null
+
+                  return {
+                    type: isReceive ? 'Receive' : 'Send',
+                    txid: transfer.txid || null,
+                    amount: assignmentValue,
+                    status: transfer.status === 'Settled' ? 'Confirmed' : 'Pending',
+                    date: timestamp
+                      ? new Date(timestamp * 1000).toLocaleDateString()
+                      : 'Pending',
+                    timestamp,
+                    unit: assetMeta.unit,
+                    route: isLightning ? 'lightning' : 'onchain',
+                    settlementLabel: isLightning ? 'Off-Chain Settlement' : 'On-Chain Settlement',
+                    note: isLightning
+                      ? `Payment ${transfer.metadata && typeof transfer.metadata.payment_hash === 'string'
+                        ? `${transfer.metadata.payment_hash.slice(0, 8)}...`
+                        : 'via channel'}`
+                      : undefined,
+                  } satisfies BitcoinActivity
+                })
+            })
+          )
+
+          nextActivities = [
+            ...nextActivities,
+            ...rgbActivities.flat(),
+          ].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+        } catch (rgbActivityError) {
+          console.error('Error loading RGB activities:', rgbActivityError)
+        }
+      }
+
+      setActivities(nextActivities)
+      console.log(`Loaded ${nextActivities.length} activities`)
     } catch (error) {
       console.error('Error loading activities:', error)
       setActivities([])
@@ -1935,6 +2032,95 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
     }
   }
 
+  const applyOptimisticRgbBalance = async (assetId: string, nextBalance: {
+    spendable?: number | string
+    offchain_outbound?: number | string
+    offchain_inbound?: number | string
+  }) => {
+    const spendingPower =
+      Number(nextBalance.spendable || 0) + Number(nextBalance.offchain_outbound || 0)
+
+    const updatedAssets = assets.map((asset) => {
+      if (asset.id !== assetId) {
+        return asset
+      }
+
+      return {
+        ...asset,
+        amount: String(spendingPower),
+        rgbSpendingPower: String(spendingPower),
+        rgbOffchainOutbound: String(nextBalance.offchain_outbound || 0),
+        rgbOffchainInbound: String(nextBalance.offchain_inbound || 0),
+      }
+    })
+
+    setAssets(updatedAssets)
+    await setStorageData({
+      [getNetworkAssetsKey(selectedNetwork)]: JSON.stringify(updatedAssets),
+    })
+  }
+
+  const handleInvoicePaste = async (text: string) => {
+    const trimmedInput = text.trim()
+    setSendReceiverAddress(text)
+    setSendRoute(null)
+    setSendRouteHint('')
+    setSendError('')
+    setSendPaymentHash('')
+
+    if (!trimmedInput) {
+      return
+    }
+
+    if (isLightningInvoice(trimmedInput)) {
+      setSendRoute('lightning')
+      setSendRouteHint('Analyzing Lightning invoice...')
+
+      if (selectedNetwork !== 'regtest') {
+        setSendError('Lightning RGB pay is currently enabled for regtest only')
+        return
+      }
+
+      try {
+        const walletKey = await getRegtestWalletKey()
+        const decoded = await decodeRegtestLightningInvoice({
+          invoice: trimmedInput,
+          walletKey,
+        })
+        const assetMeta = decoded.decoded.asset_id
+          ? await resolveAssetDisplayMeta(decoded.decoded.asset_id, selectedNetwork)
+          : { label: 'RGB Asset', unit: 'RGB' }
+        const assetAmount = Number(decoded.decoded.asset_amount || 0)
+        const amtMsat = Number(decoded.decoded.amt_msat || 0)
+
+        setSendMode('lightning')
+        setSendRgbAssetId(decoded.decoded.asset_id || '')
+        setSendRgbAssetLabel(assetMeta.unit || assetMeta.label)
+        setSendAmount(assetAmount > 0 ? String(assetAmount) : '')
+        setSendLightningMsats(amtMsat)
+        setSendNetworkFee('0.00 PHO')
+        setSendRouteHint(
+          assetAmount > 0
+            ? `Payment for ${assetAmount} ${assetMeta.unit || 'RGB'} detected. Route: Lightning`
+            : 'Lightning route detected.'
+        )
+      } catch (error: any) {
+        console.error('Error decoding Lightning invoice:', error)
+        setSendError(error.message || 'Failed to decode Lightning invoice')
+      }
+      return
+    }
+
+    if (isRgbInvoice(trimmedInput) || isBlindSealReference(trimmedInput)) {
+      setSendRoute('rgb-onchain')
+      setSendRouteHint('RGB on-chain invoice detected.')
+      return
+    }
+
+    setSendRoute('bitcoin')
+    setSendRouteHint('Bitcoin on-chain payment detected.')
+  }
+
   // Load user balance and fees when send-amount view opens
   useEffect(() => {
     const loadSendBalance = async () => {
@@ -1942,6 +2128,9 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
         const result = await getStorageData(['user_bitcoin_balance'])
         const balance = result.user_bitcoin_balance || '0.00000000'
         setSendUserBalance(balance)
+        setSendOffchainOutbound('0')
+        setSendOffchainInbound('0')
+        setSendTotalSpendingPower('0')
 
         // Fetch estimated fees from mempool.space
         setSendLoadingFees(true)
@@ -1970,15 +2159,37 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
         if (sendMode === 'rgb') {
           setMaxSendableAmount(sendAmount || '0')
         }
+
+        if ((sendMode === 'rgb' || sendMode === 'lightning') && selectedNetwork === 'regtest' && sendRgbAssetId) {
+          try {
+            const walletKey = await getRegtestWalletKey()
+            const rgbBalance = await fetchRegtestRgbBalance({
+              assetId: sendRgbAssetId,
+              walletKey,
+            })
+            const spendable = Number(rgbBalance.balance.spendable || 0)
+            const offchainOutbound = Number(rgbBalance.balance.offchain_outbound || 0)
+            const offchainInbound = Number(rgbBalance.balance.offchain_inbound || 0)
+            const totalSpendingPower = spendable + offchainOutbound
+
+            setSendOffchainOutbound(String(offchainOutbound))
+            setSendOffchainInbound(String(offchainInbound))
+            setSendTotalSpendingPower(String(totalSpendingPower))
+            setSendUserBalance(String(totalSpendingPower))
+            setMaxSendableAmount(String(totalSpendingPower))
+          } catch (rgbBalanceError) {
+            console.error('Error loading RGB spending power:', rgbBalanceError)
+          }
+        }
       }
     }
     loadSendBalance()
-  }, [view, mnemonic, selectedNetwork, sendMode, sendAmount])
+  }, [view, mnemonic, selectedNetwork, sendMode, sendAmount, sendRgbAssetId])
 
   // Calculate max sendable amount whenever relevant state changes
   useEffect(() => {
     const calculateMax = async () => {
-      if (view === 'send-amount' && sendMode === 'rgb') {
+      if (view === 'send-amount' && (sendMode === 'rgb' || sendMode === 'lightning')) {
         setMaxSendableAmount(sendAmount || '0')
         return
       }
@@ -2023,6 +2234,46 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
     setSendError('')
     setSendTxId('')
 
+    if (isLightningInvoice(trimmedInput)) {
+      if (selectedNetwork !== 'regtest') {
+        setSendError('Lightning RGB pay is currently enabled for regtest only')
+        return
+      }
+
+      try {
+        const walletKey = await getRegtestWalletKey()
+        const decoded = await decodeRegtestLightningInvoice({
+          invoice: trimmedInput,
+          walletKey,
+        })
+        const assetId = decoded.decoded.asset_id || ''
+        const amountValue = Number(decoded.decoded.asset_amount || 0)
+        if (!assetId || !Number.isFinite(amountValue) || amountValue <= 0) {
+          throw new Error('Lightning RGB invoice amount is missing or invalid')
+        }
+
+        const assetMeta = await resolveAssetDisplayMeta(assetId, selectedNetwork)
+        setSendMode('lightning')
+        setSendRoute('lightning')
+        setSendRgbAssetId(assetId)
+        setSendRgbAssetLabel(assetMeta.unit || assetMeta.label)
+        setSendAmount(String(amountValue))
+        setSendLightningMsats(Number(decoded.decoded.amt_msat || 0))
+        setSendNetworkFee('0.00 PHO')
+        setView('send-amount')
+      } catch (error: any) {
+        console.error('Error decoding Lightning invoice:', error)
+        setSendError(error.message || 'Failed to decode Lightning invoice')
+      }
+      return
+    }
+
+    if (isBlindSealReference(trimmedInput)) {
+      setSendRoute('rgb-onchain')
+      setSendError('Paste the full RGB invoice, not only the blinded seal.')
+      return
+    }
+
     if (trimmedInput.toLowerCase().startsWith('rgb:')) {
       if (selectedNetwork !== 'regtest') {
         setSendError('RGB send is currently enabled for regtest only')
@@ -2038,8 +2289,9 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
 
         const assetMeta = await resolveAssetDisplayMeta(decoded.decoded.asset_id, selectedNetwork)
         setSendMode('rgb')
+        setSendRoute('rgb-onchain')
         setSendRgbAssetId(decoded.decoded.asset_id)
-        setSendRgbAssetLabel(assetMeta.label)
+        setSendRgbAssetLabel(assetMeta.unit || assetMeta.label)
         setSendAmount(String(amountValue))
         setSendUserBalance('0.00000000')
         setSendNetworkFee('TBD')
@@ -2052,9 +2304,11 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
     }
 
     setSendMode('btc')
+    setSendRoute('bitcoin')
     setSendRgbAssetId('')
     setSendRgbAssetLabel('RGB Asset')
     setSendAmount('')
+    setSendLightningMsats(0)
     setSendNetworkFee('0')
     setView('send-amount')
   }
@@ -2065,8 +2319,8 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
       return
     }
 
-    if (sendMode === 'rgb') {
-      setSendNetworkFee('TBD')
+    if (sendMode === 'rgb' || sendMode === 'lightning') {
+      setSendNetworkFee(sendMode === 'lightning' ? '0.00 PHO (Instant)' : 'TBD')
       setSendError('')
       setView('send-confirm')
       return
@@ -2116,6 +2370,58 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
 
   // Execute Bitcoin send transaction
   const handleSendBitcoin = async () => {
+    if (sendMode === 'lightning') {
+      if (!sendReceiverAddress) {
+        setSendError('Missing Lightning invoice')
+        return
+      }
+
+      setSendProcessing(true)
+      setSendError('')
+
+      try {
+        const walletKey = await getRegtestWalletKey()
+        const result = await payRegtestLightningInvoice({
+          invoice: sendReceiverAddress.trim(),
+          walletKey,
+        })
+
+        const nextOffchainOutbound = Math.max(0, Number(result.balance.offchain_outbound || 0))
+        const nextOffchainInbound = Math.max(0, Number(result.balance.offchain_inbound || 0))
+        const nextSpendingPower = Math.max(
+          0,
+          Number(result.balance.spendable || 0) + nextOffchainOutbound
+        )
+
+        setSendTxId('')
+        setSendPaymentHash(result.payment.payment_hash || '')
+        setSendOffchainOutbound(String(nextOffchainOutbound))
+        setSendOffchainInbound(String(nextOffchainInbound))
+        setSendTotalSpendingPower(String(nextSpendingPower))
+        setSendUserBalance(String(nextSpendingPower))
+        await applyOptimisticRgbBalance(
+          assets.find((asset) => asset.unit === sendRgbAssetLabel)?.id || buildAssetIdFromTicker(sendRgbAssetLabel),
+          result.balance
+        )
+        setView('send-success')
+
+        setTimeout(async () => {
+          try {
+            await handleRefreshBalance()
+            await loadActivities()
+          } catch (refreshError) {
+            console.error('Error refreshing wallet after Lightning payment:', refreshError)
+          }
+        }, 1200)
+      } catch (error: any) {
+        console.error('Lightning payment error:', error)
+        setSendError(error.message || 'Failed to pay Lightning invoice')
+      } finally {
+        setSendProcessing(false)
+      }
+      return
+    }
+
     if (sendMode === 'rgb') {
       if (!sendReceiverAddress) {
         setSendError('Missing RGB invoice')
@@ -2138,6 +2444,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
         })
 
         setSendTxId(result.txid || '')
+        setSendPaymentHash('')
         setView('send-success')
 
         setTimeout(async () => {
@@ -3379,6 +3686,11 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                             <span className="asset-amount">
                               {asset.amount} {asset.unit}
                             </span>
+                            {(Number(asset.rgbOffchainOutbound || 0) > 0 || Number(asset.rgbOffchainInbound || 0) > 0) && (
+                              <span className="asset-lock-note">
+                                Instant: {asset.rgbOffchainOutbound || '0'} {asset.unit} outbound • {asset.rgbOffchainInbound || '0'} inbound
+                              </span>
+                            )}
                             {asset.rgbLockReason && (
                               <span className="asset-lock-note">
                                 {asset.rgbLockReason}
@@ -3429,40 +3741,55 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                       <div key={date} className="activity-date-group">
                         <div className="activity-date-header">{date}</div>
                         {dateActivities.map((activity) => {
-                          const explorerUrl = selectedNetwork === 'mainnet'
+                          const explorerUrl = activity.txid
+                            ? (selectedNetwork === 'mainnet'
                             ? `https://blockstream.info/tx/${activity.txid}`
-                            : `https://blockstream.info/testnet/tx/${activity.txid}`;
+                            : `https://blockstream.info/testnet/tx/${activity.txid}`)
+                            : null;
 
-                          const shortTxid = activity.txid ? `${activity.txid.slice(0, 4)}...${activity.txid.slice(-4)}` : 'unknown';
+                          const shortTxid = activity.txid ? `${activity.txid.slice(0, 4)}...${activity.txid.slice(-4)}` : 'off-chain';
 
                           return (
                             <div
-                              key={activity.txid}
+                              key={`${activity.txid || activity.note || 'offchain'}-${activity.timestamp || activity.date}`}
                               className="activity-item"
-                              onClick={() => window.open(explorerUrl, '_blank')}
+                              onClick={() => {
+                                if (explorerUrl) {
+                                  window.open(explorerUrl, '_blank')
+                                }
+                              }}
                             >
                               <div className="activity-left">
-                                <div className={`activity-icon-circle ${activity.type.toLowerCase()}`}>
-                                  {activity.type === 'Receive' ? (
+                                <div className={`activity-icon-circle ${activity.route === 'lightning' ? 'lightning' : activity.type.toLowerCase()}`}>
+                                  {activity.route === 'lightning' ? (
+                                    <span className="activity-lightning-icon">⚡</span>
+                                  ) : activity.type === 'Receive' ? (
                                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M19 12l-7 7-7-7" /></svg>
                                   ) : (
                                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19V5M5 12l7-7 7 7" /></svg>
                                   )}
                                 </div>
                                 <div className="activity-info">
-                                  <span className="activity-type">{activity.type}</span>
+                                  <span className="activity-type">{activity.route === 'lightning' ? 'Lightning' : activity.type}</span>
                                   <div className="activity-tx-row">
-                                    <span className="activity-txid">tx: {shortTxid}</span>
-                                    <span className="activity-link-icon">↗</span>
+                                    <span className="activity-txid">
+                                      {activity.route === 'lightning'
+                                        ? (activity.settlementLabel || 'Off-Chain Settlement')
+                                        : `tx: ${shortTxid}`}
+                                    </span>
+                                    {explorerUrl && <span className="activity-link-icon">↗</span>}
                                   </div>
+                                  {activity.note && (
+                                    <span className="activity-note">{activity.note}</span>
+                                  )}
                                 </div>
                               </div>
                               <div className="activity-right">
                                 <span className={`activity-amount-new ${activity.type.toLowerCase()}`}>
-                                  {activity.type === 'Send' ? '-' : ''}{activity.amount.toFixed(8)} BTC
+                                  {activity.type === 'Send' ? '-' : ''}{activity.amount.toFixed(activity.unit === 'BTC' ? 8 : 2)} {activity.unit || 'BTC'}
                                 </span>
                                 <span className={`activity-status-new activity-status-pill ${activity.status.toLowerCase()}`}>
-                                  {activity.status}
+                                  {activity.route === 'lightning' ? 'Off-Chain Settlement' : activity.status}
                                 </span>
                               </div>
                             </div>
@@ -4754,7 +5081,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               <div className="flow-intro-card">
                 <div className="flow-kicker">Transfer</div>
                 <div className="flow-intro-title">Send BTC or PHO from Photon</div>
-                <div className="flow-intro-copy">Paste a Bitcoin address for BTC, or paste an RGB invoice to send PHO on regtest.</div>
+                <div className="flow-intro-copy">Paste a Bitcoin address for BTC, an RGB invoice for on-chain PHO, or a Lightning invoice for instant PHO settlement on regtest.</div>
               </div>
 
 	              <div className="send-input-group send-surface-card">
@@ -4762,10 +5089,18 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
 	                <input
                   type="text"
                   className="send-input"
-                  placeholder="Invoice or Bitcoin address"
+                  placeholder="lnbcrt1..., rgb:..., or Bitcoin address"
                   value={sendReceiverAddress}
-	                  onChange={(e) => setSendReceiverAddress(e.target.value)}
+	                  onChange={(e) => { void handleInvoicePaste(e.target.value) }}
 	                />
+                  {sendRoute && (
+                    <div className={`send-route-card ${sendRoute}`}>
+                      <div className="send-route-pill">
+                        {sendRoute === 'lightning' ? 'Lightning' : sendRoute === 'rgb-onchain' ? 'RGB On-Chain' : 'Bitcoin'}
+                      </div>
+                      <div className="send-route-copy">{sendRouteHint || 'Route detected.'}</div>
+                    </div>
+                  )}
 	              </div>
 	            </div>
 
@@ -4789,11 +5124,25 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
           <div className="send-container">
             <div className="send-header">
               <button className="send-back" onClick={() => setView('send')}>←</button>
-              <h2 className="send-title">{sendMode === 'rgb' ? `Send ${sendRgbAssetLabel}` : 'Send BTC'}</h2>
+              <h2 className="send-title">{sendMode === 'rgb' ? `Send ${sendRgbAssetLabel}` : sendMode === 'lightning' ? `Instant Pay ${sendRgbAssetLabel}` : 'Send BTC'}</h2>
             </div>
 
             <div className="send-content">
               <div className="send-surface-card">
+                {sendMode === 'lightning' && (
+                  <div className="send-instant-balance-card">
+                    <div className="send-instant-kicker">Ready to Spend (Instant)</div>
+                    <div className="send-instant-amount">
+                      {sendTotalSpendingPower || '0'} <span>{sendRgbAssetLabel}</span>
+                    </div>
+                    <div className="send-instant-meta">
+                      <span>On-chain: {Number(sendTotalSpendingPower || 0) - Number(sendOffchainOutbound || 0)}</span>
+                      <span>Channel: {sendOffchainOutbound || '0'}</span>
+                      <span>Inbound: {sendOffchainInbound || '0'}</span>
+                    </div>
+                  </div>
+                )}
+
                 <div className="send-section-block">
                   <label className="send-label">Recipient</label>
                   <div className="send-recipient-display">
@@ -4811,18 +5160,22 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                   <div className="send-amount-header">
                     <label className="send-label">Amount</label>
                     <span className="send-balance-label">
-                      {sendMode === 'rgb' ? `Asset: ${sendRgbAssetLabel}` : `Balance: ${sendUserBalance} BTC`}
+                      {sendMode === 'rgb'
+                        ? `Asset: ${sendRgbAssetLabel}`
+                        : sendMode === 'lightning'
+                          ? `Spending Power: ${sendTotalSpendingPower} ${sendRgbAssetLabel}`
+                          : `Balance: ${sendUserBalance} BTC`}
                     </span>
                   </div>
                   <div className="send-amount-input-container">
                     <input
                       type="text"
                       className="send-amount-input"
-                      placeholder={sendMode === 'rgb' ? '0' : '0.000000'}
+                      placeholder={sendMode === 'rgb' || sendMode === 'lightning' ? '0' : '0.000000'}
                       value={sendAmount}
-                      readOnly={sendMode === 'rgb'}
+                      readOnly={sendMode === 'rgb' || sendMode === 'lightning'}
                       onChange={(e) => {
-                        if (sendMode === 'rgb') {
+                        if (sendMode === 'rgb' || sendMode === 'lightning') {
                           return
                         }
                         const val = e.target.value;
@@ -4838,18 +5191,21 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                       }}
                     />
                     <div className="send-amount-suffix">
-                      <span className="send-amount-unit">{sendMode === 'rgb' ? (sendRgbAssetLabel || 'RGB') : 'BTC'}</span>
-                      {sendMode !== 'rgb' && <button className="send-max-btn" onClick={handleMaxAmount}>Max</button>}
+                      <span className="send-amount-unit">{sendMode === 'rgb' || sendMode === 'lightning' ? (sendRgbAssetLabel || 'RGB') : 'BTC'}</span>
+                      {sendMode === 'btc' && <button className="send-max-btn" onClick={handleMaxAmount}>Max</button>}
                     </div>
                   </div>
                   <div className="send-helper-copy">
                     {sendMode === 'rgb'
                       ? `Invoice amount: ${sendAmount} ${sendRgbAssetLabel}`
+                      : sendMode === 'lightning'
+                        ? `Instant route detected. Channel spendable: ${sendOffchainOutbound || '0'} ${sendRgbAssetLabel}`
                       : `Maximum sendable: ${maxSendableAmount} BTC`}
                   </div>
                 </div>
               </div>
 
+              {sendMode === 'btc' && (
               <div className="send-surface-card">
                 <div className="send-fee-header">
                   <label className="send-label">
@@ -4891,6 +5247,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                   </button>
                 </div>
               </div>
+              )}
             </div>
 
             <div className="flow-footer-bar">
@@ -4912,7 +5269,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
           <div className="send-container">
             <div className="send-header">
               <button className="send-back" onClick={() => setView('send-amount')}>←</button>
-              <h2 className="send-title">{sendMode === 'rgb' ? 'Send RGB Asset' : 'Sign Transaction'}</h2>
+              <h2 className="send-title">{sendMode === 'rgb' ? 'Send RGB Asset' : sendMode === 'lightning' ? 'Pay Instantly' : 'Sign Transaction'}</h2>
             </div>
 
             <div className="send-content">
@@ -4924,28 +5281,33 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                   </div>
                   <div className="send-confirm-arrow">→</div>
                   <div className="send-confirm-party align-right">
-                    <div className="send-confirm-label">{sendMode === 'rgb' ? 'Invoice' : 'Send to'}</div>
+                    <div className="send-confirm-label">{sendMode === 'rgb' ? 'Invoice' : sendMode === 'lightning' ? 'Lightning Invoice' : 'Send to'}</div>
                     <div className="send-confirm-address">{truncateAddress(sendReceiverAddress)}</div>
                   </div>
                 </div>
 
                 <div className="send-confirm-total">
                   <div className="send-confirm-label">Send Amount</div>
-                  <div className="send-confirm-amount">{sendAmount} {sendMode === 'rgb' ? sendRgbAssetLabel : 'BTC'}</div>
+                  <div className="send-confirm-amount">{sendAmount} {sendMode === 'rgb' || sendMode === 'lightning' ? sendRgbAssetLabel : 'BTC'}</div>
                   <div className="send-confirm-fiat">
-                    {sendMode === 'rgb' ? `Asset ID: ${truncateAddress(sendRgbAssetId)}` : calculateUsdValue(sendAmount)}
+                    {sendMode === 'rgb'
+                      ? `Asset ID: ${truncateAddress(sendRgbAssetId)}`
+                      : sendMode === 'lightning'
+                        ? `Route: Lightning • ${sendLightningMsats > 0 ? `${sendLightningMsats / 1000} sats bridge` : 'Instant settlement'}`
+                        : calculateUsdValue(sendAmount)}
                   </div>
                 </div>
               </div>
 
               <div className="send-input-group">
-                <label className="send-label">{sendMode === 'rgb' ? 'Estimated BTC Fee' : 'Network Fee'}</label>
+                <label className="send-label">{sendMode === 'rgb' ? 'Estimated BTC Fee' : sendMode === 'lightning' ? 'Settlement Fee' : 'Network Fee'}</label>
                 <div className="send-metric-card">
                   <span className="send-metric-value">{sendNetworkFee}</span>
-                  <span className="send-metric-unit">{sendMode === 'rgb' ? '' : 'BTC'}</span>
+                  <span className="send-metric-unit">{sendMode === 'rgb' || sendMode === 'lightning' ? '' : 'BTC'}</span>
                 </div>
               </div>
 
+              {sendMode === 'btc' && (
               <div className="send-input-group">
                 <label className="send-label">Network Fee Rate</label>
                 <div className="send-metric-card">
@@ -4957,6 +5319,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                   <span className="send-metric-unit accent">sat/vB</span>
                 </div>
               </div>
+              )}
 
               {sendError && (
                 <div className="send-error-box">
@@ -4969,7 +5332,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                 onClick={handleSendBitcoin}
                 disabled={sendProcessing}
               >
-                {sendProcessing ? 'Sending...' : sendMode === 'rgb' ? 'Send PHO' : 'Sign & Pay'}
+                {sendProcessing ? 'Sending...' : sendMode === 'rgb' ? 'Send PHO' : sendMode === 'lightning' ? 'Pay Instantly' : 'Sign & Pay'}
               </button>
             </div>
           </div>
@@ -4981,7 +5344,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
         view === 'send-success' && (
           <div className="send-container">
             <div className="send-header">
-              <h2 className="send-title">{sendMode === 'rgb' ? 'RGB Transfer Sent' : 'Sign Transaction'}</h2>
+              <h2 className="send-title">{sendMode === 'rgb' ? 'RGB Transfer Sent' : sendMode === 'lightning' ? 'Instant Payment Settled' : 'Sign Transaction'}</h2>
             </div>
 
             <div className="send-content send-success-screen">
@@ -4994,8 +5357,19 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               <p className="send-success-copy">
                 {sendMode === 'rgb'
                   ? `Transfer of ${sendAmount} ${sendRgbAssetLabel} submitted successfully!`
+                  : sendMode === 'lightning'
+                    ? `Instant transfer of ${sendAmount} ${sendRgbAssetLabel} settled off-chain.`
                   : `Payment of ${sendAmount} BTC successfully!`}
               </p>
+
+              {sendMode === 'lightning' && sendPaymentHash && (
+                <div className="send-success-txid">
+                  <p className="send-success-label">Payment Hash</p>
+                  <p className="send-success-hash">
+                    {sendPaymentHash}
+                  </p>
+                </div>
+              )}
 
               {sendTxId && (
                 <div className="send-success-txid">
@@ -5013,6 +5387,10 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                   setSendReceiverAddress('')
                   setSendAmount('')
                   setSendTxId('')
+                  setSendPaymentHash('')
+                  setSendRoute(null)
+                  setSendRouteHint('')
+                  setSendLightningMsats(0)
                   setSendError('')
                 }}
               >

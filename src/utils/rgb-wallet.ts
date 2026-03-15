@@ -27,9 +27,10 @@ export interface RgbWalletBalanceResponse {
 }
 
 export interface RgbWalletTransfer {
-    idx: number
+    idx: number | null
     status: string
     kind: string
+    direction?: string | null
     txid?: string | null
     recipient_id?: string | null
     receive_utxo?: string | null
@@ -42,6 +43,7 @@ export interface RgbWalletTransfer {
         type: string
         value: number | string
     } | null
+    metadata?: Record<string, unknown> | null
 }
 
 export interface DecodedRgbInvoice {
@@ -80,6 +82,24 @@ export interface RgbWalletDecodeInvoiceResponse {
     decoded: DecodedRgbInvoice
 }
 
+export interface DecodedLightningInvoice {
+    amt_msat?: number | null
+    expiry_sec: number
+    timestamp: number
+    asset_id?: string | null
+    asset_amount?: number | null
+    payment_hash: string
+    payment_secret: string
+    payee_pubkey?: string | null
+    network: string
+}
+
+export interface RgbWalletDecodeLightningInvoiceResponse {
+    ok: true
+    walletKey: string
+    decoded: DecodedLightningInvoice
+}
+
 export interface RgbWalletSendResponse {
     ok: true
     walletKey: string
@@ -88,6 +108,20 @@ export interface RgbWalletSendResponse {
     decoded: DecodedRgbInvoice
     balance: RgbWalletBalanceResponse['balance']
     transfer?: RgbWalletTransfer | null
+}
+
+export interface RgbWalletLightningPayResponse {
+    ok: true
+    walletKey: string
+    assetId: string
+    balance: RgbWalletBalanceResponse['balance']
+    payment: {
+        payment_hash?: string | null
+        status: string
+        asset_amount?: number | string | null
+        amt_msat?: number | string | null
+    }
+    decoded: DecodedLightningInvoice
 }
 
 export interface RgbRegistryAsset {
@@ -333,6 +367,74 @@ export async function sendRegtestRgbInvoice(params: {
     }
 
     return data as RgbWalletSendResponse
+}
+
+export async function decodeRegtestLightningInvoice(params: {
+    invoice: string
+    walletKey?: string
+}): Promise<RgbWalletDecodeLightningInvoiceResponse> {
+    const apiBase = await getRegtestRgbApiBase()
+    const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+    }
+
+    if (params.walletKey) {
+        headers['x-photon-wallet-key'] = params.walletKey
+    }
+
+    const response = await fetch(`${apiBase}/rgb/decode-lightning-invoice`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+            invoice: params.invoice,
+        }),
+    })
+
+    if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(errorText || `Lightning invoice decode failed with status ${response.status}`)
+    }
+
+    const data = await response.json()
+    if (!data.ok) {
+        throw new Error(data.error || 'Lightning invoice decode failed')
+    }
+
+    return data as RgbWalletDecodeLightningInvoiceResponse
+}
+
+export async function payRegtestLightningInvoice(params: {
+    invoice: string
+    walletKey?: string
+}): Promise<RgbWalletLightningPayResponse> {
+    const apiBase = await getRegtestRgbApiBase()
+    const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+    }
+
+    if (params.walletKey) {
+        headers['x-photon-wallet-key'] = params.walletKey
+    }
+
+    const response = await fetch(`${apiBase}/rgb/pay-lightning`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+            invoice: params.invoice,
+        }),
+    })
+
+    if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(errorText || `Lightning payment failed with status ${response.status}`)
+    }
+
+    const data = await response.json()
+    if (!data.ok) {
+        throw new Error(data.error || 'Lightning payment failed')
+    }
+
+    return data as RgbWalletLightningPayResponse
 }
 
 export async function fetchRegtestRgbRegistry(): Promise<RgbRegistryAsset[]> {

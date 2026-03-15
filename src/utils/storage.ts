@@ -9,6 +9,9 @@ export interface Asset {
     color: string
     rgbLockReason?: string
     rgbSpendabilityStatus?: string
+    rgbOffchainOutbound?: string
+    rgbOffchainInbound?: string
+    rgbSpendingPower?: string
 }
 
 export interface StorageData {
