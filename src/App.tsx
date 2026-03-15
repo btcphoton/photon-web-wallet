@@ -14,12 +14,12 @@ import type { Asset } from './utils/storage'
 import { BACKEND_PROFILES, DEFAULT_BACKEND_PROFILE_ID, getBackendProfileById, getDefaultElectrumServer, getDefaultRgbProxy, type BackendProfileId } from './utils/backend-config'
 import { QRCodeSVG } from 'qrcode.react'
 import { createRgbInvoice } from './utils/rgb-invoice'
-import { createRegtestRgbInvoice, decodeRegtestLightningInvoice, decodeRegtestRgbInvoice, fetchRegtestRgbBalance, fetchRegtestRgbRegistry, fetchRegtestRgbTransfers, mineRegtestBlocks, payRegtestLightningInvoice, registerRgbInvoiceSecret, sendRegtestRgbInvoice } from './utils/rgb-wallet'
+import { createRegtestLightningInvoice, createRegtestRgbInvoice, decodeRegtestLightningInvoice, decodeRegtestRgbInvoice, fetchRegtestRgbBalance, fetchRegtestRgbRegistry, fetchRegtestRgbTransfers, mineRegtestBlocks, payRegtestLightningInvoice, registerRgbInvoiceSecret, sendRegtestRgbInvoice } from './utils/rgb-wallet'
 import { LightningAnimation } from './components/LightningAnimation'
 import { fetchBtcActivities, type BitcoinActivity } from './utils/bitcoin-activities'
 
 
-type View = 'welcome' | 'unlock' | 'lock' | 'forgot' | 'create' | 'verify' | 'password' | 'restore' | 'dashboard' | 'receive' | 'receive-btc' | 'receive-rgb' | 'convert-lightning' | 'add-assets' | 'settings' | 'user-settings' | 'auto-lock-settings' | 'network-settings' | 'swap' | 'send' | 'send-amount' | 'send-confirm' | 'send-success' | 'utxos' | 'create-rgb-utxo' | 'create-utxo-confirm' | 'unlock-rgb-utxo' | 'unlock-utxo-confirm' | 'utxo-action-success' | 'faucet' | 'error-logs'
+type View = 'welcome' | 'unlock' | 'lock' | 'forgot' | 'create' | 'verify' | 'password' | 'restore' | 'dashboard' | 'receive' | 'receive-btc' | 'receive-rgb' | 'receive-lightning' | 'convert-lightning' | 'add-assets' | 'settings' | 'user-settings' | 'auto-lock-settings' | 'network-settings' | 'swap' | 'send' | 'send-amount' | 'send-confirm' | 'send-success' | 'utxos' | 'create-rgb-utxo' | 'create-utxo-confirm' | 'unlock-rgb-utxo' | 'unlock-utxo-confirm' | 'utxo-action-success' | 'faucet' | 'error-logs'
 type Tab = 'assets' | 'activities'
 type Network = 'mainnet' | 'testnet3' | 'testnet4' | 'regtest'
 
@@ -250,6 +250,13 @@ function App() {
   const [rgbWalletOnline, setRgbWalletOnline] = useState<boolean>(false)
   const [openAmount, setOpenAmount] = useState<boolean>(false)
   const [rgbCopied, setRgbCopied] = useState<boolean>(false)
+  const [lightningReceiveAsset, setLightningReceiveAsset] = useState<string>('pho')
+  const [lightningReceiveAmount, setLightningReceiveAmount] = useState<string>('1')
+  const [lightningReceiveInvoice, setLightningReceiveInvoice] = useState<string>('')
+  const [lightningReceiveStep, setLightningReceiveStep] = useState<'form' | 'invoice'>('form')
+  const [lightningReceiveGenerating, setLightningReceiveGenerating] = useState<boolean>(false)
+  const [lightningReceiveError, setLightningReceiveError] = useState<string>('')
+  const [lightningReceiveCopied, setLightningReceiveCopied] = useState<boolean>(false)
 
   // Network-specific assets
   const [assets, setAssets] = useState<Asset[]>([])
@@ -1745,7 +1752,7 @@ function App() {
   // Inactivity tracking for auto-lock
   useEffect(() => {
     // Only track inactivity when on dashboard or other wallet screens (not on unlock/lock/welcome screens)
-    const trackableViews = ['dashboard', 'receive', 'receive-btc', 'receive-rgb', 'convert-lightning', 'send', 'send-amount', 'send-confirm', 'settings', 'user-settings', 'auto-lock-settings', 'network-settings', 'add-assets', 'swap', 'utxos']
+    const trackableViews = ['dashboard', 'receive', 'receive-btc', 'receive-rgb', 'receive-lightning', 'convert-lightning', 'send', 'send-amount', 'send-confirm', 'settings', 'user-settings', 'auto-lock-settings', 'network-settings', 'add-assets', 'swap', 'utxos']
 
     if (!trackableViews.includes(view)) {
       // Clean up interval if navigating away from trackable views
@@ -3829,6 +3836,19 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               </span>
               <span className="receive-option-arrow">›</span>
             </button>
+            <button className="receive-option" onClick={() => {
+              setView('receive-lightning')
+              setLightningReceiveStep('form')
+              setLightningReceiveInvoice('')
+              setLightningReceiveError('')
+            }}>
+              <span className="receive-option-icon lightning">⚡</span>
+              <span className="receive-option-copy">
+                <span className="receive-option-text">Receive Instantly</span>
+                <span className="receive-option-subtext">Generate a Lightning PHO invoice for off-chain settlement.</span>
+              </span>
+              <span className="receive-option-arrow">›</span>
+            </button>
             <button className="receive-option" onClick={() => setView('receive-btc')}>
               <span className="receive-option-icon btc">₿</span>
               <span className="receive-option-copy">
@@ -4286,6 +4306,201 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                 Create New Invoice
               </button>
             </>
+          )}
+        </div>
+      )}
+
+      {/* Receive Lightning RGB Screen */}
+      {view === 'receive-lightning' && (
+        <div className="receive-container receive-rgb-container">
+          <div className="receive-header">
+            <button className="back-arrow" onClick={() => {
+              setView('receive')
+              setLightningReceiveStep('form')
+              setLightningReceiveInvoice('')
+              setLightningReceiveError('')
+            }}>←</button>
+            <h2 className="receive-title">Receive instantly</h2>
+          </div>
+
+          {lightningReceiveStep === 'form' ? (
+            <>
+              <div className="receive-rgb-content">
+                <div className="receive-hero compact">
+                  <div className="flow-kicker">Lightning invoice</div>
+                  <div className="flow-intro-title">Create an instant PHO receive request</div>
+                  <div className="flow-intro-copy">Photon will generate a Lightning invoice that another Photon wallet can pay instantly over the RGB channel path.</div>
+                </div>
+
+                <div className="rgb-status-row">
+                  <span className="rgb-status-label">Route</span>
+                  <div className="rgb-status-indicator">
+                    <span className="rgb-status-dot online"></span>
+                    <span className="rgb-status-text">Lightning</span>
+                  </div>
+                </div>
+
+                <div className="rgb-field">
+                  <div className="rgb-label-row">
+                    <label className="rgb-label">Asset</label>
+                  </div>
+                  <div className="rgb-select-wrapper">
+                    <select
+                      className="rgb-select"
+                      value={lightningReceiveAsset}
+                      onChange={(e) => setLightningReceiveAsset(e.target.value)}
+                    >
+                      {assets.filter(a => a.id !== 'bitcoin' && a.id !== 'lightning-btc').map((asset) => (
+                        <option key={asset.id} value={asset.id}>{asset.name}</option>
+                      ))}
+                    </select>
+                    <span className="rgb-select-arrow">▾</span>
+                  </div>
+                </div>
+
+                <div className="rgb-field">
+                  <div className="rgb-label-row">
+                    <label className="rgb-label">Amount</label>
+                  </div>
+                  <input
+                    type="text"
+                    className="rgb-input"
+                    placeholder="Enter amount"
+                    value={lightningReceiveAmount}
+                    onChange={(e) => setLightningReceiveAmount(e.target.value)}
+                  />
+                  <p className="rgb-helper-text">This creates a fixed-amount Lightning RGB invoice. Current instant-pay path uses a 3,000 sat Lightning bridge amount under the hood.</p>
+                </div>
+
+                <div className="rgb-info-box">
+                  <div className="rgb-info-icon">⚡</div>
+                  <div className="rgb-info-content">
+                    <p className="rgb-info-title">Off-Chain Settlement</p>
+                    <p className="rgb-info-desc">The sender will pay this invoice instantly through the Lightning-enabled RGB node, so there is no new Bitcoin txid for the payment itself.</p>
+                  </div>
+                </div>
+
+                {lightningReceiveError && (
+                  <div className="rgb-error-box">
+                    <span className="error-icon">⚠</span>
+                    <span className="error-text">{lightningReceiveError}</span>
+                  </div>
+                )}
+              </div>
+
+              <button
+                className="btn-primary create-invoice-btn"
+                disabled={lightningReceiveGenerating || selectedNetwork !== 'regtest'}
+                onClick={async () => {
+                  setLightningReceiveGenerating(true)
+                  setLightningReceiveError('')
+
+                  try {
+                    if (selectedNetwork !== 'regtest') {
+                      throw new Error('Instant PHO receive is currently enabled for regtest only')
+                    }
+
+                    const selectedAsset = assets.find((asset) => asset.id === lightningReceiveAsset)
+                    if (!selectedAsset) {
+                      throw new Error('Select an RGB asset before generating a Lightning invoice.')
+                    }
+
+                    const invoiceAmount = Math.floor(parseFloat(lightningReceiveAmount) || 0)
+                    if (invoiceAmount <= 0) {
+                      throw new Error('Enter a valid asset amount.')
+                    }
+
+                    const contractsKey = getNetworkContractsKey(selectedNetwork)
+                    const contractSettings = await getStorageData([contractsKey])
+                    const storedContractMapRaw = contractSettings[contractsKey]
+                    const storedContractMap =
+                      typeof storedContractMapRaw === 'string'
+                        ? JSON.parse(storedContractMapRaw) as Record<string, string>
+                        : {}
+
+                    const contractId = storedContractMap[lightningReceiveAsset]
+                    if (!contractId) {
+                      throw new Error('Selected asset is not mapped to an RGB contract in this wallet.')
+                    }
+
+                    const walletKey = await getRegtestWalletKey()
+                    const result = await createRegtestLightningInvoice({
+                      assetId: contractId,
+                      amount: invoiceAmount,
+                      walletKey,
+                    })
+
+                    setSendRouteHint(`Lightning invoice created for ${invoiceAmount} ${selectedAsset.unit}`)
+                    setLightningReceiveInvoice(result.invoice)
+                    setLightningReceiveStep('invoice')
+                  } catch (error: any) {
+                    console.error('Error generating Lightning invoice:', error)
+                    setLightningReceiveError(error.message || 'Failed to generate Lightning invoice')
+                  } finally {
+                    setLightningReceiveGenerating(false)
+                  }
+                }}
+              >
+                {lightningReceiveGenerating ? (
+                  <>
+                    <span className="spinner-small"></span>
+                    Generating Lightning Invoice...
+                  </>
+                ) : (
+                  'Generate Instant Invoice'
+                )}
+              </button>
+            </>
+          ) : (
+            <div className="receive-rgb-content">
+              <div className="receive-rgb-invoice">
+                <div className="rgb-invoice-header">
+                  <div className="rgb-invoice-icon" style={{ background: 'linear-gradient(135deg, #f59e0b 0%, #f97316 100%)' }}>⚡</div>
+                  <h3 className="rgb-invoice-asset-name">LIGHTNING PHO</h3>
+                  <p className="rgb-invoice-subtitle">Pay this invoice from Photon Instant Pay to settle off-chain.</p>
+                </div>
+
+                <div className="rgb-invoice-section">
+                  <label className="rgb-invoice-label">Lightning Invoice</label>
+                  <div className="rgb-invoice-box">
+                    <p className="rgb-invoice-text">{lightningReceiveInvoice}</p>
+                  </div>
+                </div>
+
+                <div className="rgb-qr-container">
+                  <QRCodeSVG
+                    value={lightningReceiveInvoice}
+                    size={120}
+                    bgColor="#ffffff"
+                    fgColor="#000000"
+                    level="M"
+                  />
+                </div>
+
+                <button
+                  className="btn-primary rgb-copy-btn"
+                  onClick={async () => {
+                    await navigator.clipboard.writeText(lightningReceiveInvoice)
+                    setLightningReceiveCopied(true)
+                    setTimeout(() => setLightningReceiveCopied(false), 2000)
+                  }}
+                >
+                  <span className="btn-icon">{lightningReceiveCopied ? '✓' : '📋'}</span>
+                  {lightningReceiveCopied ? 'Copied!' : 'Copy Lightning Invoice'}
+                </button>
+
+                <button
+                  className="btn-secondary rgb-copy-btn"
+                  onClick={() => {
+                    setLightningReceiveStep('form')
+                    setLightningReceiveInvoice('')
+                    setLightningReceiveError('')
+                  }}
+                >
+                  Create Another
+                </button>
+              </div>
+            </div>
           )}
         </div>
       )}

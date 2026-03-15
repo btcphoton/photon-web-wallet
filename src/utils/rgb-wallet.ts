@@ -100,6 +100,13 @@ export interface RgbWalletDecodeLightningInvoiceResponse {
     decoded: DecodedLightningInvoice
 }
 
+export interface RgbWalletLightningInvoiceResponse {
+    ok: true
+    walletKey: string
+    invoice: string
+    decoded: DecodedLightningInvoice
+}
+
 export interface RgbWalletSendResponse {
     ok: true
     walletKey: string
@@ -435,6 +442,46 @@ export async function payRegtestLightningInvoice(params: {
     }
 
     return data as RgbWalletLightningPayResponse
+}
+
+export async function createRegtestLightningInvoice(params: {
+    assetId: string
+    amount: number
+    expirySec?: number
+    amtMsat?: number
+    walletKey?: string
+}): Promise<RgbWalletLightningInvoiceResponse> {
+    const apiBase = await getRegtestRgbApiBase()
+    const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+    }
+
+    if (params.walletKey) {
+        headers['x-photon-wallet-key'] = params.walletKey
+    }
+
+    const response = await fetch(`${apiBase}/rgb/ln-invoice`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+            assetId: params.assetId,
+            amount: params.amount,
+            expirySec: params.expirySec ?? 420,
+            amtMsat: params.amtMsat ?? 3000000,
+        }),
+    })
+
+    if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(errorText || `Lightning invoice creation failed with status ${response.status}`)
+    }
+
+    const data = await response.json()
+    if (!data.ok) {
+        throw new Error(data.error || 'Lightning invoice creation failed')
+    }
+
+    return data as RgbWalletLightningInvoiceResponse
 }
 
 export async function fetchRegtestRgbRegistry(): Promise<RgbRegistryAsset[]> {
