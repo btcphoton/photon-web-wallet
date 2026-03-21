@@ -3175,6 +3175,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
         <div className="card-container forgot-container">
           <div className="password-header">
             <button className="back-arrow" onClick={() => setView('lock')}>←</button>
+            <h2 className="card-title">Reset Wallet</h2>
           </div>
 
           <div className="forgot-content">
@@ -5562,7 +5563,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
         view === 'utxos' && (
           <div className="wallet-wrapper utxo-screen">
             <div className="wallet-header">
-              <button className="icon-btn" onClick={() => setView('dashboard')}>←</button>
+              <button className="back-arrow" onClick={() => setView('dashboard')}>←</button>
               <h2 className="utxo-header-title">RGB UTXOs</h2>
               <button
                 onClick={() => setView('create-rgb-utxo')}
@@ -5735,9 +5736,8 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
       {view === 'unlock-rgb-utxo' && selectedUnlockUtxo && (
         <div className="wallet-container" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', height: '100%' }}>
           <div className="wallet-header">
-            <button className="icon-btn" onClick={() => setView('utxos')}>←</button>
-            <h2 style={{ flex: 1, textAlign: 'center', margin: 0 }}>Unlock RGB UTXO</h2>
-            <button className="icon-btn" style={{ visibility: 'hidden' }}>⋮</button>
+            <button className="back-arrow" onClick={() => setView('utxos')}>←</button>
+            <h2 className="utxo-header-title">Unlock RGB UTXO</h2>
           </div>
 
           <div style={{ flex: 1, overflowY: 'auto', paddingTop: '1rem', paddingBottom: '1rem', minHeight: 0 }}>
@@ -5790,9 +5790,8 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
       {view === 'unlock-utxo-confirm' && selectedUnlockUtxo && (
         <div className="wallet-container" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', height: '100%' }}>
           <div className="wallet-header">
-            <button className="icon-btn" onClick={() => setView('unlock-rgb-utxo')}>←</button>
-            <h2 style={{ flex: 1, textAlign: 'center', margin: 0 }}>Sign Transaction</h2>
-            <button className="icon-btn" style={{ visibility: 'hidden' }}>⋮</button>
+            <button className="back-arrow" onClick={() => setView('unlock-rgb-utxo')}>←</button>
+            <h2 className="utxo-header-title">Sign Transaction</h2>
           </div>
 
           <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', marginTop: '2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem', paddingBottom: '1rem' }}>
@@ -5907,9 +5906,8 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
         view === 'create-rgb-utxo' && (
           <div className="wallet-container" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', height: '100%' }}>
             <div className="wallet-header">
-              <button className="icon-btn" onClick={() => setView('utxos')}>←</button>
-              <h2 style={{ flex: 1, textAlign: 'center', margin: 0 }}>Create RGB UTXO</h2>
-              <button className="icon-btn" style={{ visibility: 'hidden' }}>⋮</button>
+              <button className="back-arrow" onClick={() => setView('utxos')}>←</button>
+              <h2 className="utxo-header-title">Create RGB UTXO</h2>
             </div>
 
             {(() => {
@@ -5993,9 +5991,8 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
         view === 'create-utxo-confirm' && (
           <div className="wallet-container utxo-confirm-shell">
             <div className="wallet-header">
-              <button className="icon-btn" onClick={() => setView('create-rgb-utxo')}>←</button>
-              <h2 style={{ flex: 1, textAlign: 'center', margin: 0 }}>Sign Transaction</h2>
-              <button className="icon-btn" style={{ visibility: 'hidden' }}>⋮</button>
+              <button className="back-arrow" onClick={() => setView('create-rgb-utxo')}>←</button>
+              <h2 className="utxo-header-title">Sign Transaction</h2>
             </div>
 
             {(() => {
