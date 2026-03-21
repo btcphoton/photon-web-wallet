@@ -163,8 +163,8 @@ body {
 }
 
 .photon-balance-panel {
-  margin: 0.9rem 0.9rem 0.8rem;
-  padding: 1rem 1rem 0.95rem;
+  margin: 0.65rem 0.9rem 0.6rem;
+  padding: 0.85rem 1rem 0.85rem;
   border-radius: 24px;
   position: relative;
   overflow: hidden;
@@ -293,6 +293,85 @@ body {
   padding: 0 0.9rem;
 }
 
+/* Compact address bar replaces the two identity cards */
+.photon-address-bar {
+  margin: 0 0.9rem 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.025));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.address-bar-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.75rem;
+}
+
+.address-bar-item + .address-bar-item {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.address-bar-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2rem;
+  height: 1.3rem;
+  padding: 0 0.45rem;
+  border-radius: 999px;
+  background: rgba(247, 147, 26, 0.16);
+  color: #f7a84a;
+  border: 1px solid rgba(247, 147, 26, 0.18);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  flex-shrink: 0;
+}
+
+.address-bar-badge.icp {
+  background: rgba(99, 102, 241, 0.16);
+  color: #aeb4ff;
+  border-color: rgba(99, 102, 241, 0.18);
+}
+
+.address-bar-value {
+  flex: 1;
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.75);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.address-bar-action {
+  width: 1.7rem;
+  height: 1.7rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.7);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.8rem;
+  flex-shrink: 0;
+  transition: background 0.15s ease;
+}
+
+.address-bar-action:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.address-bar-action:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
 .wallet-identity-card {
   border-radius: 20px;
   padding: 0.9rem 0.95rem;
@@ -384,7 +463,11 @@ body {
 
 .dashboard-section {
   padding: 0 0.9rem;
-  margin-top: 0.95rem;
+  margin-top: 0.6rem;
+}
+
+.action-subtext {
+  display: none;
 }
 
 .dashboard-section-header {
@@ -405,10 +488,10 @@ body {
   flex-direction: column;
   align-items: flex-start;
   gap: 0.42rem;
-  min-height: 8.35rem;
-  padding: 0.95rem 0.9rem;
+  min-height: 5.5rem;
+  padding: 0.85rem 0.8rem;
   text-align: left;
-  border-radius: 20px;
+  border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.03));
   color: inherit;
@@ -867,10 +950,7 @@ body {
 }
 
 .section-inline-note {
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 0.82rem;
-  line-height: 1.45;
-  margin-bottom: 0.2rem;
+  display: none;
 }
 
 /* Tabs - Inside scroll container */
@@ -2363,8 +2443,17 @@ textarea:focus {
   align-items: center;
   gap: 1rem;
   margin-bottom: 0.5rem;
-  padding: 0.5rem 1.5rem 0.5rem 0;
+  padding: 0.5rem 1rem 0.5rem 0;
   flex-shrink: 0;
+}
+
+.receive-header-status {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.5);
 }
 
 .back-arrow {

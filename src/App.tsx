@@ -168,30 +168,6 @@ function WalletStatCard({
   )
 }
 
-function WalletIdentityCard({
-  badge,
-  label,
-  value,
-  actions,
-}: {
-  badge: string
-  label: string
-  value: ReactNode
-  actions?: ReactNode
-}) {
-  return (
-    <div className="wallet-identity-card">
-      <div className="wallet-identity-top">
-        <div className="wallet-identity-meta">
-          <span className={`wallet-identity-badge ${badge === 'ICP' ? 'wallet-identity-badge-icp' : ''}`}>{badge}</span>
-          <span className="wallet-identity-label">{label}</span>
-        </div>
-        {actions && <div className="wallet-identity-actions">{actions}</div>}
-      </div>
-      <div className="wallet-identity-value">{value}</div>
-    </div>
-  )
-}
 
 function App() {
   const [view, setView] = useState<View>('welcome')
@@ -3554,80 +3530,39 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               </div>
             </section>
 
-            <section className="photon-identity-grid">
-              <WalletIdentityCard
-                badge="BTC"
-                label="Primary wallet address"
-                value={
-                  loadingAddress ? (
-                    <span className="address-text">Loading...</span>
-                  ) : loadingExpand ? (
-                    <div className="wave-loader">
-                      <div className="wave-dot"></div>
-                      <div className="wave-dot"></div>
-                      <div className="wave-dot"></div>
-                    </div>
-                  ) : (
-                    <span className="address-text" title={walletAddress || btcAddress}>
-                      {truncateAddress(walletAddress || btcAddress) || 'No address'}
-                    </span>
-                  )
-                }
-                actions={
-                  <>
-                    <button
-                      className="wallet-inline-action"
-                      onClick={() => {
-                        navigator.clipboard.writeText(walletAddress || btcAddress)
-                        setCopied(true)
-                        setTimeout(() => setCopied(false), 2000)
-                      }}
-                      title={copied ? 'Copied!' : 'Copy address'}
-                      type="button"
-                    >
-                      {copied ? '✓' : '⧉'}
-                    </button>
-                    <button
-                      className="wallet-inline-action"
-                      onClick={handleExpandAddress}
-                      title={addressGenerationMethod === 'bitcoin' ? 'Expand disabled in Bitcoin mode' : 'Expand - Fetch from canister'}
-                      disabled={addressGenerationMethod === 'bitcoin'}
-                      type="button"
-                    >
-                      ⊡
-                    </button>
-                  </>
-                }
-              />
-
-              <WalletIdentityCard
-                badge="ICP"
-                label="Principal ID"
-                value={
-                  <span className="address-text" title={principalId}>
-                    {truncateAddress(principalId) || 'No Principal'}
-                  </span>
-                }
-                actions={
-                  <button
-                    className="wallet-inline-action"
-                    onClick={copyPrincipal}
-                    title={copiedPrincipal ? 'Copied!' : 'Copy Principal ID'}
-                    type="button"
-                  >
-                    {copiedPrincipal ? '✓' : '⧉'}
-                  </button>
-                }
-              />
+            <section className="photon-address-bar">
+              <div className="address-bar-item">
+                <span className="address-bar-badge">BTC</span>
+                <span className="address-bar-value">
+                  {loadingAddress ? 'Loading...' : loadingExpand ? '···' : truncateAddress(walletAddress || btcAddress) || 'No address'}
+                </span>
+                <button
+                  className="address-bar-action"
+                  onClick={() => { navigator.clipboard.writeText(walletAddress || btcAddress); setCopied(true); setTimeout(() => setCopied(false), 2000) }}
+                  title={copied ? 'Copied!' : 'Copy address'}
+                  type="button"
+                >{copied ? '✓' : '⧉'}</button>
+                <button
+                  className="address-bar-action"
+                  onClick={handleExpandAddress}
+                  title={addressGenerationMethod === 'bitcoin' ? 'Expand disabled in Bitcoin mode' : 'Expand'}
+                  disabled={addressGenerationMethod === 'bitcoin'}
+                  type="button"
+                >⊡</button>
+              </div>
+              <div className="address-bar-item">
+                <span className="address-bar-badge icp">ICP</span>
+                <span className="address-bar-value">{truncateAddress(principalId) || 'No Principal'}</span>
+                <button
+                  className="address-bar-action"
+                  onClick={copyPrincipal}
+                  title={copiedPrincipal ? 'Copied!' : 'Copy Principal ID'}
+                  type="button"
+                >{copiedPrincipal ? '✓' : '⧉'}</button>
+              </div>
             </section>
 
             <section className="dashboard-section">
-              <div className="dashboard-section-header">
-                <div>
-                  <div className="section-eyebrow">Quick actions</div>
-                  <h3 className="section-title">Move and manage funds</h3>
-                </div>
-              </div>
               <div className="photon-actions-grid">
                 <button className="photon-action-card" onClick={() => setView('receive')}>
                   <div className="action-icon receive">↓</div>
@@ -3891,12 +3826,6 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
           </div>
 
           <div className="receive-btc-content">
-            <div className="receive-hero compact">
-              <div className="flow-kicker">On-chain</div>
-              <div className="flow-intro-title">Share your Bitcoin address</div>
-              <div className="flow-intro-copy">Use the QR code or copy the address directly from the card below.</div>
-            </div>
-
             <div className="qr-container">
               <QRCodeSVG
                 value={walletAddress || btcAddress || 'no-address'}
@@ -3991,26 +3920,16 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               setRgbError('')
             }}>←</button>
             <h2 className="receive-title">Receive RGB assets</h2>
+            <div className="receive-header-status">
+              <span className={`rgb-status-dot ${rgbWalletOnline ? 'online' : 'offline'}`}></span>
+              <span>{rgbWalletOnline ? 'Online' : 'Offline'}</span>
+            </div>
           </div>
 
           {rgbInvoiceStep === 'form' ? (
             <>
               {/* Form View */}
               <div className="receive-rgb-content">
-                <div className="receive-hero compact">
-                  <div className="flow-kicker">RGB invoice</div>
-                  <div className="flow-intro-title">Prepare a receive invoice for an RGB asset</div>
-                  <div className="flow-intro-copy">Select the asset, decide whether the amount is fixed, and Photon will generate the invoice.</div>
-                </div>
-
-                {/* Wallet Connectivity Status */}
-                <div className="rgb-status-row">
-                  <span className="rgb-status-label">Wallet Status</span>
-                  <div className="rgb-status-indicator">
-                    <span className={`rgb-status-dot ${rgbWalletOnline ? 'online' : 'offline'}`}></span>
-                    <span className="rgb-status-text">{rgbWalletOnline ? 'Online' : 'Offline'}</span>
-                  </div>
-                </div>
 
                 {/* Asset Selection */}
                 <div className="rgb-field">
@@ -4071,30 +3990,16 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                   )}
                 </div>
 
-                {/* BTC Balance Check */}
-                <div className="rgb-info-box">
-                  <div className="rgb-info-icon">⚠️</div>
-                  <div className="rgb-info-content">
-                    <p className="rgb-info-title">Gas Requirement</p>
-                    <p className="rgb-info-desc">You need a small amount of {selectedNetwork === 'mainnet' ? 'Bitcoin' : 'Testnet BTC'} for RGB transfers. Current balance: {btcBalance} BTC</p>
+                {/* BTC Balance Check — only shown when balance is zero */}
+                {parseFloat(btcBalance) === 0 && (
+                  <div className="rgb-info-box">
+                    <div className="rgb-info-icon">⚠️</div>
+                    <div className="rgb-info-content">
+                      <p className="rgb-info-title">Gas Requirement</p>
+                      <p className="rgb-info-desc">You need a small amount of {selectedNetwork === 'mainnet' ? 'Bitcoin' : 'Testnet BTC'} for RGB transfers. Current balance: {btcBalance} BTC</p>
+                    </div>
                   </div>
-                </div>
-
-                {/* Colored Address Display */}
-                <div className="rgb-field">
-                  <label className="rgb-label">Your Colored Address (RGB)</label>
-                  <div className="rgb-address-display" style={{
-                    background: 'rgba(255, 255, 255, 0.05)',
-                    padding: '10px',
-                    borderRadius: '8px',
-                    fontSize: '0.8rem',
-                    wordBreak: 'break-all',
-                    color: '#9ca3af',
-                    marginTop: '5px'
-                  }}>
-                    {coloredAddress || 'Generating...'}
-                  </div>
-                </div>
+                )}
 
                 {/* Error Display */}
                 {rgbError && (
@@ -4326,24 +4231,15 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               setLightningReceiveError('')
             }}>←</button>
             <h2 className="receive-title">Receive instantly</h2>
+            <div className="receive-header-status">
+              <span className="rgb-status-dot online"></span>
+              <span>Lightning</span>
+            </div>
           </div>
 
           {lightningReceiveStep === 'form' ? (
             <>
               <div className="receive-rgb-content">
-                <div className="receive-hero compact">
-                  <div className="flow-kicker">Lightning invoice</div>
-                  <div className="flow-intro-title">Create an instant PHO receive request</div>
-                  <div className="flow-intro-copy">Photon will generate a Lightning invoice that another Photon wallet can pay instantly over the RGB channel path.</div>
-                </div>
-
-                <div className="rgb-status-row">
-                  <span className="rgb-status-label">Route</span>
-                  <div className="rgb-status-indicator">
-                    <span className="rgb-status-dot online"></span>
-                    <span className="rgb-status-text">Lightning</span>
-                  </div>
-                </div>
 
                 <div className="rgb-field">
                   <div className="rgb-label-row">
@@ -5243,12 +5139,6 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
             </div>
 
             <div className="send-content send-entry-content">
-              <div className="flow-intro-card">
-                <div className="flow-kicker">Transfer</div>
-                <div className="flow-intro-title">Send BTC or PHO from Photon</div>
-                <div className="flow-intro-copy">Paste a Bitcoin address for BTC, an RGB invoice for on-chain PHO, or a Lightning invoice for instant PHO settlement on regtest.</div>
-              </div>
-
 	              <div className="send-input-group send-surface-card">
 	                <label className="send-label">Receiver</label>
 	                <input
@@ -5690,8 +5580,8 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               </div>
 
               <div className="utxos-tabs">
-                <button className={`utxo-tab-btn ${utxoTab === 'unoccupied' ? 'active' : ''}`} onClick={() => setUtxoTab('unoccupied')}>Unoccupied</button>
                 <button className={`utxo-tab-btn ${utxoTab === 'occupied' ? 'active' : ''}`} onClick={() => setUtxoTab('occupied')}>Occupied</button>
+                <button className={`utxo-tab-btn ${utxoTab === 'unoccupied' ? 'active' : ''}`} onClick={() => setUtxoTab('unoccupied')}>Unoccupied</button>
                 <button className={`utxo-tab-btn ${utxoTab === 'unlockable' ? 'active' : ''}`} onClick={() => setUtxoTab('unlockable')}>Unlockable</button>
               </div>
 
