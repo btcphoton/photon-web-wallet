@@ -1521,7 +1521,7 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 500px;
+  min-height: 600px;
   gap: 2rem;
   text-align: center;
 }
@@ -1617,6 +1617,7 @@ body {
   overflow: hidden;
   max-width: 100%;
   box-sizing: border-box;
+  min-height: 600px;
 }
 
 .card-title {
@@ -1900,7 +1901,7 @@ textarea:focus {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 450px;
+  min-height: 600px;
   gap: 0.75rem;
   padding: 1rem;
 }
@@ -2219,7 +2220,7 @@ textarea:focus {
 .forgot-container {
   display: flex;
   flex-direction: column;
-  min-height: 450px;
+  min-height: 600px;
 }
 
 .forgot-content {
@@ -3352,6 +3353,7 @@ textarea:focus {
   flex-direction: column;
   gap: 1.5rem;
   padding: 1rem 0;
+  min-height: 600px;
 }
 
 .settings-content {
