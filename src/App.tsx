@@ -3668,10 +3668,11 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                 <div className="section-inline-note">Tracked assets for {(networks.find((n) => n.id === selectedNetwork)?.name || 'Bitcoin').replace('Bitcoin ', '')}.</div>
                 {assets.length === 0 ? (
                   <div className="assets-empty">
-                    <div className="empty-icon">📦</div>
-                    <p className="empty-text">No Asset</p>
-                    <button className="add-assets-btn" onClick={() => setView('add-assets')}>
-                      + Add Assets
+                    <div className="empty-icon">🗃️</div>
+                    <p className="empty-text">No assets yet</p>
+                    <p className="empty-subtitle">RGB assets you add will appear here</p>
+                    <button className="empty-cta-btn" onClick={() => setView('add-assets')}>
+                      + Add Asset
                     </button>
                   </div>
                 ) : (
@@ -3732,6 +3733,10 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                   <div className="activities-empty">
                     <div className="empty-icon">📋</div>
                     <p className="empty-text">No activities yet</p>
+                    <p className="empty-subtitle">Your transactions will appear here</p>
+                    <button className="empty-cta-btn" onClick={() => setView('receive')}>
+                      Receive Bitcoin
+                    </button>
                   </div>
                 ) : (
                   (() => {
@@ -4853,94 +4858,39 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
             <h2 className="card-title">Settings</h2>
           </div>
 
-          <div className="settings-content" style={{ padding: '1rem 0' }}>
+          <div className="settings-content" style={{ padding: '1rem 0', gap: '0.75rem' }}>
             {/* Auto-Lock Timer */}
-            <div
-              className="settings-menu-item"
-              onClick={() => {
-                setView('auto-lock-settings')
-              }}
-              style={{
-                background: 'rgba(255, 255, 255, 0.05)',
-                borderRadius: '12px',
-                padding: '1rem',
-                marginBottom: '0.75rem',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                cursor: 'pointer',
-                transition: 'background 0.2s ease'
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'}
-              onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <span style={{ fontSize: '1.25rem' }}>🕐</span>
-                <span style={{ fontWeight: '600', color: '#fff' }}>Auto-Lock Timer</span>
+            <div className="settings-menu-item" onClick={() => setView('auto-lock-settings')}>
+              <div className="settings-menu-item-left">
+                <span className="settings-menu-item-icon">🕐</span>
+                <span className="settings-menu-item-label">Auto-Lock Timer</span>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <span style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.9rem' }}>{autoLockTimer}</span>
-                <span style={{ color: 'rgba(255, 255, 255, 0.4)' }}>›</span>
+              <div className="settings-menu-item-right">
+                <span className="settings-menu-item-value">{autoLockTimer}</span>
+                <span className="settings-menu-item-chevron">›</span>
               </div>
             </div>
 
             {/* Color Mode */}
-            <div
-              className="settings-menu-item"
-              onClick={() => {
-                // Placeholder for future functionality
-                console.log('Color Mode clicked')
-              }}
-              style={{
-                background: 'rgba(255, 255, 255, 0.05)',
-                borderRadius: '12px',
-                padding: '1rem',
-                marginBottom: '0.75rem',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                cursor: 'pointer',
-                transition: 'background 0.2s ease'
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'}
-              onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <span style={{ fontSize: '1.25rem' }}>🌙</span>
-                <span style={{ fontWeight: '600', color: '#fff' }}>Color Mode</span>
+            <div className="settings-menu-item" onClick={() => console.log('Color Mode clicked')}>
+              <div className="settings-menu-item-left">
+                <span className="settings-menu-item-icon">🌙</span>
+                <span className="settings-menu-item-label">Color Mode</span>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <span style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.9rem' }}>{colorMode}</span>
-                <span style={{ color: 'rgba(255, 255, 255, 0.4)' }}>›</span>
+              <div className="settings-menu-item-right">
+                <span className="settings-menu-item-value">{colorMode}</span>
+                <span className="settings-menu-item-chevron">›</span>
               </div>
             </div>
 
             {/* Advanced Setting */}
-            <div
-              className="settings-menu-item"
-              onClick={() => {
-                // Navigate to admin settings
-                setView('settings')
-              }}
-              style={{
-                background: 'rgba(255, 255, 255, 0.05)',
-                borderRadius: '12px',
-                padding: '1rem',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                cursor: 'pointer',
-                transition: 'background 0.2s ease'
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'}
-              onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <span style={{ fontSize: '1.25rem' }}>🔧</span>
-                <span style={{ fontWeight: '600', color: '#fff' }}>Advanced Setting</span>
+            <div className="settings-menu-item" onClick={() => setView('settings')}>
+              <div className="settings-menu-item-left">
+                <span className="settings-menu-item-icon">🔧</span>
+                <span className="settings-menu-item-label">Advanced Setting</span>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <span style={{ color: 'rgba(255, 255, 255, 0.4)' }}>›</span>
+              <div className="settings-menu-item-right">
+                <span className="settings-menu-item-chevron">›</span>
               </div>
             </div>
           </div>
@@ -5514,26 +5464,31 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                 </div>
               </div>
 
-              <div className="send-input-group">
-                <label className="send-label">{sendMode === 'rgb' ? 'Estimated BTC Fee' : sendMode === 'lightning' ? 'Settlement Fee' : 'Network Fee'}</label>
-                <div className="send-metric-card">
-                  <span className="send-metric-value">{sendNetworkFee}</span>
-                  <span className="send-metric-unit">{sendMode === 'rgb' || sendMode === 'lightning' ? '' : 'BTC'}</span>
+              {sendMode === 'btc' ? (
+                <div className="send-input-group">
+                  <label className="send-label">Fee Breakdown</label>
+                  <div className="send-fee-breakdown">
+                    <div className="send-fee-row">
+                      <span className="send-fee-label">Amount sent</span>
+                      <span className="send-fee-value">{parseFloat(sendAmount).toFixed(8)} BTC</span>
+                    </div>
+                    <div className="send-fee-row">
+                      <span className="send-fee-label">Network fee ({sendFeeOption === 'slow' ? Number(sendEstimatedFees[0]) : sendFeeOption === 'avg' ? Number(sendEstimatedFees[1]) : Number(sendEstimatedFees[2])} sat/vB)</span>
+                      <span className="send-fee-value">{sendNetworkFee} BTC</span>
+                    </div>
+                    <div className="send-fee-row total">
+                      <span className="send-fee-label">Total</span>
+                      <span className="send-fee-value">{(parseFloat(sendAmount || '0') + parseFloat(sendNetworkFee || '0')).toFixed(8)} BTC</span>
+                    </div>
+                  </div>
                 </div>
-              </div>
-
-              {sendMode === 'btc' && (
-              <div className="send-input-group">
-                <label className="send-label">Network Fee Rate</label>
-                <div className="send-metric-card">
-                  <span className="send-metric-value">
-                    {sendFeeOption === 'slow' ? Number(sendEstimatedFees[0]) :
-                      sendFeeOption === 'avg' ? Number(sendEstimatedFees[1]) :
-                        Number(sendEstimatedFees[2])}
-                  </span>
-                  <span className="send-metric-unit accent">sat/vB</span>
+              ) : (
+                <div className="send-input-group">
+                  <label className="send-label">{sendMode === 'rgb' ? 'Estimated BTC Fee' : 'Settlement Fee'}</label>
+                  <div className="send-metric-card">
+                    <span className="send-metric-value">{sendNetworkFee}</span>
+                  </div>
                 </div>
-              </div>
               )}
 
               {sendError && (
