@@ -5734,67 +5734,68 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
       }
 
       {view === 'unlock-rgb-utxo' && selectedUnlockUtxo && (
-        <div className="wallet-container" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', height: '100%' }}>
+        <div className="wallet-container" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
           <div className="wallet-header">
             <button className="back-arrow" onClick={() => setView('utxos')}>←</button>
             <h2 className="utxo-header-title">Unlock RGB UTXO</h2>
           </div>
 
-          <div style={{ flex: 1, overflowY: 'auto', paddingTop: '1rem', paddingBottom: '1rem', minHeight: 0 }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-              <div>
-                <div style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)', marginBottom: '0.5rem' }}>Unlock UTXO</div>
-                <div style={{ padding: '0.9rem 1rem', background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '12px', color: '#fff', fontFamily: 'monospace', fontSize: '0.82rem', wordBreak: 'break-all' }}>
-                  {selectedUnlockUtxo.txid}:{selectedUnlockUtxo.vout}
+          <>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '0 1rem', minHeight: 0 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', paddingTop: '1rem' }}>
+                <div>
+                  <div style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)', marginBottom: '0.5rem' }}>Unlock UTXO</div>
+                  <div style={{ padding: '0.9rem 1rem', background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '12px', color: '#fff', fontFamily: 'monospace', fontSize: '0.82rem', wordBreak: 'break-all' }}>
+                    {selectedUnlockUtxo.txid}:{selectedUnlockUtxo.vout}
+                  </div>
                 </div>
-              </div>
 
-              <div>
-                <div style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)', marginBottom: '0.5rem' }}>Unlockable amount</div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.9rem 1rem', background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '12px', color: '#fff' }}>
-                  <span>{(Number(selectedUnlockUtxo.value) / 100000000).toFixed(4)}</span>
-                  <span style={{ color: 'rgba(255, 255, 255, 0.6)' }}>BTC</span>
+                <div>
+                  <div style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)', marginBottom: '0.5rem' }}>Unlockable amount</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.9rem 1rem', background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '12px', color: '#fff' }}>
+                    <span>{(Number(selectedUnlockUtxo.value) / 100000000).toFixed(4)}</span>
+                    <span style={{ color: 'rgba(255, 255, 255, 0.6)' }}>BTC</span>
+                  </div>
                 </div>
-              </div>
 
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                  <span style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)' }}>Fee</span>
-                  <button
-                    type="button"
-                    onClick={() => setUnlockUtxoFeeOption(unlockUtxoFeeOption)}
-                    style={{ background: 'none', border: 'none', color: 'rgba(255, 255, 255, 0.5)', cursor: 'pointer' }}
-                  >
-                    ⟳
-                  </button>
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                    <span style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)' }}>Fee</span>
+                    <button
+                      type="button"
+                      onClick={() => setUnlockUtxoFeeOption(unlockUtxoFeeOption)}
+                      style={{ background: 'none', border: 'none', color: 'rgba(255, 255, 255, 0.5)', cursor: 'pointer' }}
+                    >
+                      ⟳
+                    </button>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem' }}>
+                    <button onClick={() => setUnlockUtxoFeeOption('slow')} style={{ padding: '0.75rem 0.5rem', background: unlockUtxoFeeOption === 'slow' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: unlockUtxoFeeOption === 'slow' ? '#fff' : 'rgba(255, 255, 255, 0.6)', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem' }}><div style={{ fontWeight: 600 }}>Slow</div><div>3 sat/vB</div><div style={{ fontSize: '0.75rem', opacity: 0.7 }}>≈ 1 hours</div></button>
+                    <button onClick={() => setUnlockUtxoFeeOption('avg')} style={{ padding: '0.75rem 0.5rem', background: unlockUtxoFeeOption === 'avg' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: unlockUtxoFeeOption === 'avg' ? '#fff' : 'rgba(255, 255, 255, 0.6)', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem' }}><div style={{ fontWeight: 600 }}>Avg</div><div>3 sat/vB</div><div style={{ fontSize: '0.75rem', opacity: 0.7 }}>≈ 30 mins</div></button>
+                    <button onClick={() => setUnlockUtxoFeeOption('fast')} style={{ padding: '0.75rem 0.5rem', background: unlockUtxoFeeOption === 'fast' ? '#ff5a1f' : 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: '#fff', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem', fontWeight: unlockUtxoFeeOption === 'fast' ? 600 : 400 }}><div style={{ fontWeight: 600 }}>Fast</div><div>5 sat/vB</div><div style={{ fontSize: '0.75rem', opacity: 0.9 }}>≈ 10 mins</div></button>
+                    <button onClick={() => setUnlockUtxoFeeOption('custom')} style={{ padding: '0.75rem 0.5rem', background: unlockUtxoFeeOption === 'custom' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: unlockUtxoFeeOption === 'custom' ? '#fff' : 'rgba(255, 255, 255, 0.6)', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontWeight: 600 }}>Custom</button>
+                  </div>
+                  {unlockUtxoFeeOption === 'custom' && (
+                    <input type="number" placeholder="Enter custom fee rate" value={unlockUtxoCustomFee} onChange={(e) => setUnlockUtxoCustomFee(e.target.value)} style={{ width: '100%', padding: '0.75rem 1rem', background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: '#fff', fontSize: '0.9rem', marginTop: '0.75rem', outline: 'none' }} />
+                  )}
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem' }}>
-                  <button onClick={() => setUnlockUtxoFeeOption('slow')} style={{ padding: '0.75rem 0.5rem', background: unlockUtxoFeeOption === 'slow' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: unlockUtxoFeeOption === 'slow' ? '#fff' : 'rgba(255, 255, 255, 0.6)', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem' }}><div style={{ fontWeight: 600 }}>Slow</div><div>3 sat/VB</div><div style={{ fontSize: '0.75rem', opacity: 0.7 }}>≈ 1 hours</div></button>
-                  <button onClick={() => setUnlockUtxoFeeOption('avg')} style={{ padding: '0.75rem 0.5rem', background: unlockUtxoFeeOption === 'avg' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: unlockUtxoFeeOption === 'avg' ? '#fff' : 'rgba(255, 255, 255, 0.6)', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem' }}><div style={{ fontWeight: 600 }}>Avg</div><div>3 sat/VB</div><div style={{ fontSize: '0.75rem', opacity: 0.7 }}>≈ 30 mins</div></button>
-                  <button onClick={() => setUnlockUtxoFeeOption('fast')} style={{ padding: '0.75rem 0.5rem', background: unlockUtxoFeeOption === 'fast' ? '#ff5a1f' : 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: '#fff', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem', fontWeight: unlockUtxoFeeOption === 'fast' ? 600 : 400 }}><div style={{ fontWeight: 600 }}>Fast</div><div>5 sat/VB</div><div style={{ fontSize: '0.75rem', opacity: 0.9 }}>≈ 10 mins</div></button>
-                  <button onClick={() => setUnlockUtxoFeeOption('custom')} style={{ padding: '0.75rem 0.5rem', background: unlockUtxoFeeOption === 'custom' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: unlockUtxoFeeOption === 'custom' ? '#fff' : 'rgba(255, 255, 255, 0.6)', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontWeight: 600 }}>Custom</button>
-                </div>
-                {unlockUtxoFeeOption === 'custom' && (
-                  <input type="number" placeholder="Enter custom fee rate" value={unlockUtxoCustomFee} onChange={(e) => setUnlockUtxoCustomFee(e.target.value)} style={{ width: '100%', padding: '0.75rem 1rem', background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: '#fff', fontSize: '0.9rem', marginTop: '0.75rem', outline: 'none' }} />
-                )}
               </div>
             </div>
-
-            <div style={{ position: 'sticky', bottom: 0, paddingTop: '1rem', background: 'linear-gradient(180deg, rgba(10, 10, 10, 0) 0%, #131313 35%)' }}>
-              <button className="btn-primary" onClick={() => setView('unlock-utxo-confirm')} style={{ width: '100%', background: '#ff5a1f', padding: '1rem', fontSize: '1rem', fontWeight: 600 }}>Next</button>
+            <div style={{ padding: '0.75rem 1rem 1rem', flexShrink: 0 }}>
+              <button className="btn-primary" onClick={() => setView('unlock-utxo-confirm')} style={{ width: '100%' }}>Next</button>
             </div>
-          </div>
+          </>
         </div>
       )}
 
       {view === 'unlock-utxo-confirm' && selectedUnlockUtxo && (
-        <div className="wallet-container" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', height: '100%' }}>
+        <div className="wallet-container" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
           <div className="wallet-header">
             <button className="back-arrow" onClick={() => setView('unlock-rgb-utxo')}>←</button>
             <h2 className="utxo-header-title">Sign Transaction</h2>
           </div>
 
-          <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', marginTop: '2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem', paddingBottom: '1rem' }}>
+          <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '1rem 1rem 0', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
             <div style={{ background: 'rgba(255, 255, 255, 0.05)', borderRadius: '12px', padding: '1.25rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
                 <div style={{ flex: 1 }}>
@@ -5839,27 +5840,16 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                 {unlockUtxoError}
               </div>
             )}
-
-            <div style={{ position: 'sticky', bottom: 0, paddingTop: '1rem', background: 'linear-gradient(180deg, rgba(10, 10, 10, 0) 0%, #131313 35%)' }}>
-              <button
-                className="btn-primary"
-                onClick={handleUnlockUtxo}
-                disabled={unlockUtxoProcessing}
-                style={{
-                  width: '100%',
-                  background: '#ff5a1f',
-                  padding: '1rem',
-                  fontSize: '1rem',
-                  fontWeight: 600,
-                  borderRadius: '12px',
-                  border: 'none',
-                  color: '#fff',
-                  cursor: 'pointer'
-                }}
-              >
-                {unlockUtxoProcessing ? 'Signing...' : 'Sign & Pay'}
-              </button>
-            </div>
+          </div>
+          <div style={{ padding: '0.75rem 1rem 1rem', flexShrink: 0 }}>
+            <button
+              className="btn-primary"
+              onClick={handleUnlockUtxo}
+              disabled={unlockUtxoProcessing}
+              style={{ width: '100%' }}
+            >
+              {unlockUtxoProcessing ? 'Signing...' : 'Sign & Pay'}
+            </button>
           </div>
         </div>
       )}
@@ -5904,7 +5894,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
       {/* Create RGB UTXO View */}
       {
         view === 'create-rgb-utxo' && (
-          <div className="wallet-container" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', height: '100%' }}>
+          <div className="wallet-container" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
             <div className="wallet-header">
               <button className="back-arrow" onClick={() => setView('utxos')}>←</button>
               <h2 className="utxo-header-title">Create RGB UTXO</h2>
@@ -5918,68 +5908,71 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               const estimatedNetworkFee = (currentFeeRate * DEFAULT_CREATE_UTXO_TX_VBYTES) / 100000000
 
               return (
-                <div style={{ flex: 1, overflow: 'auto', paddingBottom: '1rem' }}>
-                  {/* Mode Tabs */}
-                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem', marginBottom: '1rem' }}>
-                    <button onClick={() => setCreateUtxoMode('default')} style={{ flex: 1, background: createUtxoMode === 'default' ? 'rgba(255, 255, 255, 0.1)' : 'transparent', border: `1px solid ${createUtxoMode === 'default' ? 'rgba(255, 255, 255, 0.3)' : 'rgba(255, 255, 255, 0.1)'}`, borderRadius: '8px', padding: '0.75rem', color: createUtxoMode === 'default' ? '#fff' : 'rgba(255, 255, 255, 0.5)', cursor: 'pointer', fontWeight: 600, fontSize: '0.95rem' }}>Default</button>
-                    <button onClick={() => setCreateUtxoMode('custom')} style={{ flex: 1, background: createUtxoMode === 'custom' ? 'rgba(255, 255, 255, 0.1)' : 'transparent', border: `1px solid ${createUtxoMode === 'custom' ? 'rgba(255, 255, 255, 0.3)' : 'rgba(255, 255, 255, 0.1)'}`, borderRadius: '8px', padding: '0.75rem', color: createUtxoMode === 'custom' ? '#fff' : 'rgba(255, 255, 255, 0.5)', cursor: 'pointer', fontWeight: 600, fontSize: '0.95rem' }}>Custom</button>
+                <>
+                  <div style={{ flex: 1, overflow: 'auto', padding: '0 1rem' }}>
+                    {/* Mode Tabs */}
+                    <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem', marginBottom: '1rem' }}>
+                      <button onClick={() => setCreateUtxoMode('default')} style={{ flex: 1, background: createUtxoMode === 'default' ? 'rgba(255, 255, 255, 0.1)' : 'transparent', border: `1px solid ${createUtxoMode === 'default' ? 'rgba(255, 255, 255, 0.3)' : 'rgba(255, 255, 255, 0.1)'}`, borderRadius: '8px', padding: '0.75rem', color: createUtxoMode === 'default' ? '#fff' : 'rgba(255, 255, 255, 0.5)', cursor: 'pointer', fontWeight: 600, fontSize: '0.95rem' }}>Default</button>
+                      <button onClick={() => setCreateUtxoMode('custom')} style={{ flex: 1, background: createUtxoMode === 'custom' ? 'rgba(255, 255, 255, 0.1)' : 'transparent', border: `1px solid ${createUtxoMode === 'custom' ? 'rgba(255, 255, 255, 0.3)' : 'rgba(255, 255, 255, 0.1)'}`, borderRadius: '8px', padding: '0.75rem', color: createUtxoMode === 'custom' ? '#fff' : 'rgba(255, 255, 255, 0.5)', cursor: 'pointer', fontWeight: 600, fontSize: '0.95rem' }}>Custom</button>
+                    </div>
+
+                    {/* Info Text */}
+                    <div style={{ padding: '1rem', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '8px', marginBottom: '1.5rem' }}>
+                      <p style={{ margin: 0, fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)', lineHeight: 1.5 }}>Move BTC to pre-fund UTXO for RGB20 transaction fees.</p>
+                    </div>
+
+                    {/* Default Mode */}
+                    {createUtxoMode === 'default' && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                        <div>
+                          <div style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)', marginBottom: '0.5rem' }}>Amount</div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: '1.2rem', fontWeight: 600, color: '#fff' }}>0.0003 BTC</span>
+                            <span style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.5)' }}>Balance: {btcBalance} BTC</span>
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)', marginBottom: '0.5rem' }}>Fee</div>
+                          <div style={{ fontSize: '1.1rem', fontWeight: 600, color: '#fff' }}>{currentFeeRate} sat/vB</div>
+                        </div>
+                        <div style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.6)' }}>Est. network fee: {formatBtcValue(estimatedNetworkFee, 8)} BTC</div>
+                      </div>
+                    )}
+
+                    {/* Custom Mode */}
+                    {createUtxoMode === 'custom' && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                        <div>
+                          <div style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)', marginBottom: '0.25rem' }}>Available BTC</div>
+                          <div style={{ fontSize: '0.95rem', color: 'rgba(255, 255, 255, 0.6)' }}>Balance: {btcBalance} BTC</div>
+                        </div>
+                        <div>
+                          <input type="text" placeholder="Enter BTC amount for creating UTXO" value={createUtxoAmount} onChange={(e) => setCreateUtxoAmount(e.target.value)} style={{ width: '100%', padding: '0.9rem 1rem', background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: '#fff', fontSize: '0.95rem', outline: 'none', boxSizing: 'border-box' }} />
+                          <div style={{ textAlign: 'right', marginTop: '0.4rem', fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.6)' }}>BTC</div>
+                        </div>
+                        <div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                            <span style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)' }}>Fee</span>
+                          </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem' }}>
+                            <button onClick={() => setCreateUtxoFeeOption('slow')} style={{ padding: '0.75rem 0.5rem', background: createUtxoFeeOption === 'slow' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: createUtxoFeeOption === 'slow' ? '#fff' : 'rgba(255, 255, 255, 0.6)', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem' }}><div style={{ fontWeight: 600 }}>Slow</div><div>{slowFeeRate} sat/vB</div><div style={{ fontSize: '0.75rem', opacity: 0.7 }}>≈ 1 hr</div></button>
+                            <button onClick={() => setCreateUtxoFeeOption('avg')} style={{ padding: '0.75rem 0.5rem', background: createUtxoFeeOption === 'avg' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: createUtxoFeeOption === 'avg' ? '#fff' : 'rgba(255, 255, 255, 0.6)', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem' }}><div style={{ fontWeight: 600 }}>Avg</div><div>{avgFeeRate} sat/vB</div><div style={{ fontSize: '0.75rem', opacity: 0.7 }}>≈ 30m</div></button>
+                            <button onClick={() => setCreateUtxoFeeOption('fast')} style={{ padding: '0.75rem 0.5rem', background: createUtxoFeeOption === 'fast' ? '#f7931a' : 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: '#fff', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem', fontWeight: createUtxoFeeOption === 'fast' ? 600 : 400 }}><div style={{ fontWeight: 600 }}>Fast</div><div>{fastFeeRate} sat/vB</div><div style={{ fontSize: '0.75rem', opacity: 0.9 }}>≈ 10m</div></button>
+                            <button onClick={() => setCreateUtxoFeeOption('custom')} style={{ padding: '0.75rem 0.5rem', background: createUtxoFeeOption === 'custom' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: createUtxoFeeOption === 'custom' ? '#fff' : 'rgba(255, 255, 255, 0.6)', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontWeight: 600 }}>Custom</button>
+                          </div>
+                          {createUtxoFeeOption === 'custom' && (
+                            <input type="number" placeholder="Enter custom fee rate" value={createUtxoCustomFee} onChange={(e) => setCreateUtxoCustomFee(e.target.value)} style={{ width: '100%', padding: '0.75rem 1rem', background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: '#fff', fontSize: '0.9rem', marginTop: '0.75rem', outline: 'none', boxSizing: 'border-box' }} />
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
-                  {/* Info Text */}
-                  <div style={{ padding: '1rem', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '8px', marginBottom: '1.5rem' }}>
-                    <p style={{ margin: 0, fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)', lineHeight: 1.5 }}>Move BTC to pre-fund UTXO for RGB20 transaction fees.</p>
+                  {/* Next button pinned outside scroll area */}
+                  <div style={{ padding: '0.75rem 1rem 1rem', flexShrink: 0 }}>
+                    <button className="btn-primary" onClick={() => setView('create-utxo-confirm')} style={{ width: '100%' }}>Next</button>
                   </div>
-
-                  {/* Default Mode */}
-                  {createUtxoMode === 'default' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                      <div>
-                        <div style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)', marginBottom: '0.5rem' }}>The UTXO creation amount</div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontSize: '1.2rem', fontWeight: 600, color: '#fff' }}>0.0003 BTC</span>
-                          <span style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.5)' }}>Balance: {btcBalance} BTC</span>
-                        </div>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)', marginBottom: '0.5rem' }}>Fee</div>
-                        <div style={{ fontSize: '1.1rem', fontWeight: 600, color: '#fff' }}>{currentFeeRate} sat/VB</div>
-                      </div>
-                      <div style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.6)' }}>Est. network fee: {formatBtcValue(estimatedNetworkFee, 8)} BTC</div>
-                    </div>
-                  )}
-
-                  {/* Custom Mode */}
-                  {createUtxoMode === 'custom' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                      <div>
-                        <div style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)', marginBottom: '0.5rem' }}>Available BTC</div>
-                        <div style={{ fontSize: '0.95rem', color: 'rgba(255, 255,  255, 0.6)' }}>Balance: {btcBalance} BTC</div>
-                      </div>
-                      <div>
-                        <input type="text" placeholder="Enter BTC amount for creating UTXO" value={createUtxoAmount} onChange={(e) => setCreateUtxoAmount(e.target.value)} style={{ width: '100%', padding: '0.9rem 1rem', background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: '#fff', fontSize: '0.95rem', outline: 'none' }} />
-                        <div style={{ textAlign: 'right', marginTop: '0.5rem' }}><span style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.6)' }}>BTC</span></div>
-                      </div>
-                      <div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                          <span style={{ fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)' }}>Fee</span>
-                          <button style={{ background: 'none', border: 'none', color: 'rgba(255, 255, 255, 0.5)', cursor: 'pointer' }}>⟳</button>
-                        </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem' }}>
-                          <button onClick={() => setCreateUtxoFeeOption('slow')} style={{ padding: '0.75rem 0.5rem', background: createUtxoFeeOption === 'slow' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: createUtxoFeeOption === 'slow' ? '#fff' : 'rgba(255, 255, 255, 0.6)', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem' }}><div style={{ fontWeight: 600 }}>Slow</div><div>{slowFeeRate} sat/VB</div><div style={{ fontSize: '0.75rem', opacity: 0.7 }}>≈ 1 hours</div></button>
-                          <button onClick={() => setCreateUtxoFeeOption('avg')} style={{ padding: '0.75rem 0.5rem', background: createUtxoFeeOption === 'avg' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: createUtxoFeeOption === 'avg' ? '#fff' : 'rgba(255, 255, 255, 0.6)', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem' }}><div style={{ fontWeight: 600 }}>Avg</div><div>{avgFeeRate} sat/VB</div><div style={{ fontSize: '0.75rem', opacity: 0.7 }}>≈ 30 mins</div></button>
-                          <button onClick={() => setCreateUtxoFeeOption('fast')} style={{ padding: '0.75rem 0.5rem', background: createUtxoFeeOption === 'fast' ? '#f7931a' : 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: '#fff', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem', fontWeight: createUtxoFeeOption === 'fast' ? 600 : 400 }}><div style={{ fontWeight: 600 }}>Fast</div><div>{fastFeeRate} sat/VB</div><div style={{ fontSize: '0.75rem', opacity: 0.9 }}>≈ 10 mins</div></button>
-                          <button onClick={() => setCreateUtxoFeeOption('custom')} style={{ padding: '0.75rem 0.5rem', background: createUtxoFeeOption === 'custom' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: createUtxoFeeOption === 'custom' ? '#fff' : 'rgba(255, 255, 255, 0.6)', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontWeight: 600 }}>Custom</button>
-                        </div>
-                        {createUtxoFeeOption === 'custom' && (
-                          <input type="number" placeholder="Enter custom fee rate" value={createUtxoCustomFee} onChange={(e) => setCreateUtxoCustomFee(e.target.value)} style={{ width: '100%', padding: '0.75rem 1rem', background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: '#fff', fontSize: '0.9rem', marginTop: '0.75rem', outline: 'none' }} />
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Next Button */}
-                  <button className="btn-primary" onClick={() => setView('create-utxo-confirm')} style={{ width: '100%', marginTop: '2rem', background: '#f7931a', padding: '1rem', fontSize: '1rem', fontWeight: 600 }}>Next</button>
-                </div>
+                </>
               )
             })()}
           </div>
