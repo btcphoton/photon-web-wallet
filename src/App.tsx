@@ -14,7 +14,7 @@ import type { Asset } from './utils/storage'
 import { BACKEND_PROFILES, DEFAULT_BACKEND_PROFILE_ID, getBackendProfileById, getDefaultElectrumServer, getDefaultRgbProxy, type BackendProfileId } from './utils/backend-config'
 import { QRCodeSVG } from 'qrcode.react'
 import { createRgbInvoice } from './utils/rgb-invoice'
-import { createRegtestLightningInvoice, createRegtestRgbInvoice, decodeRegtestLightningInvoice, decodeRegtestRgbInvoice, fetchRegtestRgbBalance, fetchRegtestRgbRegistry, fetchRegtestRgbTransfers, mineRegtestBlocks, payRegtestLightningInvoice, registerRgbInvoiceSecret, sendRegtestRgbInvoice } from './utils/rgb-wallet'
+import { createRegtestLightningInvoice, createRegtestRgbInvoice, decodeRegtestLightningInvoice, decodeRegtestRgbInvoice, fetchRegtestRgbBalance, fetchRegtestRgbRegistry, fetchRegtestRgbTransfers, mineRegtestBlocks, payRegtestLightningInvoice, refreshRegtestRgbTransfers, registerRgbInvoiceSecret, sendRegtestRgbInvoice } from './utils/rgb-wallet'
 import { LightningAnimation } from './components/LightningAnimation'
 import { fetchBtcActivities, type BitcoinActivity } from './utils/bitcoin-activities'
 
@@ -2390,6 +2390,23 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
 
         setTimeout(async () => {
           try {
+            const assetId = assets.find((asset) => asset.unit === sendRgbAssetLabel)?.id || buildAssetIdFromTicker(sendRgbAssetLabel)
+            const contractsKey = getNetworkContractsKey(selectedNetwork)
+            const contractSettings = await getStorageData([contractsKey])
+            const storedContractMap = typeof contractSettings[contractsKey] === 'string'
+              ? JSON.parse(contractSettings[contractsKey] as string) as Record<string, string>
+              : {}
+            const contractId = storedContractMap[assetId]
+            const walletKeyForRefresh = await getRegtestWalletKey()
+
+            if (selectedNetwork === 'regtest') {
+              await mineRegtestBlocks(1)
+            }
+
+            if (contractId) {
+              await refreshRegtestRgbTransfers({ assetId: contractId, walletKey: walletKeyForRefresh })
+            }
+
             await handleRefreshBalance()
             await loadActivities()
           } catch (refreshError) {
@@ -3632,7 +3649,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                             </span>
                             {(Number(asset.rgbOffchainOutbound || 0) > 0 || Number(asset.rgbOffchainInbound || 0) > 0) && (
                               <span className="asset-lock-note">
-                                Instant: {asset.rgbOffchainOutbound || '0'} {asset.unit} outbound • {asset.rgbOffchainInbound || '0'} inbound
+                                Instant: {asset.rgbOffchainOutbound || '0'} {asset.unit} outbound • {asset.rgbOffchainInbound || '0'} {asset.unit} inbound
                               </span>
                             )}
                             {asset.rgbLockReason && (

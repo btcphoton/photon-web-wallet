@@ -501,6 +501,33 @@ export async function fetchRegtestRgbRegistry(): Promise<RgbRegistryAsset[]> {
     return Array.isArray(data.assets) ? data.assets as RgbRegistryAsset[] : []
 }
 
+export async function refreshRegtestRgbTransfers(params: {
+    assetId: string
+    walletKey?: string
+}): Promise<void> {
+    const apiBase = await getRegtestRgbApiBase()
+    const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+    }
+
+    if (params.walletKey) {
+        headers['x-photon-wallet-key'] = params.walletKey
+    }
+
+    const response = await fetch(`${apiBase}/rgb/refresh`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+            assetId: params.assetId,
+        }),
+    })
+
+    if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(errorText || `RGB refresh failed with status ${response.status}`)
+    }
+}
+
 export async function mineRegtestBlocks(blocks: number = 1): Promise<void> {
     const apiBase = await getRegtestRgbApiBase()
     const response = await fetch(`${apiBase}/regtest/mine`, {
