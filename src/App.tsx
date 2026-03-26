@@ -2389,6 +2389,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
         setView('send-success')
 
         setTimeout(async () => {
+          // Step 1: settle the transfer (mine block + refresh) — errors here are non-fatal
           try {
             const assetId = assets.find((asset) => asset.unit === sendRgbAssetLabel)?.id || buildAssetIdFromTicker(sendRgbAssetLabel)
             const contractsKey = getNetworkContractsKey(selectedNetwork)
@@ -2406,11 +2407,16 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
             if (contractId) {
               await refreshRegtestRgbTransfers({ assetId: contractId, walletKey: walletKeyForRefresh })
             }
+          } catch (settleError) {
+            console.error('Error settling Lightning transfer:', settleError)
+          }
 
+          // Step 2: always re-fetch asset balances regardless of settle outcome
+          try {
             await loadAssetsForNetwork(selectedNetwork, mnemonic)
             await loadActivities()
           } catch (refreshError) {
-            console.error('Error refreshing wallet after Lightning payment:', refreshError)
+            console.error('Error refreshing assets after Lightning payment:', refreshError)
           }
         }, 1200)
       } catch (error: any) {
