@@ -31,6 +31,9 @@ export interface RgbWalletTransfer {
     status: string
     kind: string
     direction?: string | null
+    created_at?: string | null
+    updated_at?: string | null
+    settled_at?: string | null
     txid?: string | null
     recipient_id?: string | null
     receive_utxo?: string | null

@@ -67,6 +67,26 @@ const formatBtcValue = (btcAmount: number | string, decimals = 8) => {
   return fixed.replace(/\.0+$|0+$/g, '').replace(/\.$/, '')
 }
 
+const parseTimestampToEpochSeconds = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value > 1_000_000_000_000 ? Math.floor(value / 1000) : Math.floor(value)
+  }
+
+  if (typeof value === 'string' && value.trim()) {
+    const numeric = Number(value)
+    if (Number.isFinite(numeric)) {
+      return numeric > 1_000_000_000_000 ? Math.floor(numeric / 1000) : Math.floor(numeric)
+    }
+
+    const parsed = Date.parse(value)
+    if (!Number.isNaN(parsed)) {
+      return Math.floor(parsed / 1000)
+    }
+  }
+
+  return null
+}
+
 const isLightningInvoice = (value: string) => /^ln/i.test(value.trim())
 const isRgbInvoice = (value: string) => /^rgb:/i.test(value.trim())
 const isBlindSealReference = (value: string) => /^bcrt:utxob:/i.test(value.trim())
@@ -1285,7 +1305,7 @@ function App() {
                 .filter((transfer) => {
                   if (transfer.kind === 'Issuance') return false
                   if (transfer.kind === 'Send' || transfer.kind?.startsWith('Receive')) return true
-                  return transfer.kind?.startsWith('Lightning') || transfer.txid === null
+                  return transfer.kind?.startsWith('Lightning') || transfer.metadata?.route === 'lightning' || transfer.txid === null
                 })
                 .map((transfer) => {
                   const assignmentValue = Number(
@@ -1293,17 +1313,25 @@ function App() {
                     transfer.requested_assignment?.value ??
                     0
                   )
-                  const metadataTimestamp =
-                    typeof transfer.metadata?.created_at === 'number'
-                      ? transfer.metadata.created_at
-                      : typeof transfer.metadata?.updated_at === 'number'
-                        ? transfer.metadata.updated_at
-                        : null
-                  const timestamp = metadataTimestamp || Math.floor(Date.now() / 1000)
+                  const timestamp =
+                    parseTimestampToEpochSeconds(transfer.settled_at) ??
+                    parseTimestampToEpochSeconds(transfer.updated_at) ??
+                    parseTimestampToEpochSeconds(transfer.created_at) ??
+                    parseTimestampToEpochSeconds(transfer.metadata?.updated_at) ??
+                    parseTimestampToEpochSeconds(transfer.metadata?.created_at) ??
+                    0
                   const isReceive =
+                    transfer.direction === 'incoming' ||
                     transfer.kind?.startsWith('Receive') ||
                     transfer.kind === 'LightningReceive'
-                  const isLightning = transfer.kind?.startsWith('Lightning') || transfer.txid === null
+                  const isLightning =
+                    transfer.kind?.startsWith('Lightning') ||
+                    transfer.metadata?.route === 'lightning' ||
+                    transfer.txid === null
+                  const paymentHash =
+                    transfer.metadata && typeof transfer.metadata.payment_hash === 'string'
+                      ? transfer.metadata.payment_hash
+                      : null
 
                   return {
                     type: isReceive ? 'Receive' : 'Send',
@@ -1316,12 +1344,12 @@ function App() {
                     timestamp,
                     unit: assetMeta.unit,
                     route: isLightning ? 'lightning' : 'onchain',
-                    settlementLabel: isLightning ? 'Off-Chain Settlement' : 'On-Chain Settlement',
+                    settlementLabel: isLightning ? 'Instant Settlement' : 'On-Chain Settlement',
                     note: isLightning
-                      ? `Payment ${transfer.metadata && typeof transfer.metadata.payment_hash === 'string'
-                        ? `${transfer.metadata.payment_hash.slice(0, 8)}...`
-                        : 'via channel'}`
-                      : undefined,
+                      ? `${isReceive ? 'Received' : 'Sent'} via Lightning${paymentHash
+                        ? ` • ${paymentHash.slice(0, 8)}...`
+                        : ''}`
+                      : `${isReceive ? 'Received' : 'Sent'} on-chain`,
                   } satisfies BitcoinActivity
                 })
             })
@@ -3655,7 +3683,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                             </span>
                             {(Number(asset.rgbOffchainOutbound || 0) > 0 || Number(asset.rgbOffchainInbound || 0) > 0) && (
                               <span className="asset-lock-note">
-                                Instant: {asset.rgbOffchainOutbound || '0'} {asset.unit} outbound • {asset.rgbOffchainInbound || '0'} {asset.unit} inbound
+                                Instant liquidity: send {asset.rgbOffchainOutbound || '0'} {asset.unit} now • receive up to {asset.rgbOffchainInbound || '0'} {asset.unit}
                               </span>
                             )}
                             {asset.rgbLockReason && (
@@ -3741,11 +3769,13 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                                   )}
                                 </div>
                                 <div className="activity-info">
-                                  <span className="activity-type">{activity.route === 'lightning' ? 'Lightning' : activity.type}</span>
+                                  <span className="activity-type">
+                                    {activity.route === 'lightning' ? `${activity.type} Instantly` : activity.type}
+                                  </span>
                                   <div className="activity-tx-row">
                                     <span className="activity-txid">
                                       {activity.route === 'lightning'
-                                        ? (activity.settlementLabel || 'Off-Chain Settlement')
+                                        ? (activity.settlementLabel || 'Instant Settlement')
                                         : `tx: ${shortTxid}`}
                                     </span>
                                     {explorerUrl && <span className="activity-link-icon">↗</span>}
@@ -3760,7 +3790,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                                   {activity.type === 'Send' ? '-' : ''}{activity.amount.toFixed(activity.unit === 'BTC' ? 8 : 2)} {activity.unit || 'BTC'}
                                 </span>
                                 <span className={`activity-status-new activity-status-pill ${activity.status.toLowerCase()}`}>
-                                  {activity.route === 'lightning' ? 'Off-Chain Settlement' : activity.status}
+                                  {activity.status}
                                 </span>
                               </div>
                             </div>
@@ -5210,14 +5240,14 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               <div className="send-surface-card">
                 {sendMode === 'lightning' && (
                   <div className="send-instant-balance-card">
-                    <div className="send-instant-kicker">Ready to Spend (Instant)</div>
+                    <div className="send-instant-kicker">Available To Send</div>
                     <div className="send-instant-amount">
                       {sendTotalSpendingPower || '0'} <span>{sendRgbAssetLabel}</span>
                     </div>
                     <div className="send-instant-meta">
-                      <span>On-chain: {Number(sendTotalSpendingPower || 0) - Number(sendOffchainOutbound || 0)}</span>
-                      <span>Channel: {sendOffchainOutbound || '0'}</span>
-                      <span>Inbound: {sendOffchainInbound || '0'}</span>
+                      <span>On-chain settled: {Number(sendTotalSpendingPower || 0) - Number(sendOffchainOutbound || 0)}</span>
+                      <span>Instant send: {sendOffchainOutbound || '0'}</span>
+                      <span>Instant receive: {sendOffchainInbound || '0'}</span>
                     </div>
                   </div>
                 )}
@@ -5278,7 +5308,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                     {sendMode === 'rgb'
                       ? `Invoice amount: ${sendAmount} ${sendRgbAssetLabel}`
                       : sendMode === 'lightning'
-                        ? `Instant route detected. Channel spendable: ${sendOffchainOutbound || '0'} ${sendRgbAssetLabel}`
+                        ? `Instant route detected. Sendable now: ${sendOffchainOutbound || '0'} ${sendRgbAssetLabel} • Receivable now: ${sendOffchainInbound || '0'} ${sendRgbAssetLabel}`
                       : `Maximum sendable: ${maxSendableAmount} BTC`}
                   </div>
                 </div>
