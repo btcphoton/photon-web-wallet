@@ -11,6 +11,7 @@ export interface Asset {
     rgbSpendabilityStatus?: string
     rgbOffchainOutbound?: string
     rgbOffchainInbound?: string
+    rgbLockedUnconfirmed?: string
     rgbSpendingPower?: string
 }
 

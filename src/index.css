@@ -1085,6 +1085,31 @@ body {
   font-weight: 600;
 }
 
+.asset-state-badge {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 10px;
+  margin-top: 3px;
+}
+.asset-state-badge.incoming {
+  background: rgba(80, 220, 140, 0.15);
+  color: #50dc8c;
+}
+.asset-state-badge.confirming {
+  background: rgba(255, 190, 80, 0.15);
+  color: #ffbe50;
+}
+.asset-state-badge.outbound {
+  background: rgba(100, 160, 255, 0.15);
+  color: #64a0ff;
+}
+.asset-state-badge.locked {
+  background: rgba(255, 100, 100, 0.15);
+  color: #ff7070;
+}
+
 .asset-arrow {
   display: flex;
   align-items: center;

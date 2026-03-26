@@ -7,6 +7,7 @@ export interface BitcoinActivity {
     txid: string | null;
     amount: number;
     status: 'Confirmed' | 'Pending';
+    transferStatus?: string;
     date: string;
     blockHeight?: number;
     timestamp?: number;

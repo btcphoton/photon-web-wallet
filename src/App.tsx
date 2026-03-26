@@ -566,18 +566,22 @@ function App() {
           const offchainOutbound = Number(rgbBalance.balance.offchain_outbound || 0)
           const totalSpendingPower = spendable + offchainOutbound
 
+          const lockedUnconfirmed = Number(rgbBalance.balance.locked_unconfirmed || 0)
+          const offchainInbound = Number(rgbBalance.balance.offchain_inbound || 0)
+
           return {
             ...asset,
             amount: String(totalSpendingPower),
             rgbLockReason:
               Number(rgbBalance.balance.locked_missing_secret || 0) > 0
                 ? 'Locked (Missing Secret)'
-                : Number(rgbBalance.balance.locked_unconfirmed || 0) > 0
+                : lockedUnconfirmed > 0
                   ? 'Locked (Awaiting Confirmations)'
                   : undefined,
             rgbSpendabilityStatus: rgbBalance.balance.spendability_status,
             rgbOffchainOutbound: String(rgbBalance.balance.offchain_outbound || 0),
-            rgbOffchainInbound: String(rgbBalance.balance.offchain_inbound || 0),
+            rgbOffchainInbound: String(offchainInbound),
+            rgbLockedUnconfirmed: String(lockedUnconfirmed),
             rgbSpendingPower: String(totalSpendingPower),
           }
         } catch (error) {
@@ -1338,6 +1342,7 @@ function App() {
                     txid: transfer.txid || null,
                     amount: assignmentValue,
                     status: transfer.status === 'Settled' ? 'Confirmed' : 'Pending',
+                    transferStatus: transfer.status,
                     date: timestamp
                       ? new Date(timestamp * 1000).toLocaleDateString()
                       : 'Pending',
@@ -1848,6 +1853,32 @@ function App() {
       window.clearInterval(intervalId)
     }
   }, [])
+
+  // Auto-poll RGB balance every 20s while any asset has pending activity
+  useEffect(() => {
+    if (view !== 'dashboard' || !mnemonic) return
+
+    const hasPending = assets.some(
+      (a) =>
+        Number(a.rgbOffchainInbound || 0) > 0 ||
+        Number(a.rgbLockedUnconfirmed || 0) > 0 ||
+        Number(a.rgbOffchainOutbound || 0) > 0
+    )
+
+    if (!hasPending) return
+
+    let cancelled = false
+    const intervalId = window.setInterval(async () => {
+      if (cancelled) return
+      await loadAssetsForNetwork(selectedNetwork, mnemonic)
+      if (!cancelled) loadActivities()
+    }, 20000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(intervalId)
+    }
+  }, [view, mnemonic, assets, selectedNetwork])
 
   // Load user balance when swap view opens
   useEffect(() => {
@@ -3443,9 +3474,6 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                 </span>
                 <span className="wallet-network-caret">▾</span>
               </WalletHeaderButton>
-              <WalletHeaderButton ariaLabel="Refresh balance" onClick={handleRefreshBalance} title="Refresh balance">
-                ↻
-              </WalletHeaderButton>
               <WalletHeaderButton ariaLabel="Open menu" onClick={() => setShowMenu(!showMenu)} title="Open menu">
                 ≡
               </WalletHeaderButton>
@@ -3681,14 +3709,24 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                             <span className="asset-amount">
                               {asset.amount} {asset.unit}
                             </span>
-                            {(Number(asset.rgbOffchainOutbound || 0) > 0 || Number(asset.rgbOffchainInbound || 0) > 0) && (
-                              <span className="asset-lock-note">
-                                Instant liquidity: send {asset.rgbOffchainOutbound || '0'} {asset.unit} now • receive up to {asset.rgbOffchainInbound || '0'} {asset.unit}
+                            {Number(asset.rgbOffchainInbound || 0) > 0 && (
+                              <span className="asset-state-badge incoming">
+                                ↓ {asset.rgbOffchainInbound} {asset.unit} incoming
                               </span>
                             )}
-                            {asset.rgbLockReason && (
-                              <span className="asset-lock-note">
-                                {asset.rgbLockReason}
+                            {Number(asset.rgbLockedUnconfirmed || 0) > 0 && (
+                              <span className="asset-state-badge confirming">
+                                ⏳ {asset.rgbLockedUnconfirmed} {asset.unit} confirming…
+                              </span>
+                            )}
+                            {Number(asset.rgbOffchainOutbound || 0) > 0 && (
+                              <span className="asset-state-badge outbound">
+                                ↑ {asset.rgbOffchainOutbound} {asset.unit} sending
+                              </span>
+                            )}
+                            {asset.rgbLockReason === 'Locked (Missing Secret)' && (
+                              <span className="asset-state-badge locked">
+                                🔒 {asset.rgbLockReason}
                               </span>
                             )}
                           </div>
@@ -3790,7 +3828,13 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                                   {activity.type === 'Send' ? '-' : ''}{activity.amount.toFixed(activity.unit === 'BTC' ? 8 : 2)} {activity.unit || 'BTC'}
                                 </span>
                                 <span className={`activity-status-new activity-status-pill ${activity.status.toLowerCase()}`}>
-                                  {activity.status}
+                                  {activity.transferStatus === 'WaitingCounterparty'
+                                    ? 'Awaiting Receiver'
+                                    : activity.transferStatus === 'WaitingConfirmations'
+                                      ? 'Confirming…'
+                                      : activity.transferStatus === 'Settled'
+                                        ? 'Confirmed'
+                                        : activity.status}
                                 </span>
                               </div>
                             </div>
