@@ -2407,7 +2407,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               await refreshRegtestRgbTransfers({ assetId: contractId, walletKey: walletKeyForRefresh })
             }
 
-            await handleRefreshBalance()
+            await loadAssetsForNetwork(selectedNetwork, mnemonic)
             await loadActivities()
           } catch (refreshError) {
             console.error('Error refreshing wallet after Lightning payment:', refreshError)
