@@ -1,0 +1,32 @@
+sequenceDiagram
+    autonumber
+    participant W as Photon-Web Wallet (Chrome)
+    participant API as Node.js Gateway (Nginx)
+    participant UN as User RLN Node (Port 3002)
+    participant MN as Master RLN Node (Port 3001)
+    participant PX as RGB Proxy (Consignments)
+    participant BC as Bitcoin Core (Regtest)
+
+    Note over W, MN: Step 1: Initiating the Transfer
+    W->>API: POST /pay-lightning (invoice + x-photon-key)
+    API->>UN: Command: send_asset_payment(invoice)
+
+    rect rgb(255, 243, 205)
+    Note over UN, MN: Step 2: The Lightning Handshake (Instant)
+    UN->>MN: Peer-to-Peer Payment (HTLC)
+    MN-->>UN: Pre-image (Settlement Proof)
+    end
+
+    rect rgb(209, 236, 241)
+    Note over UN, PX: Step 3: RGB Asset Proof (Privacy Layer)
+    UN->>PX: Upload PHO Consignment
+    MN->>PX: Fetch & Validate Consignment
+    end
+
+    Note over UN, BC: Step 4: Verification
+    UN->>BC: Verify Taproot Anchor (Is the coin still there?)
+    BC-->>UN: Verified (Confirmed at Height 578)
+
+    Note over W: Step 5: Success State
+    UN-->>API: Status: SUCCESS (Hash: 69018fc3...)
+    API-->>W: Update UI: 9.00 PHO Outbound / 1.00 PHO Inbound
