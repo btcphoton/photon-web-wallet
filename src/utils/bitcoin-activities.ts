@@ -6,7 +6,7 @@ export interface BitcoinActivity {
     type: 'Receive' | 'Send';
     txid: string | null;
     amount: number;
-    status: 'Confirmed' | 'Pending';
+    status: 'Confirmed' | 'Pending' | 'Confirming';
     transferStatus?: string;
     date: string;
     blockHeight?: number;

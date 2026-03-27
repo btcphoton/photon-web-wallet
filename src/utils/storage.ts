@@ -236,9 +236,6 @@ export const getNetworkContractsKey = (network: string): keyof StorageData => {
 // Testnet default assets (testnet3, testnet4, regtest)
 export const testnet3DefaultAssets: Asset[] = [
     { id: 'lightning-btc', name: 'Lightning BTC', amount: '0', unit: 'ckBTC', color: '#fbbf24' },
-    { id: 'puliyal', name: 'PULIYAL20', amount: '21,000,000', unit: 'Puliyal', color: '#a855f7' },
-    { id: 'bitcoin', name: 'BITCOIN', amount: '210,000,000', unit: 'BTC', color: '#f7931a' },
-    { id: 'xiao', name: 'XIAOTANG68', amount: '0', unit: 'Xiaotan', color: '#22c55e' },
 ]
 
 // Mainnet default assets

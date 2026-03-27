@@ -103,47 +103,11 @@ const getRandomPositions = (): number[] => {
   return positions.sort((a, b) => a - b)
 }
 
-const REGTEST_PHO_CONTRACT_ID = 'rgb:2Mhfmuc0-BqWCUwP-kkJKF_V-F1~L4j6-A1_W6Yy-hK6Z~rA'
-const REGTEST_LIGHT_CONTRACT_ID = 'rgb:WDJM8Vmw-Gnipws~-5i7T1Hh-~v028f1-FUW_OqC-1ClqyPk'
 const PHOTON_PRICE_API = 'https://faucet.photonbolt.xyz/api/market/btc-usd'
 
-const importableAssets: ImportableAsset[] = [
-  {
-    asset: {
-      id: 'pho',
-      name: 'Photon Token',
-      amount: '0',
-      unit: 'PHO',
-      color: '#38bdf8',
-    },
-    aliases: [
-      'pho',
-      'photon',
-      'photon token',
-      REGTEST_PHO_CONTRACT_ID.toLowerCase(),
-    ],
-    contracts: {
-      regtest: REGTEST_PHO_CONTRACT_ID,
-    },
-  },
-  {
-    asset: {
-      id: 'light',
-      name: 'LIGHT Token',
-      amount: '0',
-      unit: 'LIGHT',
-      color: '#f8fafc',
-    },
-    aliases: [
-      'light',
-      'light token',
-      REGTEST_LIGHT_CONTRACT_ID.toLowerCase(),
-    ],
-    contracts: {
-      regtest: REGTEST_LIGHT_CONTRACT_ID,
-    },
-  },
-]
+// Fallback importable assets used only when the registry API is unreachable
+// and for non-regtest networks. Regtest always queries the live registry first.
+const importableAssets: ImportableAsset[] = []
 
 function WalletHeaderButton({
   ariaLabel,
@@ -627,21 +591,17 @@ function App() {
     setAddAssetSuccess('')
 
     try {
-      let matchedAsset = importableAssets.find((entry) =>
-        entry.aliases.includes(normalizedInput)
-      )
+      let matchedAsset: ImportableAsset | undefined
 
       if (selectedNetwork === 'regtest') {
+        // Registry is authoritative for regtest — query it first
         try {
           const registryAssets = await fetchRegtestRgbRegistry()
-          const registryMatch = registryAssets.find((entry) => {
-            return (
-              entry.contract_id.toLowerCase() === normalizedInput ||
-              entry.ticker.toLowerCase() === normalizedInput ||
-              entry.token_name.toLowerCase() === normalizedInput
-            )
-          })
-
+          const registryMatch = registryAssets.find((entry) =>
+            entry.contract_id.toLowerCase() === normalizedInput ||
+            entry.ticker.toLowerCase() === normalizedInput ||
+            entry.token_name.toLowerCase() === normalizedInput
+          )
           if (registryMatch) {
             matchedAsset = {
               asset: {
@@ -656,14 +616,15 @@ function App() {
                 registryMatch.token_name.toLowerCase(),
                 registryMatch.contract_id.toLowerCase(),
               ],
-              contracts: {
-                regtest: registryMatch.contract_id,
-              },
+              contracts: { regtest: registryMatch.contract_id },
             }
           }
         } catch (registryError) {
-          console.error('[Add Assets] Failed to query regtest registry, falling back to local list:', registryError)
+          console.error('[Add Assets] Registry API unreachable, falling back to local list:', registryError)
+          matchedAsset = importableAssets.find((entry) => entry.aliases.includes(normalizedInput))
         }
+      } else {
+        matchedAsset = importableAssets.find((entry) => entry.aliases.includes(normalizedInput))
       }
 
       if (!matchedAsset) {
@@ -1319,6 +1280,8 @@ function App() {
               return response.transfers
                 .filter((transfer) => {
                   if (transfer.kind === 'Issuance') return false
+                  // WaitingCounterparty = open invoice nobody has sent to yet — not a real activity
+                  if (transfer.status === 'WaitingCounterparty') return false
                   if (transfer.kind === 'Send' || transfer.kind?.startsWith('Receive')) return true
                   return transfer.kind?.startsWith('Lightning') || transfer.metadata?.route === 'lightning' || transfer.txid === null
                 })
@@ -1352,7 +1315,7 @@ function App() {
                     type: isReceive ? 'Receive' : 'Send',
                     txid: transfer.txid || null,
                     amount: assignmentValue,
-                    status: transfer.status === 'Settled' ? 'Confirmed' : 'Pending',
+                    status: transfer.status === 'Settled' ? 'Confirmed' : transfer.status === 'WaitingConfirmations' ? 'Confirming' : 'Pending',
                     transferStatus: transfer.status,
                     date: timestamp
                       ? new Date(timestamp * 1000).toLocaleDateString()
