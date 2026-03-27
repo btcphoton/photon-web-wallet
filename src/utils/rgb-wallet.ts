@@ -553,3 +553,86 @@ export async function mineRegtestBlocks(blocks: number = 1): Promise<void> {
         throw new Error(data.error || 'Regtest mining failed')
     }
 }
+
+// ─── UTXO Slot API ───────────────────────────────────────────────────────────
+
+export interface UtxoFundingAddressResponse {
+    ok: true
+    fundingAddress: string
+    expectedSats: number
+    expectedBtc: string
+    label: string
+    walletKey: string
+}
+
+export type UtxoSlotState = 'FREE' | 'OCCUPIED' | 'EMPTY' | 'REDEEMED'
+
+export interface UtxoSlot {
+    id: string
+    outpoint: string
+    state: UtxoSlotState
+    satsValue: number | null
+    nodeAccountRef: string | null
+    transferId: string | null
+    invoiceId: string | null
+    redeemedTxid: string | null
+    createdAt: string
+    updatedAt: string
+    redeemedAt: string | null
+}
+
+export async function fetchUtxoFundingAddress(params: { walletKey: string }): Promise<UtxoFundingAddressResponse> {
+    const apiBase = await getRegtestRgbApiBase()
+    const response = await fetch(`${apiBase}/utxo/funding-address`, {
+        method: 'GET',
+        headers: { 'x-photon-wallet-key': params.walletKey },
+    })
+    if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(errorText || `Failed to fetch funding address (${response.status})`)
+    }
+    const data = await response.json()
+    if (!data.ok) throw new Error(data.error || 'Failed to fetch funding address')
+    return data as UtxoFundingAddressResponse
+}
+
+export async function fetchUtxoSlots(params: { walletKey: string }): Promise<UtxoSlot[]> {
+    const apiBase = await getRegtestRgbApiBase()
+    const response = await fetch(`${apiBase}/utxo/slots`, {
+        method: 'GET',
+        headers: { 'x-photon-wallet-key': params.walletKey },
+    })
+    if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(errorText || `Failed to fetch UTXO slots (${response.status})`)
+    }
+    const data = await response.json()
+    if (!data.ok) throw new Error(data.error || 'Failed to fetch UTXO slots')
+    return (data.slots || []) as UtxoSlot[]
+}
+
+export async function redeemUtxoSlot(params: {
+    walletKey: string
+    slotId: string
+    mainBtcAddress?: string
+}): Promise<{ txid: string; sentSats: number; returnAddress: string }> {
+    const apiBase = await getRegtestRgbApiBase()
+    const response = await fetch(`${apiBase}/utxo/redeem`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'x-photon-wallet-key': params.walletKey,
+        },
+        body: JSON.stringify({
+            slotId: params.slotId,
+            mainBtcAddress: params.mainBtcAddress,
+        }),
+    })
+    if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(errorText || `Redeem failed (${response.status})`)
+    }
+    const data = await response.json()
+    if (!data.ok) throw new Error(data.error || 'Redeem failed')
+    return { txid: data.txid, sentSats: data.sentSats, returnAddress: data.returnAddress }
+}

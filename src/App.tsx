@@ -14,12 +14,12 @@ import type { Asset } from './utils/storage'
 import { BACKEND_PROFILES, DEFAULT_BACKEND_PROFILE_ID, getBackendProfileById, getDefaultElectrumServer, getDefaultRgbProxy, type BackendProfileId } from './utils/backend-config'
 import { QRCodeSVG } from 'qrcode.react'
 import { createRgbInvoice } from './utils/rgb-invoice'
-import { createRegtestLightningInvoice, createRegtestRgbInvoice, decodeRegtestLightningInvoice, decodeRegtestRgbInvoice, fetchRegtestRgbBalance, fetchRegtestRgbRegistry, fetchRegtestRgbTransfers, mineRegtestBlocks, payRegtestLightningInvoice, refreshRegtestRgbTransfers, registerRgbInvoiceSecret, sendRegtestRgbInvoice } from './utils/rgb-wallet'
+import { createRegtestLightningInvoice, createRegtestRgbInvoice, decodeRegtestLightningInvoice, decodeRegtestRgbInvoice, fetchRegtestRgbBalance, fetchRegtestRgbRegistry, fetchRegtestRgbTransfers, mineRegtestBlocks, payRegtestLightningInvoice, refreshRegtestRgbTransfers, registerRgbInvoiceSecret, sendRegtestRgbInvoice, fetchUtxoFundingAddress, fetchUtxoSlots, redeemUtxoSlot, type UtxoSlot, type UtxoFundingAddressResponse } from './utils/rgb-wallet'
 import { LightningAnimation } from './components/LightningAnimation'
 import { fetchBtcActivities, type BitcoinActivity } from './utils/bitcoin-activities'
 
 
-type View = 'welcome' | 'unlock' | 'lock' | 'forgot' | 'create' | 'verify' | 'password' | 'restore' | 'dashboard' | 'receive' | 'receive-btc' | 'receive-rgb' | 'receive-lightning' | 'convert-lightning' | 'add-assets' | 'settings' | 'user-settings' | 'auto-lock-settings' | 'network-settings' | 'swap' | 'send' | 'send-amount' | 'send-confirm' | 'send-success' | 'utxos' | 'create-rgb-utxo' | 'create-utxo-confirm' | 'unlock-rgb-utxo' | 'unlock-utxo-confirm' | 'utxo-action-success' | 'faucet' | 'error-logs'
+type View = 'welcome' | 'unlock' | 'lock' | 'forgot' | 'create' | 'verify' | 'password' | 'restore' | 'dashboard' | 'receive' | 'receive-btc' | 'receive-rgb' | 'receive-lightning' | 'convert-lightning' | 'add-assets' | 'settings' | 'user-settings' | 'auto-lock-settings' | 'network-settings' | 'swap' | 'send' | 'send-amount' | 'send-confirm' | 'send-success' | 'utxos' | 'create-rgb-utxo' | 'create-utxo-confirm' | 'unlock-rgb-utxo' | 'unlock-utxo-confirm' | 'utxo-action-success' | 'faucet' | 'error-logs' | 'funding-address'
 type Tab = 'assets' | 'activities'
 type Network = 'mainnet' | 'testnet3' | 'testnet4' | 'regtest'
 
@@ -339,7 +339,17 @@ function App() {
   const [bitcoinUtxos, setBitcoinUtxos] = useState<UtxoWithRgbStatus[]>([])
   const [rgbUtxos, setRgbUtxos] = useState<UtxoWithRgbStatus[]>([])
   const [spendableVanillaUtxos, setSpendableVanillaUtxos] = useState<UTXO[]>([])
-  const [utxoTab, setUtxoTab] = useState<'unoccupied' | 'occupied' | 'unlockable'>('unoccupied')
+  const [utxoTab, setUtxoTab] = useState<'unoccupied' | 'occupied' | 'unlockable' | 'slots'>('slots')
+
+  // RGB Slot (server-managed) state
+  const [rgbSlots, setRgbSlots] = useState<UtxoSlot[]>([])
+  const [loadingRgbSlots, setLoadingRgbSlots] = useState<boolean>(false)
+  const [rgbSlotsError, setRgbSlotsError] = useState<string>('')
+  const [fundingAddressData, setFundingAddressData] = useState<UtxoFundingAddressResponse | null>(null)
+  const [loadingFundingAddress, setLoadingFundingAddress] = useState<boolean>(false)
+  const [fundingAddressError, setFundingAddressError] = useState<string>('')
+  const [redeemingSlotId, setRedeemingSlotId] = useState<string | null>(null)
+  const [redeemError, setRedeemError] = useState<string>('')
   const [rgbClassificationError, setRgbClassificationError] = useState<string>('')
   const [showUnlockUtxoModal, setShowUnlockUtxoModal] = useState<boolean>(false)
   const [selectedUnlockUtxo, setSelectedUnlockUtxo] = useState<UtxoWithRgbStatus | null>(null)
@@ -2811,6 +2821,38 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
     applyBackendProfileDefaults(DEFAULT_BACKEND_PROFILE_ID)
   }
 
+  // Load server-managed RGB UTXO slots
+  const loadRgbSlots = async () => {
+    if (selectedNetwork !== 'regtest') return
+    try {
+      setLoadingRgbSlots(true)
+      setRgbSlotsError('')
+      const walletKey = await getRegtestWalletKey()
+      const slots = await fetchUtxoSlots({ walletKey })
+      setRgbSlots(slots)
+    } catch (e: any) {
+      setRgbSlotsError(e?.message || 'Failed to load slots')
+    } finally {
+      setLoadingRgbSlots(false)
+    }
+  }
+
+  // Load the permanent node-generated UTXO funding address
+  const loadFundingAddress = async () => {
+    if (selectedNetwork !== 'regtest') return
+    try {
+      setLoadingFundingAddress(true)
+      setFundingAddressError('')
+      const walletKey = await getRegtestWalletKey()
+      const data = await fetchUtxoFundingAddress({ walletKey })
+      setFundingAddressData(data)
+    } catch (e: any) {
+      setFundingAddressError(e?.message || 'Failed to load funding address')
+    } finally {
+      setLoadingFundingAddress(false)
+    }
+  }
+
   // Fetch and display UTXOs
   const handleViewUtxos = async () => {
     if (!walletAddress) return
@@ -3127,11 +3169,13 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
       }
 
       setView('utxos')
+      loadRgbSlots()
     } catch (error) {
       console.error('Error fetching UTXOs:', error)
       setBitcoinUtxos([])
       setRgbUtxos([])
       setView('utxos')
+      loadRgbSlots()
     } finally {
       setLoadingUtxos(false)
     }
@@ -5663,7 +5707,10 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               <button className="back-arrow" onClick={() => setView('dashboard')}>←</button>
               <h2 className="utxo-header-title">RGB UTXOs</h2>
               <button
-                onClick={() => setView('create-rgb-utxo')}
+                onClick={() => {
+                  setView('funding-address')
+                  loadFundingAddress()
+                }}
                 className="utxo-header-action"
               >
                 Create UTXO
@@ -5678,6 +5725,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               </div>
 
               <div className="utxos-tabs">
+                <button className={`utxo-tab-btn ${utxoTab === 'slots' ? 'active' : ''}`} onClick={() => { setUtxoTab('slots'); loadRgbSlots() }}>Slots</button>
                 <button className={`utxo-tab-btn ${utxoTab === 'occupied' ? 'active' : ''}`} onClick={() => setUtxoTab('occupied')}>Occupied</button>
                 <button className={`utxo-tab-btn ${utxoTab === 'unoccupied' ? 'active' : ''}`} onClick={() => setUtxoTab('unoccupied')}>Unoccupied</button>
                 <button className={`utxo-tab-btn ${utxoTab === 'unlockable' ? 'active' : ''}`} onClick={() => setUtxoTab('unlockable')}>Unlockable</button>
@@ -5694,6 +5742,93 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                   <div className="utxo-empty-state">Classifying UTXOs with RGB proxy...</div>
                 ) : (
                   <>
+                    {utxoTab === 'slots' && (
+                      <>
+                        {loadingRgbSlots ? (
+                          <div className="utxo-empty-state">Loading slots...</div>
+                        ) : rgbSlotsError ? (
+                          <div className="utxo-banner error"><div>⚠️ {rgbSlotsError}</div></div>
+                        ) : rgbSlots.length === 0 ? (
+                          <div className="utxo-empty-state">
+                            <div className="utxo-empty-icon">🔲</div>
+                            <p className="utxo-empty-title">No RGB Slots</p>
+                            <p className="utxo-empty-copy">Click "Create UTXO" to allocate your first RGB-ready slot. You will send 0.00033 BTC to the node funding address.</p>
+                          </div>
+                        ) : (
+                          <div className="utxo-list">
+                            {rgbSlots.map((slot) => {
+                              const stateColor: Record<string, string> = {
+                                FREE: '#4ade80',
+                                OCCUPIED: '#f7931a',
+                                EMPTY: '#60a5fa',
+                                REDEEMED: '#9ca3af',
+                              }
+                              const stateLabel: Record<string, string> = {
+                                FREE: 'Free',
+                                OCCUPIED: 'Occupied',
+                                EMPTY: 'Empty',
+                                REDEEMED: 'Redeemed',
+                              }
+                              const canRedeem = slot.state === 'FREE' || slot.state === 'EMPTY'
+                              return (
+                                <div key={slot.id} className="utxo-list-card" style={{ opacity: slot.state === 'REDEEMED' ? 0.5 : 1 }}>
+                                  <div className="utxo-card-head">
+                                    <div>
+                                      <span className="utxo-card-label">Outpoint</span>
+                                      <div className="utxo-card-outpoint" style={{ fontFamily: 'monospace', fontSize: '0.78rem' }}>
+                                        {slot.outpoint.length > 24
+                                          ? `${slot.outpoint.slice(0, 12)}...${slot.outpoint.slice(-10)}`
+                                          : slot.outpoint}
+                                      </div>
+                                    </div>
+                                    <div className="utxo-tag" style={{ background: stateColor[slot.state] || '#9ca3af', color: '#000', fontWeight: 700 }}>
+                                      {stateLabel[slot.state] || slot.state}
+                                    </div>
+                                  </div>
+                                  {slot.satsValue != null && (
+                                    <div>
+                                      <span className="utxo-card-label">Value</span>
+                                      <div className="utxo-card-amount">{(slot.satsValue / 1e8).toFixed(8)} BTC</div>
+                                    </div>
+                                  )}
+                                  {slot.redeemedTxid && (
+                                    <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)', wordBreak: 'break-all', marginTop: '0.25rem' }}>
+                                      Redeemed txid: {slot.redeemedTxid.slice(0, 16)}...
+                                    </div>
+                                  )}
+                                  {canRedeem && (
+                                    <button
+                                      className="utxo-action-btn"
+                                      disabled={redeemingSlotId === slot.id}
+                                      onClick={async () => {
+                                        try {
+                                          setRedeemingSlotId(slot.id)
+                                          setRedeemError('')
+                                          const walletKey = await getRegtestWalletKey()
+                                          const result = await redeemUtxoSlot({ walletKey, slotId: slot.id, mainBtcAddress: walletAddress || undefined })
+                                          await loadRgbSlots()
+                                          alert(`Redeemed! Txid: ${result.txid}\n${result.sentSats} sats → ${result.returnAddress}`)
+                                        } catch (e: any) {
+                                          setRedeemError(e?.message || 'Redeem failed')
+                                        } finally {
+                                          setRedeemingSlotId(null)
+                                        }
+                                      }}
+                                    >
+                                      {redeemingSlotId === slot.id ? 'Redeeming...' : 'Redeem'}
+                                    </button>
+                                  )}
+                                </div>
+                              )
+                            })}
+                            {redeemError && (
+                              <div className="utxo-banner error" style={{ marginTop: '0.5rem' }}><div>⚠️ {redeemError}</div></div>
+                            )}
+                          </div>
+                        )}
+                      </>
+                    )}
+
                     {utxoTab === 'unoccupied' && (
                       <>
                         {bitcoinUtxos.length === 0 ? (
@@ -5829,6 +5964,63 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
           </div>
         )
       }
+
+      {/* Funding Address View — shown when user clicks Create UTXO */}
+      {view === 'funding-address' && (
+        <div className="wallet-wrapper">
+          <div className="wallet-header">
+            <button className="back-arrow" onClick={() => setView('utxos')}>←</button>
+            <h2 className="utxo-header-title">Create UTXO Slot</h2>
+          </div>
+          <div className="wallet-scroll-container" style={{ padding: '1rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div className="utxo-hero">
+              <div className="flow-kicker">One-time setup</div>
+              <div className="flow-intro-title">Fund your RGB slot</div>
+              <div className="flow-intro-copy">
+                Send exactly <strong>0.00033 BTC</strong> from your wallet to the address below.
+                The node will automatically create an RGB-ready UTXO slot once the transaction is confirmed.
+              </div>
+            </div>
+
+            {loadingFundingAddress ? (
+              <div className="utxo-empty-state">Generating funding address...</div>
+            ) : fundingAddressError ? (
+              <div className="utxo-banner error"><div>⚠️ {fundingAddressError}</div></div>
+            ) : fundingAddressData ? (
+              <>
+                <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '14px', padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Deposit address</div>
+                  <div style={{ fontFamily: 'monospace', fontSize: '0.82rem', wordBreak: 'break-all', color: '#6fd3ff' }}>{fundingAddressData.fundingAddress}</div>
+                  <button
+                    className="btn-primary"
+                    style={{ marginTop: '0.25rem' }}
+                    onClick={() => navigator.clipboard.writeText(fundingAddressData.fundingAddress)}
+                  >
+                    Copy Address
+                  </button>
+                </div>
+
+                <div style={{ background: 'rgba(247,147,26,0.08)', border: '1px solid rgba(247,147,26,0.3)', borderRadius: '14px', padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <div style={{ fontSize: '0.8rem', color: '#f7931a', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Exact amount required</div>
+                  <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#f7931a' }}>{fundingAddressData.expectedBtc} BTC</div>
+                  <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)' }}>{fundingAddressData.expectedSats.toLocaleString()} sats</div>
+                </div>
+
+                <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', padding: '1rem', fontSize: '0.82rem', color: 'rgba(255,255,255,0.55)', lineHeight: 1.6 }}>
+                  <strong style={{ color: 'rgba(255,255,255,0.8)' }}>What happens next?</strong><br />
+                  1. Send exactly {fundingAddressData.expectedBtc} BTC from your main wallet to the address above.<br />
+                  2. The server detects the deposit and waits for 1 confirmation.<br />
+                  3. A FREE slot appears automatically in the Slots tab. No further action needed.
+                </div>
+
+                <button className="btn-secondary" onClick={() => { setView('utxos'); setUtxoTab('slots'); loadRgbSlots() }} style={{ width: '100%' }}>
+                  Back to Slots
+                </button>
+              </>
+            ) : null}
+          </div>
+        </div>
+      )}
 
       {view === 'unlock-rgb-utxo' && selectedUnlockUtxo && (
         <div className="wallet-container" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
