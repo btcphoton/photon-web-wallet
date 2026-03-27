@@ -5748,7 +5748,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                           <div className="utxo-empty-state">Loading slots...</div>
                         ) : rgbSlotsError ? (
                           <div className="utxo-banner error"><div>⚠️ {rgbSlotsError}</div></div>
-                        ) : rgbSlots.length === 0 ? (
+                        ) : rgbSlots.filter(s => s.satsValue != null).length === 0 ? (
                           <div className="utxo-empty-state">
                             <div className="utxo-empty-icon">🔲</div>
                             <p className="utxo-empty-title">No RGB Slots</p>
@@ -5756,7 +5756,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                           </div>
                         ) : (
                           <div className="utxo-list">
-                            {rgbSlots.map((slot) => {
+                            {rgbSlots.filter(s => s.satsValue != null).map((slot) => {
                               const stateColor: Record<string, string> = {
                                 FREE: '#4ade80',
                                 OCCUPIED: '#f7931a',
@@ -5769,7 +5769,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                                 EMPTY: 'Empty',
                                 REDEEMED: 'Redeemed',
                               }
-                              const canRedeem = slot.state === 'FREE' || slot.state === 'EMPTY'
+                              const canRedeem = (slot.state === 'FREE' || slot.state === 'EMPTY') && slot.satsValue != null
                               return (
                                 <div key={slot.id} className="utxo-list-card" style={{ opacity: slot.state === 'REDEEMED' ? 0.5 : 1 }}>
                                   <div className="utxo-card-head">
