@@ -1645,10 +1645,17 @@ function App() {
     }
   }
 
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false)
+
   const handleRefreshBalance = async () => {
-    if (!mnemonic || !walletAddress) return
-    await fetchBalance(mnemonic, selectedNetwork)
-    await loadAssetsForNetwork(selectedNetwork, mnemonic)
+    if (!mnemonic || !walletAddress || isRefreshing) return
+    setIsRefreshing(true)
+    try {
+      await fetchBalance(mnemonic, selectedNetwork)
+      await loadAssetsForNetwork(selectedNetwork, mnemonic)
+    } finally {
+      setIsRefreshing(false)
+    }
   }
 
   const handleConfirmNotice = async () => {
@@ -3504,6 +3511,13 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
             </div>
             <div className="photon-header-actions">
               <WalletHeaderButton
+                ariaLabel="Refresh balance"
+                onClick={handleRefreshBalance}
+                title="Refresh balance"
+              >
+                <span style={{ display: 'inline-block', transition: 'transform 0.6s linear', transform: isRefreshing ? 'rotate(360deg)' : 'rotate(0deg)' }}>⟳</span>
+              </WalletHeaderButton>
+              <WalletHeaderButton
                 ariaLabel="Select network"
                 onClick={() => setShowNetworkModal(true)}
                 className="wallet-network-trigger"
@@ -4290,9 +4304,9 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               <div className="receive-rgb-invoice">
                 {/* Bootstrap warning — shown only for first-time asset receipt */}
                 {rgbInvoiceBootstrap && (
-                  <div style={{ background: '#1c1202', border: '1px solid #78350f', borderRadius: '10px', padding: '12px 14px', marginBottom: '14px', fontSize: '12px', color: '#fde68a', lineHeight: '1.5' }}>
-                    <strong style={{ color: '#fb923c' }}>⚠️ First-time receive for this asset</strong><br />
-                    Your node has never received this asset before, so this is an <strong>open invoice</strong>. Make sure the sender sends the correct asset to it. After your first receipt, future invoices for this asset will work normally.
+                  <div style={{ background: '#1c1202', border: '1px solid #78350f', borderRadius: '8px', padding: '8px 11px', marginBottom: '10px', fontSize: '11px', color: '#fde68a', lineHeight: '1.4', display: 'flex', gap: '7px', alignItems: 'flex-start' }}>
+                    <span style={{ fontSize: '14px', flexShrink: 0 }}>⚠️</span>
+                    <span><strong style={{ color: '#fb923c' }}>First-time receive — open invoice.</strong> Tell the sender to send the correct asset. Future invoices will work normally after first receipt.</span>
                   </div>
                 )}
                 {/* Asset Icon */}
