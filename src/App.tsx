@@ -241,6 +241,7 @@ function App() {
   const [rgbAmount, setRgbAmount] = useState<string>('')
   const [rgbInvoiceStep, setRgbInvoiceStep] = useState<'form' | 'invoice'>('form')
   const [rgbInvoice, setRgbInvoice] = useState<string>('')
+  const [rgbInvoiceBootstrap, setRgbInvoiceBootstrap] = useState<boolean>(false)
   const [rgbGenerating, setRgbGenerating] = useState<boolean>(false)
   const [rgbError, setRgbError] = useState<string>('')
   const [rgbWalletOnline, setRgbWalletOnline] = useState<boolean>(false)
@@ -4239,6 +4240,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
 
                       setRgbWalletOnline(true)
                       setRgbInvoice(invoiceResult.invoice)
+                      setRgbInvoiceBootstrap(Boolean((invoiceResult as any).bootstrapInvoice))
                       setRgbInvoiceStep('invoice')
                     } else {
                       const invoiceResult = await createRgbInvoice(contractId, invoiceAmount)
@@ -4286,6 +4288,13 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
             <>
               {/* Invoice Display View */}
               <div className="receive-rgb-invoice">
+                {/* Bootstrap warning — shown only for first-time asset receipt */}
+                {rgbInvoiceBootstrap && (
+                  <div style={{ background: '#1c1202', border: '1px solid #78350f', borderRadius: '10px', padding: '12px 14px', marginBottom: '14px', fontSize: '12px', color: '#fde68a', lineHeight: '1.5' }}>
+                    <strong style={{ color: '#fb923c' }}>⚠️ First-time receive for this asset</strong><br />
+                    Your node has never received this asset before, so this is an <strong>open invoice</strong>. Make sure the sender sends the correct asset to it. After your first receipt, future invoices for this asset will work normally.
+                  </div>
+                )}
                 {/* Asset Icon */}
                 <div className="rgb-invoice-header">
                   <div className="rgb-invoice-icon">B</div>
@@ -4350,6 +4359,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                 onClick={() => {
                   setRgbInvoiceStep('form')
                   setRgbInvoice('')
+                  setRgbInvoiceBootstrap(false)
                   setRgbAsset('')
                   setRgbAmount('')
                   setOpenAmount(false)
