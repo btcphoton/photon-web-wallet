@@ -1404,7 +1404,7 @@ function App() {
   useEffect(() => {
     if (activities.length > 0) {
       const pendingReceives = activities
-        .filter(activity => activity.status === 'Pending' && activity.type === 'Receive')
+        .filter(activity => activity.status === 'Pending' && activity.type === 'Receive' && (!activity.unit || activity.unit === 'BTC'))
         .reduce((sum, activity) => sum + activity.amount, 0)
 
       setPendingBalance(pendingReceives)
