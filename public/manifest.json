@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Photon Labs Wallet",
   "version": "1.0.0",
-  "description": "A one-stop suite for RGB assets: from issuance and storage to invoicing and UTXO management. We offload the heavy lightning to decentralized blockchain storage",
+  "description": "Browser wallet for connecting to dApps, viewing balances, signing messages, and approving Bitcoin and RGB transactions",
   "permissions": [
     "storage",
     "activeTab",
