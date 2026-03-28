@@ -222,6 +222,10 @@
                 <label>Amount (BTC)</label>
                 <input type="text" id="txAmount" value="0.0001">
             </div>
+            <div class="input-group">
+                <label>Fee Rate (sat/vB, optional)</label>
+                <input type="text" id="txFeeRate" value="2">
+            </div>
             <div class="grid">
                 <button class="btn" id="signTxBtn">Sign Transaction</button>
                 <button class="btn" id="sendTxBtn">Send Transaction</button>
@@ -292,8 +296,8 @@
 
                 const state = {
                     address: accounts[0] || 'Not connected',
-                    network: network.network,
-                    balance: balance.balance
+                    network,
+                    balance
                 };
 
                 document.getElementById('statusOutput').textContent = JSON.stringify(state, null, 2);
@@ -307,12 +311,13 @@
             try {
                 const to = document.getElementById('txTo').value;
                 const amount = document.getElementById('txAmount').value;
+                const feeRate = document.getElementById('txFeeRate').value;
                 const output = document.getElementById('txOutput');
 
                 output.textContent = 'Requesting signature...';
 
-                const signedTx = await window.photon.signTransaction({ to, amount });
-                output.textContent = 'Signed TX:\n' + signedTx;
+                const signedTx = await window.photon.signTransaction({ to, amount, feeRate });
+                output.textContent = 'Signed TX:\n' + signedTx + '\n\nAll API methods are now backed by the real wallet execution path.';
                 logEvent('Transaction signed');
             } catch (error) {
                 document.getElementById('txOutput').textContent = 'Error: ' + error.message;
@@ -324,11 +329,12 @@
             try {
                 const to = document.getElementById('txTo').value;
                 const amount = document.getElementById('txAmount').value;
+                const feeRate = document.getElementById('txFeeRate').value;
                 const output = document.getElementById('txOutput');
 
                 output.textContent = 'Sending...';
 
-                const txId = await window.photon.sendTransaction({ to, amount });
+                const txId = await window.photon.sendTransaction({ to, amount, feeRate });
                 output.textContent = 'Transaction ID:\n' + txId;
                 logEvent('Transaction sent: ' + txId);
             } catch (error) {

@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Photon Wallet Extension API Status</title>
+  <style>
+    :root {
+      --bg: #07111b;
+      --panel: #0f1b2a;
+      --panel-2: #15263c;
+      --text: #eff6ff;
+      --muted: #9db3cf;
+      --accent: #72d4ff;
+      --ok: #79e2a5;
+      --border: #29405f;
+      --code: #0a1421;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: linear-gradient(180deg, #07111b 0%, #0d1827 100%);
+      color: var(--text);
+      line-height: 1.6;
+    }
+    .wrap {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 32px 20px 64px;
+    }
+    .hero, .card {
+      background: rgba(15, 27, 42, 0.94);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 22px;
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.22);
+    }
+    h1, h2, h3 { line-height: 1.2; }
+    h1 { margin: 0 0 10px; font-size: 34px; }
+    h2 {
+      margin: 34px 0 14px;
+      font-size: 24px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
+    }
+    p { margin: 10px 0; }
+    code {
+      background: var(--code);
+      border: 1px solid #22314c;
+      border-radius: 6px;
+      padding: 2px 6px;
+      color: #deebff;
+      font-family: "Courier New", monospace;
+      font-size: 13px;
+    }
+    .muted { color: var(--muted); }
+    .pill {
+      display: inline-block;
+      margin: 4px 8px 0 0;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .ok {
+      border-left: 4px solid var(--ok);
+      background: rgba(121, 226, 165, 0.08);
+      border-radius: 12px;
+      padding: 14px 16px;
+      margin-top: 14px;
+    }
+    .grid {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+    th, td {
+      text-align: left;
+      vertical-align: top;
+      padding: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    th {
+      background: #13203a;
+      color: var(--accent);
+      font-size: 14px;
+    }
+    .done {
+      color: var(--ok);
+      font-weight: 700;
+    }
+    ul {
+      margin: 10px 0 0;
+      padding-left: 22px;
+    }
+    li { margin: 8px 0; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <h1>Photon Wallet Extension API Status</h1>
+      <p class="muted">
+        Updated on 2026-03-28 for <code>/home/waheed/PhotonBoltXYZ/photon-web-wallet</code>.
+      </p>
+      <p>
+        The extension API plan has been moved from planning state to implementation state.
+        The background worker now uses the real wallet execution path for transaction signing,
+        transaction broadcast, live balance refresh, and message signing.
+      </p>
+      <div>
+        <span class="pill">Provider injection</span>
+        <span class="pill">Content bridge</span>
+        <span class="pill">Approval review</span>
+        <span class="pill">Typed execution layer</span>
+        <span class="pill">Real BTC signing</span>
+      </div>
+      <div class="ok">
+        Current state: all public provider methods in the current contract are implemented against real wallet logic.
+        No mock txids, mock signatures, or mock signed transaction hex remain in the public provider path.
+      </div>
+    </section>
+
+    <h2>Contract Status</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Method</th>
+          <th>Expected Behavior</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>connect()</code></td>
+          <td>Request origin approval, expose active account and network, persist origin session.</td>
+          <td class="done">Completed</td>
+        </tr>
+        <tr>
+          <td><code>disconnect()</code></td>
+          <td>Remove connection for the origin and emit disconnect/account events.</td>
+          <td class="done">Completed</td>
+        </tr>
+        <tr>
+          <td><code>getAccounts()</code></td>
+          <td>Return approved account list for the origin.</td>
+          <td class="done">Completed</td>
+        </tr>
+        <tr>
+          <td><code>getNetwork()</code></td>
+          <td>Return current wallet network in a stable public format.</td>
+          <td class="done">Completed</td>
+        </tr>
+        <tr>
+          <td><code>getBalance()</code></td>
+          <td>Return current wallet balance for the exposed account.</td>
+          <td class="done">Completed</td>
+        </tr>
+        <tr>
+          <td><code>signTransaction(tx)</code></td>
+          <td>Validate request, show approval, produce real signed transaction hex without broadcasting.</td>
+          <td class="done">Completed</td>
+        </tr>
+        <tr>
+          <td><code>sendTransaction(tx)</code></td>
+          <td>Validate request, show approval, sign and broadcast, return real txid.</td>
+          <td class="done">Completed</td>
+        </tr>
+        <tr>
+          <td><code>signMessage(message)</code></td>
+          <td>Validate request, show approval, return deterministic signature format.</td>
+          <td class="done">Completed</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>Implementation Paths</h2>
+    <div class="grid">
+      <div class="card">
+        <h3>Public Surface</h3>
+        <p><code>public/provider.js</code> continues to own the injected <code>window.photon</code> API.</p>
+      </div>
+      <div class="card">
+        <h3>Bridge</h3>
+        <p><code>public/content.js</code> continues to forward page requests into the extension worker.</p>
+      </div>
+      <div class="card">
+        <h3>Execution</h3>
+        <p><code>src/extension/background.ts</code> now routes requests into the real executor layer.</p>
+      </div>
+      <div class="card">
+        <h3>Wallet Executors</h3>
+        <p><code>src/extension/executors.ts</code> prepares transactions, signs messages, loads wallet state, and persists origin permissions.</p>
+      </div>
+      <div class="card">
+        <h3>Approval UI</h3>
+        <p><code>public/approval.js</code> now renders exact network, sender, fee, total spend, change, and signature details.</p>
+      </div>
+      <div class="card">
+        <h3>Test Page</h3>
+        <p><code>test-dapp.html</code> reflects the completed API shape and exercises the real methods.</p>
+      </div>
+    </div>
+
+    <h2>Completed Behaviors</h2>
+    <div class="card">
+      <ul>
+        <li>Connected dApp origins are persisted in extension storage instead of existing only in memory.</li>
+        <li><code>signTransaction</code> prepares a real transaction before approval and returns real signed hex.</li>
+        <li><code>sendTransaction</code> approves and broadcasts the same prepared transaction, then returns the real txid.</li>
+        <li><code>signMessage</code> returns a deterministic Schnorr signature using the active Taproot account key.</li>
+        <li><code>getBalance</code> refreshes balance from a live discovery scan when the wallet is unlocked, and falls back to cached balance only when needed.</li>
+        <li>The approval popup now shows executable details instead of generic placeholders.</li>
+      </ul>
+    </div>
+  </div>
+</body>
+</html>

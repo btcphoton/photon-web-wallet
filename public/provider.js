@@ -130,6 +130,8 @@
             const result = await this._sendRequest('disconnect');
             this.isConnected = false;
             this.selectedAddress = null;
+            this.emit('accountsChanged', []);
+            this.emit('disconnect', result);
             return result;
         }
 

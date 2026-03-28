@@ -85,6 +85,14 @@ function renderConnectRequest(data) {
     <div class="approval-card">
       <div class="details-label">Permissions requested:</div>
       <div class="detail-row">
+        <div class="detail-label">Active address</div>
+        <div class="detail-value">${escapeHtml(data.address || 'Unavailable')}</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-label">Active network</div>
+        <div class="detail-value">${escapeHtml(data.network || 'Unknown')}</div>
+      </div>
+      <div class="detail-row">
         <div class="detail-label">View address</div>
         <div class="detail-value">✓</div>
       </div>
@@ -115,16 +123,48 @@ function renderSignTransactionRequest(data) {
     <div class="approval-card">
       <div class="details-label">Transaction Details:</div>
       <div class="detail-row">
+        <div class="detail-label">Network</div>
+        <div class="detail-value">${escapeHtml(data.network || 'Unknown')}</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-label">From</div>
+        <div class="detail-value">${escapeHtml(data.from || 'Unavailable')}</div>
+      </div>
+      <div class="detail-row">
         <div class="detail-label">To</div>
         <div class="detail-value">${escapeHtml(data.to)}</div>
       </div>
       <div class="detail-row">
         <div class="detail-label">Amount</div>
-        <div class="detail-value">${escapeHtml(data.amount)} BTC</div>
+        <div class="detail-value">${escapeHtml(data.amountBtc || data.amount || '0')} BTC</div>
       </div>
       <div class="detail-row">
-        <div class="detail-label">Network Fee</div>
-        <div class="detail-value">${escapeHtml(data.fee)}</div>
+        <div class="detail-label">Amount (sats)</div>
+        <div class="detail-value">${escapeHtml(data.amountSats || '0')}</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-label">Fee Rate</div>
+        <div class="detail-value">${escapeHtml(String(data.feeRate || ''))} sat/vB</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-label">Estimated Fee</div>
+        <div class="detail-value">${escapeHtml(data.feeBtc || '0')} BTC (${escapeHtml(data.feeSats || '0')} sats)</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-label">Inputs</div>
+        <div class="detail-value">${escapeHtml(String(data.inputs || '0'))}</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-label">Total Spend</div>
+        <div class="detail-value">${escapeHtml(data.totalSpendBtc || '0')} BTC</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-label">Change</div>
+        <div class="detail-value">${escapeHtml(data.changeBtc || '0')} BTC</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-label">Change Address</div>
+        <div class="detail-value">${escapeHtml(data.changeAddress || 'No change output')}</div>
       </div>
       <div class="warning-box">
         <div class="warning-icon">⚠️</div>
@@ -152,16 +192,48 @@ function renderSendTransactionRequest(data) {
     <div class="approval-card">
       <div class="details-label">Transaction Details:</div>
       <div class="detail-row">
+        <div class="detail-label">Network</div>
+        <div class="detail-value">${escapeHtml(data.network || 'Unknown')}</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-label">From</div>
+        <div class="detail-value">${escapeHtml(data.from || 'Unavailable')}</div>
+      </div>
+      <div class="detail-row">
         <div class="detail-label">To</div>
         <div class="detail-value">${escapeHtml(data.to)}</div>
       </div>
       <div class="detail-row">
         <div class="detail-label">Amount</div>
-        <div class="detail-value">${escapeHtml(data.amount)} BTC</div>
+        <div class="detail-value">${escapeHtml(data.amountBtc || data.amount || '0')} BTC</div>
       </div>
       <div class="detail-row">
-        <div class="detail-label">Network Fee</div>
-        <div class="detail-value">${escapeHtml(data.fee)}</div>
+        <div class="detail-label">Amount (sats)</div>
+        <div class="detail-value">${escapeHtml(data.amountSats || '0')}</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-label">Fee Rate</div>
+        <div class="detail-value">${escapeHtml(String(data.feeRate || ''))} sat/vB</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-label">Estimated Fee</div>
+        <div class="detail-value">${escapeHtml(data.feeBtc || '0')} BTC (${escapeHtml(data.feeSats || '0')} sats)</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-label">Inputs</div>
+        <div class="detail-value">${escapeHtml(String(data.inputs || '0'))}</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-label">Total Spend</div>
+        <div class="detail-value">${escapeHtml(data.totalSpendBtc || '0')} BTC</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-label">Change</div>
+        <div class="detail-value">${escapeHtml(data.changeBtc || '0')} BTC</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-label">Change Address</div>
+        <div class="detail-value">${escapeHtml(data.changeAddress || 'No change output')}</div>
       </div>
       <div class="warning-box">
         <div class="warning-icon">⚠️</div>
@@ -187,6 +259,23 @@ function renderSignMessageRequest(data) {
       </div>
     </div>
     <div class="approval-card">
+      <div class="details-label">Signing Details:</div>
+      <div class="detail-row">
+        <div class="detail-label">Network</div>
+        <div class="detail-value">${escapeHtml(data.network || 'Unknown')}</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-label">Address</div>
+        <div class="detail-value">${escapeHtml(data.address || 'Unavailable')}</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-label">Signature Type</div>
+        <div class="detail-value">${escapeHtml(data.signatureType || 'Unknown')}</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-label">Message Size</div>
+        <div class="detail-value">${escapeHtml(String(data.bytes || '0'))} bytes</div>
+      </div>
       <div class="details-label">Message to sign:</div>
       <div class="message-box">${escapeHtml(data.message)}</div>
       <div class="warning-box">
