@@ -14,7 +14,7 @@ import type { Asset } from './utils/storage'
 import { BACKEND_PROFILES, DEFAULT_BACKEND_PROFILE_ID, getBackendProfileById, getDefaultElectrumServer, getDefaultRgbProxy, type BackendProfileId } from './utils/backend-config'
 import { QRCodeSVG } from 'qrcode.react'
 import { createRgbInvoice } from './utils/rgb-invoice'
-import { createRegtestLightningInvoice, createRegtestRgbInvoice, decodeRegtestLightningInvoice, decodeRegtestRgbInvoice, fetchRegtestRgbBalance, fetchRegtestRgbRegistry, fetchRegtestRgbTransfers, mineRegtestBlocks, payRegtestLightningInvoice, refreshRegtestRgbTransfers, registerRgbInvoiceSecret, sendRegtestRgbInvoice, fetchUtxoFundingAddress, fetchUtxoSlots, redeemUtxoSlot, type UtxoSlot, type UtxoFundingAddressResponse } from './utils/rgb-wallet'
+import { createRegtestLightningInvoice, createRegtestRgbInvoice, decodeRegtestLightningInvoice, decodeRegtestRgbInvoice, fetchRegtestChannelDashboard, fetchRegtestRgbBalance, fetchRegtestRgbRegistry, fetchRegtestRgbTransfers, mineRegtestBlocks, payRegtestLightningInvoice, refreshRegtestRgbTransfers, registerRgbInvoiceSecret, sendRegtestRgbInvoice, fetchUtxoFundingAddress, fetchUtxoSlots, redeemUtxoSlot, type UtxoSlot, type UtxoFundingAddressResponse } from './utils/rgb-wallet'
 import { LightningAnimation } from './components/LightningAnimation'
 import { fetchBtcActivities, type BitcoinActivity } from './utils/bitcoin-activities'
 
@@ -64,6 +64,13 @@ const formatBtcValue = (btcAmount: number | string, decimals = 8) => {
   const btc = Number(btcAmount)
   if (Number.isNaN(btc)) return '0'
   const fixed = btc.toFixed(decimals)
+  return fixed.replace(/\.0+$|0+$/g, '').replace(/\.$/, '')
+}
+
+const formatAssetAmount = (amount: number | string, decimals = 8) => {
+  const numeric = Number(amount)
+  if (!Number.isFinite(numeric)) return '0'
+  const fixed = numeric.toFixed(decimals)
   return fixed.replace(/\.0+$|0+$/g, '').replace(/\.$/, '')
 }
 
@@ -506,6 +513,96 @@ function App() {
     return {
       label: matchingAsset?.name || contractId,
       unit: matchingAsset?.unit || 'RGB',
+    }
+  }
+
+  const buildSendCapacityError = (maxSendable: number, assetLabel: string, mode: 'rgb' | 'lightning') => {
+    const maxLabel = formatAssetAmount(Math.max(0, maxSendable))
+    return mode === 'lightning'
+      ? `Reduce the amount. Maximum sendable right now is ${maxLabel} ${assetLabel} based on available channel liquidity.`
+      : `Reduce the amount. Maximum sendable right now is ${maxLabel} ${assetLabel}.`
+  }
+
+  const getRegtestChannelLiquidityLimit = async (assetId: string) => {
+    const dashboard = await fetchRegtestChannelDashboard()
+    const normalizedAssetId = assetId.trim().toLowerCase()
+
+    const liquidityLimits = dashboard.channels
+      .filter((channel) =>
+        channel.ready &&
+        channel.isUsable &&
+        typeof channel.assetId === 'string' &&
+        channel.assetId.trim().toLowerCase() === normalizedAssetId
+      )
+      .map((channel) => {
+        const userNode = channel.nodes.find((node) =>
+          node.accountRef === 'photon-rln-user' && node.ready && node.isUsable
+        )
+        return Number(userNode?.assetLocalAmount || 0)
+      })
+      .filter((value) => Number.isFinite(value) && value > 0)
+
+    if (liquidityLimits.length === 0) {
+      return 0
+    }
+
+    return Math.max(...liquidityLimits)
+  }
+
+  const getRegtestSendCapacity = async (assetId: string, mode: 'rgb' | 'lightning') => {
+    const walletKey = await getRegtestWalletKey()
+    const rgbBalance = await fetchRegtestRgbBalance({
+      assetId,
+      walletKey,
+    })
+
+    const spendable = Math.max(0, Number(rgbBalance.balance.spendable || 0))
+    const offchainOutbound = Math.max(0, Number(rgbBalance.balance.offchain_outbound || 0))
+    const offchainInbound = Math.max(0, Number(rgbBalance.balance.offchain_inbound || 0))
+    const totalSpendingPower = spendable + offchainOutbound
+
+    let channelLiquidityLimit: number | null = null
+    let maxSendable = totalSpendingPower
+
+    if (mode === 'lightning') {
+      channelLiquidityLimit = await getRegtestChannelLiquidityLimit(assetId)
+      maxSendable = Math.min(totalSpendingPower, channelLiquidityLimit)
+    }
+
+    return {
+      spendable,
+      offchainOutbound,
+      offchainInbound,
+      totalSpendingPower,
+      channelLiquidityLimit,
+      maxSendable: Math.max(0, maxSendable),
+    }
+  }
+
+  const validateRegtestSendCapacity = async ({
+    assetId,
+    amount,
+    assetLabel,
+    mode,
+  }: {
+    assetId: string
+    amount: number
+    assetLabel: string
+    mode: 'rgb' | 'lightning'
+  }) => {
+    const capacity = await getRegtestSendCapacity(assetId, mode)
+
+    if (amount > capacity.maxSendable) {
+      return {
+        ok: false as const,
+        message: buildSendCapacityError(capacity.maxSendable, assetLabel, mode),
+        capacity,
+      }
+    }
+
+    return {
+      ok: true as const,
+      capacity,
     }
   }
 
@@ -2179,27 +2276,15 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
           setSendLoadingFees(false)
         }
 
-        if (sendMode === 'rgb') {
-          setMaxSendableAmount(sendAmount || '0')
-        }
-
         if ((sendMode === 'rgb' || sendMode === 'lightning') && selectedNetwork === 'regtest' && sendRgbAssetId) {
           try {
-            const walletKey = await getRegtestWalletKey()
-            const rgbBalance = await fetchRegtestRgbBalance({
-              assetId: sendRgbAssetId,
-              walletKey,
-            })
-            const spendable = Number(rgbBalance.balance.spendable || 0)
-            const offchainOutbound = Number(rgbBalance.balance.offchain_outbound || 0)
-            const offchainInbound = Number(rgbBalance.balance.offchain_inbound || 0)
-            const totalSpendingPower = spendable + offchainOutbound
+            const capacity = await getRegtestSendCapacity(sendRgbAssetId, sendMode)
 
-            setSendOffchainOutbound(String(offchainOutbound))
-            setSendOffchainInbound(String(offchainInbound))
-            setSendTotalSpendingPower(String(totalSpendingPower))
-            setSendUserBalance(String(totalSpendingPower))
-            setMaxSendableAmount(String(totalSpendingPower))
+            setSendOffchainOutbound(String(capacity.offchainOutbound))
+            setSendOffchainInbound(String(capacity.offchainInbound))
+            setSendTotalSpendingPower(String(capacity.totalSpendingPower))
+            setSendUserBalance(String(capacity.totalSpendingPower))
+            setMaxSendableAmount(String(capacity.maxSendable))
           } catch (rgbBalanceError) {
             console.error('Error loading RGB spending power:', rgbBalanceError)
           }
@@ -2213,7 +2298,6 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
   useEffect(() => {
     const calculateMax = async () => {
       if (view === 'send-amount' && (sendMode === 'rgb' || sendMode === 'lightning')) {
-        setMaxSendableAmount(sendAmount || '0')
         return
       }
 
@@ -2246,6 +2330,34 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
     calculateMax()
   }, [view, btcBalance, sendEstimatedFees, sendFeeOption, walletAddress, selectedNetwork, sendMode, sendAmount])
 
+  const sendAmountNumber = Number(sendAmount || 0)
+  const maxSendableNumber = Number(maxSendableAmount || 0)
+  const sendAmountExceedsLimit =
+    (sendMode === 'rgb' || sendMode === 'lightning') &&
+    Number.isFinite(sendAmountNumber) &&
+    Number.isFinite(maxSendableNumber) &&
+    sendAmountNumber > 0 &&
+    sendAmountNumber > maxSendableNumber
+
+  useEffect(() => {
+    if (view !== 'send-amount' && view !== 'send-confirm') {
+      return
+    }
+
+    if (sendMode !== 'rgb' && sendMode !== 'lightning') {
+      return
+    }
+
+    if (!sendAmountExceedsLimit) {
+      setSendError((current) => (
+        current.startsWith('Reduce the amount.') ? '' : current
+      ))
+      return
+    }
+
+    setSendError(buildSendCapacityError(maxSendableNumber, sendRgbAssetLabel || 'RGB', sendMode))
+  }, [view, sendAmountExceedsLimit, maxSendableNumber, sendRgbAssetLabel, sendMode])
+
   // Navigate to send confirm screen
   const handleSendEntryNext = async () => {
     const trimmedInput = sendReceiverAddress.trim()
@@ -2276,6 +2388,18 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
         }
 
         const assetMeta = await resolveAssetDisplayMeta(assetId, selectedNetwork)
+        const validation = await validateRegtestSendCapacity({
+          assetId,
+          amount: amountValue,
+          assetLabel: assetMeta.unit || assetMeta.label,
+          mode: 'lightning',
+        })
+
+        if (!validation.ok) {
+          setSendError(validation.message)
+          return
+        }
+
         setSendMode('lightning')
         setSendRoute('lightning')
         setSendRgbAssetId(assetId)
@@ -2283,6 +2407,11 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
         setSendAmount(String(amountValue))
         setSendLightningMsats(Number(decoded.decoded.amt_msat || 0))
         setSendNetworkFee('0.00 PHO')
+        setMaxSendableAmount(String(validation.capacity.maxSendable))
+        setSendOffchainOutbound(String(validation.capacity.offchainOutbound))
+        setSendOffchainInbound(String(validation.capacity.offchainInbound))
+        setSendTotalSpendingPower(String(validation.capacity.totalSpendingPower))
+        setSendUserBalance(String(validation.capacity.totalSpendingPower))
         setView('send-amount')
       } catch (error: any) {
         console.error('Error decoding Lightning invoice:', error)
@@ -2311,12 +2440,28 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
         }
 
         const assetMeta = await resolveAssetDisplayMeta(decoded.decoded.asset_id, selectedNetwork)
+        const validation = await validateRegtestSendCapacity({
+          assetId: decoded.decoded.asset_id,
+          amount: amountValue,
+          assetLabel: assetMeta.unit || assetMeta.label,
+          mode: 'rgb',
+        })
+
+        if (!validation.ok) {
+          setSendError(validation.message)
+          return
+        }
+
         setSendMode('rgb')
         setSendRoute('rgb-onchain')
         setSendRgbAssetId(decoded.decoded.asset_id)
         setSendRgbAssetLabel(assetMeta.unit || assetMeta.label)
         setSendAmount(String(amountValue))
-        setSendUserBalance('0.00000000')
+        setSendOffchainOutbound(String(validation.capacity.offchainOutbound))
+        setSendOffchainInbound(String(validation.capacity.offchainInbound))
+        setSendTotalSpendingPower(String(validation.capacity.totalSpendingPower))
+        setSendUserBalance(String(validation.capacity.totalSpendingPower))
+        setMaxSendableAmount(String(validation.capacity.maxSendable))
         setSendNetworkFee('TBD')
         setView('send-amount')
       } catch (error: any) {
@@ -2343,6 +2488,30 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
     }
 
     if (sendMode === 'rgb' || sendMode === 'lightning') {
+      try {
+        const validation = await validateRegtestSendCapacity({
+          assetId: sendRgbAssetId,
+          amount: parseFloat(sendAmount),
+          assetLabel: sendRgbAssetLabel || 'RGB',
+          mode: sendMode,
+        })
+
+        if (!validation.ok) {
+          setSendError(validation.message)
+          return
+        }
+
+        setMaxSendableAmount(String(validation.capacity.maxSendable))
+        setSendOffchainOutbound(String(validation.capacity.offchainOutbound))
+        setSendOffchainInbound(String(validation.capacity.offchainInbound))
+        setSendTotalSpendingPower(String(validation.capacity.totalSpendingPower))
+        setSendUserBalance(String(validation.capacity.totalSpendingPower))
+      } catch (error: any) {
+        console.error('Error validating send capacity:', error)
+        setSendError(error.message || 'Failed to validate sendable amount')
+        return
+      }
+
       setSendNetworkFee(sendMode === 'lightning' ? '0.00 PHO (Instant)' : 'TBD')
       setSendError('')
       setView('send-confirm')
@@ -2396,6 +2565,24 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
     if (sendMode === 'lightning') {
       if (!sendReceiverAddress) {
         setSendError('Missing Lightning invoice')
+        return
+      }
+
+      try {
+        const validation = await validateRegtestSendCapacity({
+          assetId: sendRgbAssetId,
+          amount: parseFloat(sendAmount),
+          assetLabel: sendRgbAssetLabel || 'RGB',
+          mode: 'lightning',
+        })
+
+        if (!validation.ok) {
+          setSendError(validation.message)
+          return
+        }
+      } catch (error: any) {
+        console.error('Error validating Lightning send capacity:', error)
+        setSendError(error.message || 'Failed to validate Lightning capacity')
         return
       }
 
@@ -2471,6 +2658,24 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
     if (sendMode === 'rgb') {
       if (!sendReceiverAddress) {
         setSendError('Missing RGB invoice')
+        return
+      }
+
+      try {
+        const validation = await validateRegtestSendCapacity({
+          assetId: sendRgbAssetId,
+          amount: parseFloat(sendAmount),
+          assetLabel: sendRgbAssetLabel || 'RGB',
+          mode: 'rgb',
+        })
+
+        if (!validation.ok) {
+          setSendError(validation.message)
+          return
+        }
+      } catch (error: any) {
+        console.error('Error validating RGB send capacity:', error)
+        setSendError(error.message || 'Failed to validate RGB capacity')
         return
       }
 
@@ -5317,10 +5522,10 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                   <div className="send-instant-balance-card">
                     <div className="send-instant-kicker">Available To Send</div>
                     <div className="send-instant-amount">
-                      {sendTotalSpendingPower || '0'} <span>{sendRgbAssetLabel}</span>
+                      {maxSendableAmount || '0'} <span>{sendRgbAssetLabel}</span>
                     </div>
                     <div className="send-instant-meta">
-                      <span>On-chain settled: {Number(sendTotalSpendingPower || 0) - Number(sendOffchainOutbound || 0)}</span>
+                      <span>On-chain settled: {Math.max(0, Number(sendTotalSpendingPower || 0) - Number(sendOffchainOutbound || 0))}</span>
                       <span>Instant send: {sendOffchainOutbound || '0'}</span>
                       <span>Instant receive: {sendOffchainInbound || '0'}</span>
                     </div>
@@ -5381,10 +5586,10 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                   </div>
                   <div className="send-helper-copy">
                     {sendMode === 'rgb'
-                      ? `Invoice amount: ${sendAmount} ${sendRgbAssetLabel}`
+                      ? `Invoice amount: ${sendAmount} ${sendRgbAssetLabel} • Max sendable now: ${maxSendableAmount} ${sendRgbAssetLabel}`
                       : sendMode === 'lightning'
-                        ? `Instant route detected. Sendable now: ${sendOffchainOutbound || '0'} ${sendRgbAssetLabel} • Receivable now: ${sendOffchainInbound || '0'} ${sendRgbAssetLabel}`
-                      : `Maximum sendable: ${maxSendableAmount} BTC`}
+                        ? `Instant route detected. Max sendable now: ${maxSendableAmount || '0'} ${sendRgbAssetLabel} • Receivable now: ${sendOffchainInbound || '0'} ${sendRgbAssetLabel}`
+                        : `Maximum sendable: ${maxSendableAmount} BTC`}
                   </div>
                 </div>
               </div>
@@ -5437,7 +5642,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
             <div className="flow-footer-bar">
               <button
                 className="send-next-btn"
-                disabled={!sendAmount || parseFloat(sendAmount) === 0}
+                disabled={!sendAmount || parseFloat(sendAmount) === 0 || sendAmountExceedsLimit}
                 onClick={handleSendNext}
               >
                 Next
@@ -5519,7 +5724,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               <button
                 className="send-next-btn"
                 onClick={handleSendBitcoin}
-                disabled={sendProcessing}
+                disabled={sendProcessing || sendAmountExceedsLimit}
               >
                 {sendProcessing ? 'Sending...' : sendMode === 'rgb' ? 'Send PHO' : sendMode === 'lightning' ? 'Pay Instantly' : 'Sign & Pay'}
               </button>

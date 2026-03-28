@@ -146,6 +146,40 @@ export interface RgbRegistryAsset {
     schema_id?: string | null
 }
 
+export interface RgbChannelDashboardNode {
+    nodeLabel: string
+    accountRef: string
+    peerPubkey?: string | null
+    assetLocalAmount: number
+    assetRemoteAmount: number
+    outboundBalanceMsat: number
+    inboundBalanceMsat: number
+    nextOutboundHtlcLimitMsat: number
+    ready: boolean
+    isUsable: boolean
+    status: string
+}
+
+export interface RgbChannelDashboardChannel {
+    channelId: string
+    assetId?: string | null
+    assetName?: string | null
+    assetTicker?: string | null
+    status: string
+    ready: boolean
+    isUsable: boolean
+    maxLocalAssetAmount: number
+    maxRemoteAssetAmount: number
+    totalAssetLiquidity: number
+    nodes: RgbChannelDashboardNode[]
+}
+
+export interface RgbChannelDashboardResponse {
+    ok: true
+    refreshedAt: string
+    channels: RgbChannelDashboardChannel[]
+}
+
 async function getRegtestRgbApiBase(): Promise<string> {
     const { PHOTON_REGTEST_API_BASE } = await import('./backend-config')
     return PHOTON_REGTEST_API_BASE
@@ -502,6 +536,23 @@ export async function fetchRegtestRgbRegistry(): Promise<RgbRegistryAsset[]> {
     }
 
     return Array.isArray(data.assets) ? data.assets as RgbRegistryAsset[] : []
+}
+
+export async function fetchRegtestChannelDashboard(): Promise<RgbChannelDashboardResponse> {
+    const apiBase = await getRegtestRgbApiBase()
+    const response = await fetch(`${apiBase}/rgb/channel-dashboard`)
+
+    if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(errorText || `RGB channel dashboard lookup failed with status ${response.status}`)
+    }
+
+    const data = await response.json()
+    if (!data.ok) {
+        throw new Error(data.error || 'RGB channel dashboard lookup failed')
+    }
+
+    return data as RgbChannelDashboardResponse
 }
 
 export async function refreshRegtestRgbTransfers(params: {
