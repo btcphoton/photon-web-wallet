@@ -51,6 +51,9 @@ function displayRequest(data) {
         case 'sendTransaction':
             content = renderSendTransactionRequest(data.data);
             break;
+        case 'sendBtcFunding':
+            content = renderSendTransactionRequest(data.data, 'BTC Funding Approval', 'This will send Bitcoin from your wallet to fund a channel application.');
+            break;
         default:
             content = renderGenericRequest(data);
     }
@@ -180,10 +183,10 @@ function renderSignTransactionRequest(data) {
 /**
  * Render send transaction request
  */
-function renderSendTransactionRequest(data) {
+function renderSendTransactionRequest(data, title = 'Send Transaction', warning = 'Important: This will immediately send Bitcoin from your wallet. Double-check the recipient address and amount before approving.') {
     return `
     <div class="approval-card">
-      <div class="approval-type">Send Transaction</div>
+      <div class="approval-type">${escapeHtml(title)}</div>
       <div class="domain-info">
         <div class="domain-label">Requested by:</div>
         <div class="domain-value">${escapeHtml(data.domain)}</div>
@@ -238,8 +241,7 @@ function renderSendTransactionRequest(data) {
       <div class="warning-box">
         <div class="warning-icon">⚠️</div>
         <div class="warning-text">
-          <strong>Important:</strong> This will immediately send Bitcoin from your wallet. 
-          Double-check the recipient address and amount before approving.
+          <strong>Important:</strong> ${escapeHtml(warning)}
         </div>
       </div>
     </div>

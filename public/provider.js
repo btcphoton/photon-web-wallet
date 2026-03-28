@@ -195,6 +195,24 @@
             const result = await this._sendRequest('sendTransaction', txData);
             return result.txId;
         }
+
+        // Send BTC specifically for PLM / channel collateral funding
+        async sendBtcFunding(params = {}) {
+            const address = typeof params.address === 'string' ? params.address.trim() : '';
+            const amountSats = params.amountSats;
+            if (!address) {
+                throw new Error('Funding address is required');
+            }
+            if (amountSats === undefined || amountSats === null || String(amountSats).trim() === '') {
+                throw new Error('amountSats is required');
+            }
+            const result = await this._sendRequest('sendBtcFunding', {
+                to: address,
+                amountSats,
+                purpose: 'channel_funding',
+            });
+            return result;
+        }
     }
 
     // Create and expose the provider

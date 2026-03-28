@@ -97,6 +97,8 @@ async function handleRequest(message: any, sender: chrome.runtime.MessageSender)
       return handleSignTransaction(origin, params, sender.tab?.id)
     case 'sendTransaction':
       return handleSendTransaction(origin, params, sender.tab?.id)
+    case 'sendBtcFunding':
+      return handleSendBtcFunding(origin, params, sender.tab?.id)
     case 'signMessage':
       return handleSignMessage(origin, params, sender.tab?.id)
     default:
@@ -299,6 +301,54 @@ async function handleSendTransaction(origin: string, params: Record<string, unkn
       amountBtc: prepared.amountBtc,
       from: prepared.senderAddress,
       to: prepared.recipientAddress,
+    },
+  }
+}
+
+async function handleSendBtcFunding(origin: string, params: Record<string, unknown>, tabId?: number) {
+  const prepared = await prepareTransaction(origin, params)
+
+  const approval = await requestApproval({
+    type: 'sendBtcFunding',
+    origin,
+    tabId,
+    data: {
+      domain: new URL(origin).hostname,
+      origin,
+      network: prepared.network,
+      from: prepared.senderAddress,
+      to: prepared.recipientAddress,
+      amountBtc: prepared.amountBtc,
+      amountSats: prepared.amountSats.toString(),
+      feeRate: prepared.feeRate,
+      feeBtc: prepared.estimatedFeeBtc,
+      feeSats: String(prepared.estimatedFeeSats),
+      totalSpendBtc: prepared.totalSpendBtc,
+      totalSpendSats: prepared.totalSpendSats.toString(),
+      inputs: prepared.inputCount,
+      changeAddress: prepared.changeAddress,
+      changeBtc: prepared.changeBtc,
+      changeSats: prepared.changeSats.toString(),
+      purpose: 'Channel Funding',
+    },
+  })
+
+  if (!approval.approved) {
+    return { error: 'User rejected BTC funding transaction' }
+  }
+
+  const { txId } = await executeSendTransaction(prepared)
+  return {
+    result: {
+      txId,
+      network: prepared.network,
+      feeSats: prepared.estimatedFeeSats,
+      feeBtc: prepared.estimatedFeeBtc,
+      amountSats: prepared.amountSats.toString(),
+      amountBtc: prepared.amountBtc,
+      from: prepared.senderAddress,
+      to: prepared.recipientAddress,
+      purpose: 'channel_funding',
     },
   }
 }

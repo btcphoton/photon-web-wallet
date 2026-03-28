@@ -27,7 +27,7 @@ const MESSAGE_SIGNATURE_TYPE = 'photon-schnorr-sha256-v1'
 const MAX_MESSAGE_BYTES = 1024
 
 export interface ApprovalRequest {
-  type: 'connect' | 'signTransaction' | 'signMessage' | 'sendTransaction'
+  type: 'connect' | 'signTransaction' | 'signMessage' | 'sendTransaction' | 'sendBtcFunding'
   origin: string
   tabId?: number
   data: Record<string, unknown>
