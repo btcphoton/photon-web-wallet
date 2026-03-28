@@ -643,7 +643,7 @@ function App() {
 
           return {
             ...asset,
-            amount: String(totalSpendingPower),
+            amount: String(spendable),
             rgbLockReason:
               Number(rgbBalance.balance.locked_missing_secret || 0) > 0
                 ? 'Locked (Missing Secret)'
@@ -2157,8 +2157,9 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
     offchain_outbound?: number | string
     offchain_inbound?: number | string
   }) => {
+    const settledBalance = Math.max(0, Number(nextBalance.spendable || 0))
     const spendingPower =
-      Number(nextBalance.spendable || 0) + Number(nextBalance.offchain_outbound || 0)
+      settledBalance + Number(nextBalance.offchain_outbound || 0)
 
     const updatedAssets = assets.map((asset) => {
       if (asset.id !== assetId) {
@@ -2167,7 +2168,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
 
       return {
         ...asset,
-        amount: String(spendingPower),
+        amount: String(settledBalance),
         rgbSpendingPower: String(spendingPower),
         rgbOffchainOutbound: String(nextBalance.offchain_outbound || 0),
         rgbOffchainInbound: String(nextBalance.offchain_inbound || 0),
