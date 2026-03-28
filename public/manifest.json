@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Photon Labs Wallet",
+  "name": "Photon Bolt Wallet",
   "version": "1.0.0",
-  "description": "Browser wallet for connecting to dApps, viewing balances, signing messages, and approving Bitcoin and RGB transactions",
+  "description": "One-stop RGB suite: issuance, storage, invoicing & UTXO management. Offload heavy lightning to decentralized blockchain storage.",
   "permissions": [
     "storage",
     "activeTab",
@@ -13,7 +13,7 @@
   ],
   "action": {
     "default_popup": "index.html",
-    "default_title": "Photon Labs Wallet"
+    "default_title": "Photon Bolt Wallet"
   },
   "background": {
     "service_worker": "background.js",
