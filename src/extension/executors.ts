@@ -27,7 +27,7 @@ const MESSAGE_SIGNATURE_TYPE = 'photon-schnorr-sha256-v1'
 const MAX_MESSAGE_BYTES = 1024
 
 export interface ApprovalRequest {
-  type: 'connect' | 'signTransaction' | 'signMessage' | 'sendTransaction' | 'sendBtcFunding'
+  type: 'connect' | 'signTransaction' | 'signMessage' | 'sendTransaction' | 'sendBtcFunding' | 'payRgbInvoice'
   origin: string
   tabId?: number
   data: Record<string, unknown>
@@ -145,6 +145,16 @@ export const loadWalletContext = async (): Promise<WalletContext> => {
     addressIndex,
     changeIndex,
   }
+}
+
+export const getRegtestExtensionWalletKey = async (): Promise<string> => {
+  const storedIdentity = await getStorageData(['principalId', 'walletAddress', 'coloredAddress'])
+  const stableId =
+    storedIdentity.principalId ||
+    storedIdentity.walletAddress ||
+    storedIdentity.coloredAddress ||
+    'anonymous'
+  return `extension-${stableId}-regtest`
 }
 
 export const requireUnlockedWallet = async (): Promise<WalletContext> => {

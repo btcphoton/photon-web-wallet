@@ -54,6 +54,9 @@ function displayRequest(data) {
         case 'sendBtcFunding':
             content = renderSendTransactionRequest(data.data, 'BTC Funding Approval', 'This will send Bitcoin from your wallet to fund a channel application.');
             break;
+        case 'payRgbInvoice':
+            content = renderPayRgbInvoiceRequest(data.data);
+            break;
         default:
             content = renderGenericRequest(data);
     }
@@ -242,6 +245,51 @@ function renderSendTransactionRequest(data, title = 'Send Transaction', warning 
         <div class="warning-icon">⚠️</div>
         <div class="warning-text">
           <strong>Important:</strong> ${escapeHtml(warning)}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderPayRgbInvoiceRequest(data) {
+    return `
+    <div class="approval-card">
+      <div class="approval-type">RGB Invoice Payment</div>
+      <div class="domain-info">
+        <div class="domain-label">Requested by:</div>
+        <div class="domain-value">${escapeHtml(data.domain)}</div>
+      </div>
+    </div>
+    <div class="approval-card">
+      <div class="details-label">RGB Funding Details:</div>
+      <div class="detail-row">
+        <div class="detail-label">Network</div>
+        <div class="detail-value">${escapeHtml(data.network || 'Unknown')}</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-label">From</div>
+        <div class="detail-value">${escapeHtml(data.address || 'Unavailable')}</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-label">Asset ID</div>
+        <div class="detail-value">${escapeHtml(data.assetId || 'Unknown')}</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-label">Asset Amount</div>
+        <div class="detail-value">${escapeHtml(String(data.assetAmount ?? 'Unknown'))}</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-label">Bridge Amount</div>
+        <div class="detail-value">${escapeHtml(String(data.amtMsat ?? 'Unknown'))} msat</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-label">Invoice</div>
+        <div class="detail-value">${escapeHtml(data.invoice || 'Unavailable')}</div>
+      </div>
+      <div class="warning-box">
+        <div class="warning-icon">⚠️</div>
+        <div class="warning-text">
+          This will pay an RGB Lightning invoice from your wallet to fund channel liquidity. Approve only if the asset and amount match your intent.
         </div>
       </div>
     </div>

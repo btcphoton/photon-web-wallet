@@ -2,6 +2,7 @@ import {
   approveConnection,
   buildConnectApproval,
   executeSendTransaction,
+  getRegtestExtensionWalletKey,
   getStoredAssetBalanceForOrigin,
   getStoredAssetsForOrigin,
   getLiveBalance,
@@ -13,6 +14,7 @@ import {
   type ApprovalRequest,
   type ApprovalResult,
 } from './executors'
+import { decodeRegtestLightningInvoice, payRegtestLightningInvoice } from '../utils/rgb-wallet'
 
 interface PendingApproval {
   resolve: (result: ApprovalResult) => void
@@ -99,6 +101,8 @@ async function handleRequest(message: any, sender: chrome.runtime.MessageSender)
       return handleSendTransaction(origin, params, sender.tab?.id)
     case 'sendBtcFunding':
       return handleSendBtcFunding(origin, params, sender.tab?.id)
+    case 'payRgbInvoice':
+      return handlePayRgbInvoice(origin, params, sender.tab?.id)
     case 'signMessage':
       return handleSignMessage(origin, params, sender.tab?.id)
     default:
@@ -349,6 +353,66 @@ async function handleSendBtcFunding(origin: string, params: Record<string, unkno
       from: prepared.senderAddress,
       to: prepared.recipientAddress,
       purpose: 'channel_funding',
+    },
+  }
+}
+
+async function handlePayRgbInvoice(origin: string, params: Record<string, unknown>, tabId?: number) {
+  if (!(await isConnectedOrigin(origin))) {
+    return { error: 'Not connected. Please call connect() first.' }
+  }
+
+  const invoice = typeof params.invoice === 'string' ? params.invoice.trim() : ''
+  if (!invoice) {
+    return { error: 'invoice is required' }
+  }
+
+  const context = await loadWalletContext()
+  if (context.network !== 'regtest') {
+    return { error: 'payRgbInvoice is currently supported only on regtest.' }
+  }
+
+  const walletKey = await getRegtestExtensionWalletKey()
+  const decoded = await decodeRegtestLightningInvoice({
+    invoice,
+    walletKey,
+  })
+
+  const approval = await requestApproval({
+    type: 'payRgbInvoice',
+    origin,
+    tabId,
+    data: {
+      domain: new URL(origin).hostname,
+      origin,
+      network: context.network,
+      address: context.address,
+      invoice,
+      assetId: decoded.decoded?.asset_id || '',
+      assetAmount: decoded.decoded?.asset_amount ?? null,
+      amtMsat: decoded.decoded?.amt_msat ?? null,
+      expiry: decoded.decoded?.expiry_sec ?? null,
+      purpose: 'RGB Liquidity Funding',
+    },
+  })
+
+  if (!approval.approved) {
+    return { error: 'User rejected RGB invoice payment' }
+  }
+
+  const result = await payRegtestLightningInvoice({
+    invoice,
+    walletKey,
+  })
+
+  return {
+    result: {
+      ok: true,
+      assetId: result.assetId,
+      balance: result.balance,
+      payment: result.payment,
+      decoded: result.decoded,
+      walletKey,
     },
   }
 }

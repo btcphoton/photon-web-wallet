@@ -213,6 +213,16 @@
             });
             return result;
         }
+
+        // Pay an RGB Lightning invoice through the wallet
+        async payRgbInvoice(params = {}) {
+            const invoice = typeof params.invoice === 'string' ? params.invoice.trim() : '';
+            if (!invoice) {
+                throw new Error('invoice is required');
+            }
+            const result = await this._sendRequest('payRgbInvoice', { invoice });
+            return result;
+        }
     }
 
     // Create and expose the provider
