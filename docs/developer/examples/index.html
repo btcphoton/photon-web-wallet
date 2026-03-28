@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Build an App Examples | PhotonBolt Wallet</title>
+  <link rel="stylesheet" href="/assets/docs.css" />
+</head>
+<body>
+  <div class="docs-shell">
+    <aside class="sidebar">
+      <a class="brand" href="/" data-nav>
+        <span class="brand-mark">developer.photonbolt.xyz</span>
+        <span class="brand-title">PhotonBolt Wallet</span>
+        <span class="brand-subtitle">Developer Portal</span>
+      </a>
+      <div class="nav-group">
+        <div class="nav-label">Overview</div>
+        <a href="/" data-nav>What is PhotonBolt Wallet</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">Developer Guides</div>
+        <a href="/developer-guides/getting-started/" data-nav>Getting Started</a>
+        <a href="/developer-guides/connect-apps/" data-nav>Connect Apps</a>
+        <a href="/developer-guides/balances-and-transactions/" data-nav>Balances and Transactions</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">Build an App Examples</div>
+        <a href="/examples/" data-nav>Examples</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">Resources and FAQs</div>
+        <a href="/resources/" data-nav>Resources and FAQs</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">Troubleshooting</div>
+        <a href="/troubleshooting/" data-nav>Troubleshooting Guide</a>
+      </div>
+    </aside>
+
+    <main class="content">
+      <section class="hero">
+        <div class="eyebrow">Build an App Examples</div>
+        <h1>Examples</h1>
+        <p class="lead">
+          These examples are intentionally small. They show how to shape the app flow around user-controlled approvals instead of hiding the wallet behind your backend.
+        </p>
+      </section>
+
+      <div class="grid two">
+        <section class="card">
+          <h3>Donate Button</h3>
+          <p>Connect the wallet, prefill a recipient address, and let the user send a small BTC amount with a chosen fee rate.</p>
+        </section>
+        <section class="card">
+          <h3>Authenticated Dashboard</h3>
+          <p>Use <code>signMessage()</code> to prove wallet ownership before unlocking higher-trust actions in your app.</p>
+        </section>
+      </div>
+
+      <h2>Example 1: Donation Widget</h2>
+      <div class="code-block">
+        <div class="code-header">
+          <span>JavaScript</span>
+          <button class="copy-btn" data-copy="#ex-donate">Copy</button>
+        </div>
+        <pre id="ex-donate"><code>async function donate() {
+  const photon = window.photon;
+  if (!photon) throw new Error("Install PhotonBolt Wallet first");
+
+  await photon.connect();
+
+  const txid = await photon.sendTransaction({
+    to: "tb1qmerchantaddress0000000000000000000000000",
+    amountBtc: "0.00005",
+    feeRate: 2
+  });
+
+  console.log("Donation sent", txid);
+}</code></pre>
+      </div>
+
+      <h2>Example 2: Wallet Ownership Challenge</h2>
+      <div class="code-block">
+        <div class="code-header">
+          <span>JavaScript</span>
+          <button class="copy-btn" data-copy="#ex-auth">Copy</button>
+        </div>
+        <pre id="ex-auth"><code>async function signLoginChallenge(challenge) {
+  const photon = window.photon;
+  if (!photon) throw new Error("PhotonBolt Wallet missing");
+
+  await photon.connect();
+  const [address] = await photon.getAccounts();
+  const signature = await photon.signMessage(challenge);
+
+  return { address, signature };
+}</code></pre>
+      </div>
+
+      <h2>Example 3: Show Account, Network, and Balance</h2>
+      <div class="code-block">
+        <div class="code-header">
+          <span>JavaScript</span>
+          <button class="copy-btn" data-copy="#ex-status">Copy</button>
+        </div>
+        <pre id="ex-status"><code>async function loadWalletSummary() {
+  if (!window.photon) return null;
+
+  await window.photon.connect();
+
+  const [address] = await window.photon.getAccounts();
+  const network = await window.photon.getNetwork();
+  const balance = await window.photon.getBalance();
+
+  return { address, network, balance };
+}</code></pre>
+      </div>
+
+      <h2>Example 4: Prepare Then Send</h2>
+      <p>
+        If your product needs a second confirmation step in the app UI, use <code>signTransaction()</code> for preview-oriented flows and <code>sendTransaction()</code> for final send.
+      </p>
+
+      <div class="code-block">
+        <div class="code-header">
+          <span>JavaScript</span>
+          <button class="copy-btn" data-copy="#ex-prepare">Copy</button>
+        </div>
+        <pre id="ex-prepare"><code>async function prepareThenSend(to, amountBtc) {
+  const signedHex = await window.photon.signTransaction({
+    to,
+    amountBtc,
+    feeRate: 2
+  });
+
+  console.log("Preview signed hex", signedHex);
+
+  const txid = await window.photon.sendTransaction({
+    to,
+    amountBtc,
+    feeRate: 2
+  });
+
+  return txid;
+}</code></pre>
+      </div>
+
+      <div class="footer">
+        Need integration details first? Start with <a href="/developer-guides/getting-started/">Getting Started</a>.
+      </div>
+    </main>
+  </div>
+  <script src="/assets/docs.js"></script>
+</body>
+</html>

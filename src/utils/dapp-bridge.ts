@@ -48,6 +48,18 @@ export interface MessageSignature {
     address: string;
 }
 
+export interface WalletAsset {
+    id: string;
+    name: string;
+    amount: string;
+    unit: string;
+    color?: string;
+    ticker?: string;
+    assetId?: string;
+    contractId?: string;
+    [key: string]: unknown;
+}
+
 /**
  * Validate Bitcoin address format
  */

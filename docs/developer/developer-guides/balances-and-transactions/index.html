@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Balances and Transactions | PhotonBolt Wallet Developer Guides</title>
+  <link rel="stylesheet" href="/assets/docs.css" />
+</head>
+<body>
+  <div class="docs-shell">
+    <aside class="sidebar">
+      <a class="brand" href="/" data-nav>
+        <span class="brand-mark">developer.photonbolt.xyz</span>
+        <span class="brand-title">PhotonBolt Wallet</span>
+        <span class="brand-subtitle">Developer Portal</span>
+      </a>
+      <div class="nav-group">
+        <div class="nav-label">Overview</div>
+        <a href="/" data-nav>What is PhotonBolt Wallet</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">Developer Guides</div>
+        <a href="/developer-guides/getting-started/" data-nav>Getting Started</a>
+        <a href="/developer-guides/connect-apps/" data-nav>Connect Apps</a>
+        <a href="/developer-guides/balances-and-transactions/" data-nav>Balances and Transactions</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">Build an App Examples</div>
+        <a href="/examples/" data-nav>Examples</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">Resources and FAQs</div>
+        <a href="/resources/" data-nav>Resources and FAQs</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">Troubleshooting</div>
+        <a href="/troubleshooting/" data-nav>Troubleshooting Guide</a>
+      </div>
+    </aside>
+
+    <main class="content">
+      <section class="hero">
+        <div class="eyebrow">Developer Guides</div>
+        <h1>Balances and Transactions</h1>
+        <p class="lead">
+          PhotonBolt’s provider exposes a narrow, Bitcoin-focused transaction API.
+          Use it to read the active balance, produce signed transaction hex, or request a full send flow with user approval.
+        </p>
+      </section>
+
+      <h2>Read Balance</h2>
+      <div class="code-block">
+        <div class="code-header">
+          <span>JavaScript</span>
+          <button class="copy-btn" data-copy="#tx-balance">Copy</button>
+        </div>
+        <pre id="tx-balance"><code>async function loadBalance() {
+  const balanceBtc = await window.photon.getBalance();
+  document.querySelector("#balance").textContent = `${balanceBtc} BTC`;
+}</code></pre>
+      </div>
+
+      <h2>Transaction Request Shape</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Field</th>
+            <th>Required</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>to</code></td>
+            <td>Yes</td>
+            <td>Recipient Bitcoin address for the active network.</td>
+          </tr>
+          <tr>
+            <td><code>amount</code> or <code>amountBtc</code></td>
+            <td>Yes</td>
+            <td>BTC string or number, for example <code>"0.0001"</code>.</td>
+          </tr>
+          <tr>
+            <td><code>amountSats</code></td>
+            <td>No</td>
+            <td>Optional integer string if you prefer satoshi precision.</td>
+          </tr>
+          <tr>
+            <td><code>feeRate</code></td>
+            <td>No</td>
+            <td>Optional sat/vB override. If omitted, the wallet falls back to live fee estimates.</td>
+          </tr>
+          <tr>
+            <td><code>network</code></td>
+            <td>No</td>
+            <td>If supplied, it must match the wallet’s active network.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>Sign Without Broadcasting</h2>
+      <p>
+        Use <code>signTransaction()</code> when your app needs signed raw transaction hex for another flow.
+      </p>
+
+      <div class="code-block">
+        <div class="code-header">
+          <span>JavaScript</span>
+          <button class="copy-btn" data-copy="#tx-sign">Copy</button>
+        </div>
+        <pre id="tx-sign"><code>const signedTxHex = await window.photon.signTransaction({
+  to: "tb1qexampleaddress0000000000000000000000000",
+  amount: "0.0001",
+  feeRate: 2
+});
+
+console.log("Signed transaction hex", signedTxHex);</code></pre>
+      </div>
+
+      <h2>Send Transaction</h2>
+      <div class="code-block">
+        <div class="code-header">
+          <span>JavaScript</span>
+          <button class="copy-btn" data-copy="#tx-send">Copy</button>
+        </div>
+        <pre id="tx-send"><code>const txid = await window.photon.sendTransaction({
+  to: "tb1qexampleaddress0000000000000000000000000",
+  amountBtc: "0.0001",
+  feeRate: 3
+});
+
+console.log("Broadcast txid", txid);</code></pre>
+      </div>
+
+      <h2>Sign Message</h2>
+      <div class="code-block">
+        <div class="code-header">
+          <span>JavaScript</span>
+          <button class="copy-btn" data-copy="#tx-message">Copy</button>
+        </div>
+        <pre id="tx-message"><code>const signatureHex = await window.photon.signMessage(
+  "I authorize this login challenge for app.example.com"
+);
+
+console.log("Signature", signatureHex);</code></pre>
+      </div>
+
+      <h2>End-to-End Example</h2>
+      <div class="code-block">
+        <div class="code-header">
+          <span>JavaScript</span>
+          <button class="copy-btn" data-copy="#tx-flow">Copy</button>
+        </div>
+        <pre id="tx-flow"><code>async function payInvoice({ to, amountBtc }) {
+  const photon = window.photon;
+  if (!photon) throw new Error("PhotonBolt Wallet missing");
+
+  await photon.connect();
+
+  const [account] = await photon.getAccounts();
+  const network = await photon.getNetwork();
+  const balance = await photon.getBalance();
+
+  console.log("Paying from", account, "on", network, "with balance", balance);
+
+  const txid = await photon.sendTransaction({
+    to,
+    amountBtc,
+    feeRate: 2
+  });
+
+  return txid;
+}</code></pre>
+      </div>
+
+      <div class="callout warn">
+        <p><strong>Network safety:</strong> do not let users paste a mainnet address while your app is labeled testnet. Read <code>getNetwork()</code> before rendering send UI.</p>
+      </div>
+
+      <div class="footer">
+        More complete examples: <a href="/examples/">Build an App Examples</a>
+      </div>
+    </main>
+  </div>
+  <script src="/assets/docs.js"></script>
+</body>
+</html>

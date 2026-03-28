@@ -1,6 +1,6 @@
 /**
  * Photon Wallet Provider
- * This script is injected into web pages and creates the window.photon object
+ * This script is injected into web pages and creates the window.photonbolt object
  * that dApps use to interact with the wallet.
  */
 
@@ -8,8 +8,8 @@
     'use strict';
 
     // Prevent double injection
-    if (window.photon) {
-        console.warn('Photon provider already injected');
+    if (window.photonbolt) {
+        console.warn('PhotonBolt provider already injected');
         return;
     }
 
@@ -48,6 +48,7 @@
         constructor() {
             super();
             this.isPhoton = true;
+            this.isPhotonBolt = true;
             this.isConnected = false;
             this.selectedAddress = null;
             this.network = null;
@@ -153,6 +154,21 @@
             return result.balance;
         }
 
+        // Get wallet assets for the active network
+        async getAssets() {
+            const result = await this._sendRequest('getAssets');
+            return result.assets || [];
+        }
+
+        // Get a specific asset balance by asset id, ticker, unit, or contract id
+        async getAssetBalance(params = {}) {
+            if (!params || !params.assetId) {
+                throw new Error('assetId is required');
+            }
+            const result = await this._sendRequest('getAssetBalance', params);
+            return result.balance;
+        }
+
         // Sign a Bitcoin transaction
         async signTransaction(txData) {
             if (!txData || !txData.to || !txData.amount) {
@@ -182,17 +198,27 @@
     }
 
     // Create and expose the provider
-    const photonProvider = new PhotonProvider();
+    const photonBoltProvider = new PhotonProvider();
 
-    // Make it non-configurable and non-writable
-    Object.defineProperty(window, 'photon', {
-        value: photonProvider,
+    // Primary provider name
+    Object.defineProperty(window, 'photonbolt', {
+        value: photonBoltProvider,
         writable: false,
         configurable: false
     });
 
-    // Announce to the page that Photon is available
+    // Legacy alias for compatibility with older dApps
+    if (!window.photon) {
+        Object.defineProperty(window, 'photon', {
+            value: photonBoltProvider,
+            writable: false,
+            configurable: false
+        });
+    }
+
+    // Announce to the page that PhotonBolt is available
+    window.dispatchEvent(new Event('photonbolt#initialized'));
     window.dispatchEvent(new Event('photon#initialized'));
 
-    console.log('Photon Wallet provider injected successfully');
+    console.log('PhotonBolt Wallet provider injected successfully');
 })();

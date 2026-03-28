@@ -255,7 +255,7 @@
         // 1. Check if Photon is Installed
         function checkInstallation() {
             const badge = document.getElementById('installStatus');
-            if (typeof window.photon !== 'undefined') {
+            if (typeof window.photonbolt !== 'undefined') {
                 badge.textContent = 'Photon Installed';
                 badge.className = 'status-badge status-installed';
                 return true;
@@ -272,7 +272,7 @@
                 const output = document.getElementById('statusOutput');
                 output.textContent = 'Connecting...';
 
-                const result = await window.photon.connect();
+                const result = await window.photonbolt.connect();
 
                 output.textContent = JSON.stringify(result, null, 2);
 
@@ -290,9 +290,9 @@
         // 3. Get Wallet State
         async function getWalletState() {
             try {
-                const accounts = await window.photon.getAccounts();
-                const network = await window.photon.getNetwork();
-                const balance = await window.photon.getBalance();
+                const accounts = await window.photonbolt.getAccounts();
+                const network = await window.photonbolt.getNetwork();
+                const balance = await window.photonbolt.getBalance();
 
                 const state = {
                     address: accounts[0] || 'Not connected',
@@ -316,7 +316,7 @@
 
                 output.textContent = 'Requesting signature...';
 
-                const signedTx = await window.photon.signTransaction({ to, amount, feeRate });
+                const signedTx = await window.photonbolt.signTransaction({ to, amount, feeRate });
                 output.textContent = 'Signed TX:\n' + signedTx + '\n\nAll API methods are now backed by the real wallet execution path.';
                 logEvent('Transaction signed');
             } catch (error) {
@@ -334,7 +334,7 @@
 
                 output.textContent = 'Sending...';
 
-                const txId = await window.photon.sendTransaction({ to, amount, feeRate });
+                const txId = await window.photonbolt.sendTransaction({ to, amount, feeRate });
                 output.textContent = 'Transaction ID:\n' + txId;
                 logEvent('Transaction sent: ' + txId);
             } catch (error) {
@@ -350,7 +350,7 @@
 
                 output.textContent = 'Signing...';
 
-                const signature = await window.photon.signMessage(msg);
+                const signature = await window.photonbolt.signMessage(msg);
                 output.textContent = 'Signature:\n' + signature;
                 logEvent('Message signed');
             } catch (error) {
@@ -360,14 +360,14 @@
 
         // 7. Event Listeners
         function setupEventListeners() {
-            if (typeof window.photon === 'undefined') return;
+            if (typeof window.photonbolt === 'undefined') return;
 
-            window.photon.on('accountsChanged', (accounts) => {
+            window.photonbolt.on('accountsChanged', (accounts) => {
                 logEvent('Accounts changed: ' + (accounts[0] || 'Disconnected'));
                 getWalletState();
             });
 
-            window.photon.on('networkChanged', (network) => {
+            window.photonbolt.on('networkChanged', (network) => {
                 logEvent('Network changed: ' + network);
                 getWalletState();
             });

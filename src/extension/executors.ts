@@ -16,8 +16,9 @@ import {
   isValidBitcoinAddress,
   satoshisToBtc,
   type Network,
+  type WalletAsset,
 } from '../utils/dapp-bridge'
-import { getStorageData, setStorageData } from '../utils/storage'
+import { getNetworkAssetsKey, getStorageData, setStorageData } from '../utils/storage'
 
 bitcoin.initEccLib(ecc)
 
@@ -195,6 +196,68 @@ export const getLiveBalance = async (origin: string): Promise<{ balance: string;
   return {
     balance,
     network: context.network,
+  }
+}
+
+export const getStoredAssetsForOrigin = async (origin: string): Promise<{ assets: WalletAsset[]; network: Network }> => {
+  if (!(await isConnectedOrigin(origin))) {
+    throw new Error('Not connected. Please call connect() first.')
+  }
+
+  const context = await loadWalletContext()
+  const assetsKey = getNetworkAssetsKey(context.network)
+  const result = await getStorageData([assetsKey])
+  const rawAssets = result[assetsKey]
+
+  if (!rawAssets || typeof rawAssets !== 'string') {
+    return { assets: [], network: context.network }
+  }
+
+  try {
+    const parsed = JSON.parse(rawAssets) as WalletAsset[]
+    return {
+      assets: Array.isArray(parsed) ? parsed : [],
+      network: context.network,
+    }
+  } catch {
+    return { assets: [], network: context.network }
+  }
+}
+
+export const getStoredAssetBalanceForOrigin = async (
+  origin: string,
+  assetId: string,
+): Promise<{ assetId: string; balance: string; asset: WalletAsset | null; network: Network }> => {
+  const normalizedAssetId = assetId.trim()
+  if (!normalizedAssetId) {
+    throw new Error('assetId is required.')
+  }
+
+  const { assets, network } = await getStoredAssetsForOrigin(origin)
+  const matchedAsset = assets.find((asset) => {
+    const candidates = [
+      asset.id,
+      asset.ticker,
+      asset.unit,
+      asset.name,
+      asset.assetId,
+      asset.contractId,
+    ]
+      .filter(Boolean)
+      .map((value) => String(value).toLowerCase())
+
+    return candidates.includes(normalizedAssetId.toLowerCase())
+  }) || null
+
+  if (!matchedAsset) {
+    throw new Error(`Asset ${normalizedAssetId} is not available in the active wallet.`)
+  }
+
+  return {
+    assetId: normalizedAssetId,
+    balance: String(matchedAsset.amount ?? '0'),
+    asset: matchedAsset,
+    network,
   }
 }
 

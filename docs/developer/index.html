@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PhotonBolt Wallet Developer Portal</title>
+  <link rel="stylesheet" href="/assets/docs.css" />
+</head>
+<body>
+  <div class="docs-shell">
+    <aside class="sidebar">
+      <a class="brand" href="/" data-nav>
+        <span class="brand-mark">developer.photonbolt.xyz</span>
+        <span class="brand-title">PhotonBolt Wallet</span>
+        <span class="brand-subtitle">Developer Portal</span>
+      </a>
+
+      <div class="nav-group">
+        <div class="nav-label">Overview</div>
+        <a href="/" data-nav>What is PhotonBolt Wallet</a>
+      </div>
+
+      <div class="nav-group">
+        <div class="nav-label">Developer Guides</div>
+        <a href="/developer-guides/getting-started/" data-nav>Getting Started</a>
+        <a href="/developer-guides/connect-apps/" data-nav>Connect Apps</a>
+        <a href="/developer-guides/balances-and-transactions/" data-nav>Balances and Transactions</a>
+      </div>
+
+      <div class="nav-group">
+        <div class="nav-label">Build an App Examples</div>
+        <a href="/examples/" data-nav>Examples</a>
+      </div>
+
+      <div class="nav-group">
+        <div class="nav-label">Resources and FAQs</div>
+        <a href="/resources/" data-nav>Resources and FAQs</a>
+      </div>
+
+      <div class="nav-group">
+        <div class="nav-label">Troubleshooting</div>
+        <a href="/troubleshooting/" data-nav>Troubleshooting Guide</a>
+      </div>
+    </aside>
+
+    <main class="content">
+      <section class="hero">
+        <div class="eyebrow">What is PhotonBolt Wallet</div>
+        <h1>Build browser apps that can detect, connect to, and request approvals from PhotonBolt Wallet.</h1>
+        <p class="lead">
+          PhotonBolt Wallet is a browser wallet with a dApp-facing provider injected as <code>window.photon</code>.
+          It exposes a compact JavaScript API for wallet connection, account discovery, balance reads,
+          transaction signing, transaction broadcast, and message signing.
+        </p>
+        <p class="muted">
+          This portal documents the API shape currently implemented in the PhotonBolt extension codebase.
+        </p>
+      </section>
+
+      <div class="grid three">
+        <section class="card">
+          <h3>Fast Integration</h3>
+          <p>Detect the extension in a few lines, prompt the user to connect, then call the provider directly from your app.</p>
+        </section>
+        <section class="card">
+          <h3>Approval Driven</h3>
+          <p>Signing and sending requests open an approval popup showing network, sender, fee, amount, total spend, and change details.</p>
+        </section>
+        <section class="card">
+          <h3>Simple Public Surface</h3>
+          <p>The current public methods are <code>connect</code>, <code>disconnect</code>, <code>getAccounts</code>, <code>getNetwork</code>, <code>getBalance</code>, <code>signTransaction</code>, <code>sendTransaction</code>, and <code>signMessage</code>.</p>
+        </section>
+      </div>
+
+      <h2>Provider Shape</h2>
+      <p>
+        PhotonBolt injects a provider into normal web pages under <code>window.photon</code>. Your app should never assume the provider exists.
+        Always detect it first and handle the not-installed case cleanly.
+      </p>
+
+      <div class="code-block">
+        <div class="code-header">
+          <span>JavaScript</span>
+          <button class="copy-btn" data-copy="#home-detect">Copy</button>
+        </div>
+        <pre id="home-detect"><code>function getPhoton() {
+  if (typeof window === "undefined") return null;
+  if (!window.photon || !window.photon.isPhoton) return null;
+  return window.photon;
+}
+
+const photon = getPhoton();
+
+if (!photon) {
+  console.log("PhotonBolt Wallet is not installed.");
+} else {
+  console.log("PhotonBolt Wallet detected.");
+}</code></pre>
+      </div>
+
+      <h2>API Summary</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Method</th>
+            <th>Returns</th>
+            <th>Use It For</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>await photon.connect()</code></td>
+            <td><code>{ address, network, connected }</code></td>
+            <td>Prompting the user to approve the current origin.</td>
+          </tr>
+          <tr>
+            <td><code>await photon.disconnect()</code></td>
+            <td><code>{ success: true }</code></td>
+            <td>Disconnecting the current origin and clearing local dApp session state.</td>
+          </tr>
+          <tr>
+            <td><code>await photon.getAccounts()</code></td>
+            <td><code>string[]</code></td>
+            <td>Reading the approved wallet address list for the current origin.</td>
+          </tr>
+          <tr>
+            <td><code>await photon.getNetwork()</code></td>
+            <td><code>"mainnet" | "testnet3" | "testnet4" | "regtest"</code></td>
+            <td>Displaying or validating the active Bitcoin network.</td>
+          </tr>
+          <tr>
+            <td><code>await photon.getBalance()</code></td>
+            <td><code>string</code></td>
+            <td>Displaying the wallet's BTC balance.</td>
+          </tr>
+          <tr>
+            <td><code>await photon.signTransaction(tx)</code></td>
+            <td><code>signedTxHex</code></td>
+            <td>Getting a signed transaction without broadcasting it.</td>
+          </tr>
+          <tr>
+            <td><code>await photon.sendTransaction(tx)</code></td>
+            <td><code>txid</code></td>
+            <td>Preparing, approving, signing, and broadcasting a BTC transaction.</td>
+          </tr>
+          <tr>
+            <td><code>await photon.signMessage(message)</code></td>
+            <td><code>signatureHex</code></td>
+            <td>Requesting a deterministic message signature from the active account.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>Events</h2>
+      <div class="grid two">
+        <section class="card">
+          <h3><code>accountsChanged</code></h3>
+          <p>Fires when the active wallet address changes or the connection is removed for your origin.</p>
+        </section>
+        <section class="card">
+          <h3><code>networkChanged</code></h3>
+          <p>Fires when the wallet network changes.</p>
+        </section>
+      </div>
+
+      <div class="code-block">
+        <div class="code-header">
+          <span>JavaScript</span>
+          <button class="copy-btn" data-copy="#home-events">Copy</button>
+        </div>
+        <pre id="home-events"><code>const photon = window.photon;
+
+photon.on("accountsChanged", (accounts) =&gt; {
+  console.log("accountsChanged", accounts);
+});
+
+photon.on("networkChanged", (network) =&gt; {
+  console.log("networkChanged", network);
+});</code></pre>
+      </div>
+
+      <div class="footer">
+        Serve the contents of <code>docs/developer/</code> at <code>developer.photonbolt.xyz</code>.
+      </div>
+    </main>
+  </div>
+  <script src="/assets/docs.js"></script>
+</body>
+</html>

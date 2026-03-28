@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Troubleshooting Guide | PhotonBolt Wallet</title>
+  <link rel="stylesheet" href="/assets/docs.css" />
+</head>
+<body>
+  <div class="docs-shell">
+    <aside class="sidebar">
+      <a class="brand" href="/" data-nav>
+        <span class="brand-mark">developer.photonbolt.xyz</span>
+        <span class="brand-title">PhotonBolt Wallet</span>
+        <span class="brand-subtitle">Developer Portal</span>
+      </a>
+      <div class="nav-group">
+        <div class="nav-label">Overview</div>
+        <a href="/" data-nav>What is PhotonBolt Wallet</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">Developer Guides</div>
+        <a href="/developer-guides/getting-started/" data-nav>Getting Started</a>
+        <a href="/developer-guides/connect-apps/" data-nav>Connect Apps</a>
+        <a href="/developer-guides/balances-and-transactions/" data-nav>Balances and Transactions</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">Build an App Examples</div>
+        <a href="/examples/" data-nav>Examples</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">Resources and FAQs</div>
+        <a href="/resources/" data-nav>Resources and FAQs</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">Troubleshooting</div>
+        <a href="/troubleshooting/" data-nav>Troubleshooting Guide</a>
+      </div>
+    </aside>
+
+    <main class="content">
+      <section class="hero">
+        <div class="eyebrow">Troubleshooting Guide</div>
+        <h1>Troubleshooting</h1>
+        <p class="lead">
+          Most integration failures fall into five buckets: provider missing, connection not approved, wallet locked, network mismatch, or invalid request payload.
+        </p>
+      </section>
+
+      <h2>Provider Missing</h2>
+      <div class="callout bad">
+        <p><strong>Symptom:</strong> <code>window.photon</code> is undefined.</p>
+        <p><strong>Fix:</strong> confirm the extension is installed, enabled, and the page was refreshed after installation.</p>
+      </div>
+
+      <h2>Wallet Connection Rejected</h2>
+      <div class="callout warn">
+        <p><strong>Symptom:</strong> <code>connect()</code> rejects with a user-facing approval error.</p>
+        <p><strong>Fix:</strong> treat it as a normal decline path and let the user retry later.</p>
+      </div>
+
+      <h2>Wallet Locked</h2>
+      <div class="callout warn">
+        <p><strong>Symptom:</strong> signing or sending fails even though the extension is installed.</p>
+        <p><strong>Fix:</strong> ask the user to unlock the wallet UI first, then repeat the action.</p>
+      </div>
+
+      <h2>Network Mismatch</h2>
+      <div class="callout bad">
+        <p><strong>Symptom:</strong> transaction requests fail with invalid address or wrong network errors.</p>
+        <p><strong>Fix:</strong> read <code>await photon.getNetwork()</code> before creating the transaction request and validate the destination address for that network.</p>
+      </div>
+
+      <h2>Quick Diagnostic Snippet</h2>
+      <div class="code-block">
+        <div class="code-header">
+          <span>JavaScript</span>
+          <button class="copy-btn" data-copy="#trouble-check">Copy</button>
+        </div>
+        <pre id="trouble-check"><code>async function diagnosePhoton() {
+  if (!window.photon) {
+    return { installed: false };
+  }
+
+  try {
+    const accounts = await window.photon.getAccounts();
+    const network = await window.photon.getNetwork().catch(() =&gt; null);
+    return {
+      installed: true,
+      connected: accounts.length &gt; 0,
+      accounts,
+      network
+    };
+  } catch (error) {
+    return {
+      installed: true,
+      error: error.message
+    };
+  }
+}</code></pre>
+      </div>
+
+      <h2>Common Integration Mistakes</h2>
+      <ol class="steps">
+        <li>Calling privileged methods before <code>connect()</code>.</li>
+        <li>Sending a mainnet address while the wallet is on testnet or regtest.</li>
+        <li>Assuming <code>signTransaction()</code> returns metadata instead of signed hex.</li>
+        <li>Assuming <code>signMessage()</code> is standardized to BIP-322 when it is currently Photon-specific.</li>
+        <li>Hiding all wallet errors behind one generic “transaction failed” message.</li>
+      </ol>
+
+      <h2>Escalation Path</h2>
+      <p>
+        If your app still fails after basic checks, log the exact method name, the active network, the request payload shape without secrets, and the user-visible error string.
+        That is the minimum useful bug report for diagnosing PhotonBolt Wallet integration issues.
+      </p>
+
+      <div class="footer">
+        Reference pages: <a href="/resources/">Resources and FAQs</a>
+      </div>
+    </main>
+  </div>
+  <script src="/assets/docs.js"></script>
+</body>
+</html>

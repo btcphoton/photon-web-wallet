@@ -2,6 +2,8 @@ import {
   approveConnection,
   buildConnectApproval,
   executeSendTransaction,
+  getStoredAssetBalanceForOrigin,
+  getStoredAssetsForOrigin,
   getLiveBalance,
   isConnectedOrigin,
   loadWalletContext,
@@ -87,6 +89,10 @@ async function handleRequest(message: any, sender: chrome.runtime.MessageSender)
       return handleGetNetwork(origin)
     case 'getBalance':
       return handleGetBalance(origin)
+    case 'getAssets':
+      return handleGetAssets(origin)
+    case 'getAssetBalance':
+      return handleGetAssetBalance(origin, params)
     case 'signTransaction':
       return handleSignTransaction(origin, params, sender.tab?.id)
     case 'sendTransaction':
@@ -176,6 +182,29 @@ async function handleGetBalance(origin: string) {
   return {
     result: {
       balance: result.balance,
+      network: result.network,
+    },
+  }
+}
+
+async function handleGetAssets(origin: string) {
+  const result = await getStoredAssetsForOrigin(origin)
+  return {
+    result: {
+      assets: result.assets,
+      network: result.network,
+    },
+  }
+}
+
+async function handleGetAssetBalance(origin: string, params: Record<string, unknown>) {
+  const assetId = typeof params.assetId === 'string' ? params.assetId : ''
+  const result = await getStoredAssetBalanceForOrigin(origin, assetId)
+  return {
+    result: {
+      assetId: result.assetId,
+      balance: result.balance,
+      asset: result.asset,
       network: result.network,
     },
   }

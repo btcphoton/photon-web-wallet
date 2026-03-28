@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Connect Apps | PhotonBolt Wallet Developer Guides</title>
+  <link rel="stylesheet" href="/assets/docs.css" />
+</head>
+<body>
+  <div class="docs-shell">
+    <aside class="sidebar">
+      <a class="brand" href="/" data-nav>
+        <span class="brand-mark">developer.photonbolt.xyz</span>
+        <span class="brand-title">PhotonBolt Wallet</span>
+        <span class="brand-subtitle">Developer Portal</span>
+      </a>
+      <div class="nav-group">
+        <div class="nav-label">Overview</div>
+        <a href="/" data-nav>What is PhotonBolt Wallet</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">Developer Guides</div>
+        <a href="/developer-guides/getting-started/" data-nav>Getting Started</a>
+        <a href="/developer-guides/connect-apps/" data-nav>Connect Apps</a>
+        <a href="/developer-guides/balances-and-transactions/" data-nav>Balances and Transactions</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">Build an App Examples</div>
+        <a href="/examples/" data-nav>Examples</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">Resources and FAQs</div>
+        <a href="/resources/" data-nav>Resources and FAQs</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">Troubleshooting</div>
+        <a href="/troubleshooting/" data-nav>Troubleshooting Guide</a>
+      </div>
+    </aside>
+
+    <main class="content">
+      <section class="hero">
+        <div class="eyebrow">Developer Guides</div>
+        <h1>Connect Apps</h1>
+        <p class="lead">
+          Use the Photon provider as the user-controlled permission boundary.
+          Your app requests access, the wallet asks the user, and only approved origins can read account state or request privileged actions.
+        </p>
+      </section>
+
+      <h2>Connect and Read Session State</h2>
+      <div class="code-block">
+        <div class="code-header">
+          <span>JavaScript</span>
+          <button class="copy-btn" data-copy="#connect-read">Copy</button>
+        </div>
+        <pre id="connect-read"><code>async function openPhotonSession() {
+  const photon = window.photon;
+  if (!photon) throw new Error("PhotonBolt Wallet is not available");
+
+  const connectResult = await photon.connect();
+  const accounts = await photon.getAccounts();
+  const network = await photon.getNetwork();
+  const balance = await photon.getBalance();
+
+  return {
+    connectResult,
+    accounts,
+    network,
+    balance,
+  };
+}</code></pre>
+      </div>
+
+      <h2>Disconnect Cleanly</h2>
+      <p>
+        If your app has a “Disconnect Wallet” action, remove your own app state after the wallet revokes the current origin.
+      </p>
+
+      <div class="code-block">
+        <div class="code-header">
+          <span>JavaScript</span>
+          <button class="copy-btn" data-copy="#connect-disconnect">Copy</button>
+        </div>
+        <pre id="connect-disconnect"><code>async function disconnectPhoton() {
+  if (!window.photon) return;
+
+  await window.photon.disconnect();
+
+  sessionStorage.removeItem("photon-address");
+  sessionStorage.removeItem("photon-network");
+}</code></pre>
+      </div>
+
+      <h2>React Example</h2>
+      <div class="code-block">
+        <div class="code-header">
+          <span>JavaScript / React</span>
+          <button class="copy-btn" data-copy="#connect-react">Copy</button>
+        </div>
+        <pre id="connect-react"><code>import { useEffect, useState } from "react";
+
+export function PhotonConnectButton() {
+  const [address, setAddress] = useState("");
+  const [network, setNetwork] = useState("");
+  const [error, setError] = useState("");
+
+  useEffect(() =&gt; {
+    const photon = window.photon;
+    if (!photon) return;
+
+    const handleAccounts = (accounts) =&gt; setAddress(accounts[0] || "");
+    const handleNetwork = (nextNetwork) =&gt; setNetwork(nextNetwork);
+
+    photon.on("accountsChanged", handleAccounts);
+    photon.on("networkChanged", handleNetwork);
+
+    return () =&gt; {
+      photon.removeListener("accountsChanged", handleAccounts);
+      photon.removeListener("networkChanged", handleNetwork);
+    };
+  }, []);
+
+  async function connect() {
+    try {
+      setError("");
+      const result = await window.photon.connect();
+      setAddress(result.address);
+      setNetwork(result.network);
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  return (
+    &lt;div&gt;
+      &lt;button onClick={connect}&gt;Connect PhotonBolt&lt;/button&gt;
+      {address ? &lt;p&gt;{address} on {network}&lt;/p&gt; : null}
+      {error ? &lt;p&gt;{error}&lt;/p&gt; : null}
+    &lt;/div&gt;
+  );
+}</code></pre>
+      </div>
+
+      <h2>Origin Permission Model</h2>
+      <div class="grid two">
+        <section class="card">
+          <h3>Connection Scope</h3>
+          <p>Permissions are origin-scoped. An approval on <code>app.example.com</code> does not imply approval on another subdomain.</p>
+        </section>
+        <section class="card">
+          <h3>Privileged Methods</h3>
+          <p><code>getBalance</code>, <code>signTransaction</code>, <code>sendTransaction</code>, and <code>signMessage</code> should be treated as permissioned actions.</p>
+        </section>
+      </div>
+
+      <div class="callout warn">
+        <p><strong>Do not auto-call <code>connect()</code> on page load.</strong> It is better UX and better security posture to request connection only after the user clicks a wallet action.</p>
+      </div>
+
+      <div class="footer">
+        Next: <a href="/developer-guides/balances-and-transactions/">Balances and Transactions</a>
+      </div>
+    </main>
+  </div>
+  <script src="/assets/docs.js"></script>
+</body>
+</html>

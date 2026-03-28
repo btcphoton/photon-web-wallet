@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Getting Started | PhotonBolt Wallet Developer Guides</title>
+  <link rel="stylesheet" href="/assets/docs.css" />
+</head>
+<body>
+  <div class="docs-shell">
+    <aside class="sidebar">
+      <a class="brand" href="/" data-nav>
+        <span class="brand-mark">developer.photonbolt.xyz</span>
+        <span class="brand-title">PhotonBolt Wallet</span>
+        <span class="brand-subtitle">Developer Portal</span>
+      </a>
+      <div class="nav-group">
+        <div class="nav-label">Overview</div>
+        <a href="/" data-nav>What is PhotonBolt Wallet</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">Developer Guides</div>
+        <a href="/developer-guides/getting-started/" data-nav>Getting Started</a>
+        <a href="/developer-guides/connect-apps/" data-nav>Connect Apps</a>
+        <a href="/developer-guides/balances-and-transactions/" data-nav>Balances and Transactions</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">Build an App Examples</div>
+        <a href="/examples/" data-nav>Examples</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">Resources and FAQs</div>
+        <a href="/resources/" data-nav>Resources and FAQs</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-label">Troubleshooting</div>
+        <a href="/troubleshooting/" data-nav>Troubleshooting Guide</a>
+      </div>
+    </aside>
+
+    <main class="content">
+      <section class="hero">
+        <div class="eyebrow">Developer Guides</div>
+        <h1>Getting Started</h1>
+        <p class="lead">
+          The quickest way to integrate PhotonBolt Wallet is to detect <code>window.photon</code>,
+          prompt the user to connect, and cache the approved account in your app state.
+        </p>
+      </section>
+
+      <h2>Browser Extension</h2>
+      <p>
+        PhotonBolt Wallet is a browser extension. The provider is injected into standard HTTP and HTTPS pages.
+        If the user installs the extension after opening your page, ask them to refresh so the provider is injected.
+      </p>
+
+      <div class="callout good">
+        <p><strong>Recommended flow:</strong> detect the provider on page load, render an install CTA if it is missing, and enable your connect button only when the provider exists.</p>
+      </div>
+
+      <h2>Console Playground</h2>
+      <p>
+        If the extension is installed, you can test it from the browser developer console before wiring it into your app.
+      </p>
+
+      <div class="code-block">
+        <div class="code-header">
+          <span>Browser Console</span>
+          <button class="copy-btn" data-copy="#gs-console">Copy</button>
+        </div>
+        <pre id="gs-console"><code>window.photon &amp;&amp; "PhotonBolt is ready"</code></pre>
+      </div>
+
+      <h2>Minimal Connect Example</h2>
+      <p>
+        This example checks for the provider, requests a connection, then stores the selected address and network in local state.
+      </p>
+
+      <div class="code-block">
+        <div class="code-header">
+          <span>JavaScript</span>
+          <button class="copy-btn" data-copy="#gs-connect">Copy</button>
+        </div>
+        <pre id="gs-connect"><code>async function connectPhoton() {
+  const photon = window.photon;
+
+  if (!photon || !photon.isPhoton) {
+    throw new Error("PhotonBolt Wallet is not installed.");
+  }
+
+  const result = await photon.connect();
+
+  return {
+    address: result.address,
+    network: result.network,
+    connected: result.connected,
+  };
+}
+
+document.querySelector("#connectBtn").addEventListener("click", async () =&gt; {
+  try {
+    const session = await connectPhoton();
+    console.log("Connected session", session);
+  } catch (error) {
+    console.error(error.message);
+  }
+});</code></pre>
+      </div>
+
+      <h2>Suggested App State</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>State</th>
+            <th>Why Keep It</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>installed</code></td>
+            <td>Controls whether to show install instructions or wallet actions.</td>
+          </tr>
+          <tr>
+            <td><code>connected</code></td>
+            <td>Controls whether protected actions like sign or send are enabled.</td>
+          </tr>
+          <tr>
+            <td><code>address</code></td>
+            <td>Lets you label the active account in the UI and logs.</td>
+          </tr>
+          <tr>
+            <td><code>network</code></td>
+            <td>Protects against mainnet/testnet mismatches.</td>
+          </tr>
+          <tr>
+            <td><code>balance</code></td>
+            <td>Lets you preview spendability before prompting a send approval.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>Best Practices</h2>
+      <ol class="steps">
+        <li>Never assume the extension is installed.</li>
+        <li>Never assume the user already approved your origin.</li>
+        <li>Always display the active network next to any amount field.</li>
+        <li>Catch rejected approvals and show them as normal user actions, not application crashes.</li>
+        <li>Re-read account and network after connection, because the wallet is the source of truth.</li>
+      </ol>
+
+      <div class="footer">
+        Next: <a href="/developer-guides/connect-apps/">Connect Apps</a>
+      </div>
+    </main>
+  </div>
+  <script src="/assets/docs.js"></script>
+</body>
+</html>
