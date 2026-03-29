@@ -171,6 +171,29 @@ export const requireUnlockedWallet = async (): Promise<WalletContext> => {
   return context
 }
 
+const resolveSigningAddressIndex = async (context: WalletContext): Promise<number> => {
+  const fallbackIndex = Math.max(0, Number(context.addressIndex || 0))
+  const currentAddress = typeof context.address === 'string' ? context.address.trim() : ''
+
+  if (!currentAddress || !context.mnemonic) {
+    return fallbackIndex
+  }
+
+  const derivedAtFallback = await deriveBitcoinAddress(context.mnemonic, context.network, 86, 0, 0, fallbackIndex)
+  if (derivedAtFallback === currentAddress) {
+    return fallbackIndex
+  }
+
+  for (let index = 0; index <= fallbackIndex; index += 1) {
+    const candidate = await deriveBitcoinAddress(context.mnemonic, context.network, 86, 0, 0, index)
+    if (candidate === currentAddress) {
+      return index
+    }
+  }
+
+  return fallbackIndex
+}
+
 export const getLiveBalance = async (origin: string): Promise<{ balance: string; network: Network }> => {
   if (!(await isConnectedOrigin(origin))) {
     throw new Error('Not connected. Please call connect() first.')
@@ -466,10 +489,12 @@ export const signMessageForOrigin = async (
     throw new Error(`Message is too large. Maximum size is ${MAX_MESSAGE_BYTES} bytes.`)
   }
 
+  const signingIndex = await resolveSigningAddressIndex(context)
+  const signingAddress = await deriveBitcoinAddress(context.mnemonic!, context.network, 86, 0, 0, signingIndex)
   const seed = await bip39.mnemonicToSeed(context.mnemonic!)
   const root = bip32.fromSeed(seed, getBitcoinJsNetwork(context.network))
   const coinType = context.network === 'mainnet' ? 0 : 1
-  const derivationPath = `m/86'/${coinType}'/0'/0/${context.addressIndex}`
+  const derivationPath = `m/86'/${coinType}'/0'/0/${signingIndex}`
   const child = root.derivePath(derivationPath)
   const internalPubkey = child.publicKey.slice(1, 33)
   const tweak = bitcoin.crypto.taggedHash('TapTweak', internalPubkey)
@@ -484,7 +509,7 @@ export const signMessageForOrigin = async (
 
   return {
     signature: Buffer.from(signature).toString('hex'),
-    address: context.address,
+    address: signingAddress,
     signatureType: MESSAGE_SIGNATURE_TYPE,
     network: context.network,
   }
