@@ -225,6 +225,7 @@ body {
   font-weight: 900;
   letter-spacing: -0.06em;
   color: #fff;
+  font-family: 'DM Mono', 'Monaco', 'Menlo', monospace;
 }
 
 .photon-balance-unit {
@@ -338,7 +339,7 @@ body {
 
 .address-bar-value {
   flex: 1;
-  font-family: 'Monaco', 'Menlo', monospace;
+  font-family: 'DM Mono', 'Monaco', 'Menlo', monospace;
   font-size: 0.82rem;
   color: rgba(255, 255, 255, 0.75);
   white-space: nowrap;
@@ -434,7 +435,7 @@ body {
 
 .wallet-identity-value .address-text {
   display: block;
-  font-family: 'Monaco', 'Menlo', monospace;
+  font-family: 'DM Mono', 'Monaco', 'Menlo', monospace;
   color: #edf3f9;
   font-size: 0.88rem;
   line-height: 1.4;
@@ -703,6 +704,7 @@ body {
   font-weight: 800;
   color: #fff;
   letter-spacing: -0.04em;
+  font-family: 'DM Mono', 'Monaco', 'Menlo', monospace;
 }
 
 /* Skeleton loader for balance */
@@ -789,7 +791,7 @@ body {
 }
 
 .address-text {
-  font-family: 'Monaco', 'Menlo', monospace;
+  font-family: 'DM Mono', 'Monaco', 'Menlo', monospace;
   font-size: 0.85rem;
   color: rgba(255, 255, 255, 0.7);
 }
@@ -3041,7 +3043,7 @@ textarea:focus {
 }
 
 .rgb-invoice-text {
-  font-family: 'Monaco', 'Menlo', monospace;
+  font-family: 'DM Mono', 'Monaco', 'Menlo', monospace;
   font-size: 0.66rem;
   color: rgba(255, 255, 255, 0.7);
   line-height: 1.3;
@@ -3445,7 +3447,7 @@ textarea:focus {
   backdrop-filter: blur(10px);
   color: #fff;
   font-size: 0.9rem;
-  font-family: 'Monaco', 'Menlo', monospace;
+  font-family: 'DM Mono', 'Monaco', 'Menlo', monospace;
   transition: all 0.2s ease;
 }
 
@@ -4382,7 +4384,7 @@ textarea:focus {
   font-size: 0.92rem;
   font-weight: 600;
   color: #f8fafc;
-  font-family: 'Monaco', 'Menlo', monospace;
+  font-family: 'DM Mono', 'Monaco', 'Menlo', monospace;
 }
 
 .send-fee-row.total .send-fee-label {
