@@ -3880,17 +3880,17 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
 
             <section className="dashboard-section">
               <div className="photon-actions-grid">
-                <button className="photon-action-card" onClick={() => setView('receive')}>
+                <button className="photon-action-card action-card-receive" onClick={() => setView('receive')}>
                   <div className="action-icon receive">↓</div>
                   <span className="action-label">Receive</span>
                   <span className="action-subtext">Bitcoin address and RGB invoices</span>
                 </button>
-                <button className="photon-action-card" onClick={() => setView('send')}>
+                <button className="photon-action-card action-card-send" onClick={() => setView('send')}>
                   <div className="action-icon send">↗</div>
                   <span className="action-label">Send</span>
                   <span className="action-subtext">Broadcast Bitcoin transactions</span>
                 </button>
-                <button className="photon-action-card" onClick={handleViewUtxos}>
+                <button className="photon-action-card action-card-utxos" onClick={handleViewUtxos}>
                   <div className="action-icon utxos">▤</div>
                   <span className="action-label">UTXOs</span>
                   <span className="action-subtext">Manage RGB holder outputs</span>
