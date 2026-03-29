@@ -148,13 +148,15 @@ function WalletStatCard({
   label,
   value,
   tone = 'default',
+  title,
 }: {
   label: string
   value: string
   tone?: 'default' | 'positive' | 'warning'
+  title?: string
 }) {
   return (
-    <div className={`wallet-stat-card wallet-stat-${tone}`}>
+    <div className={`wallet-stat-card wallet-stat-${tone}`} title={title ?? value}>
       <span className="wallet-stat-label">{label}</span>
       <span className="wallet-stat-value">{value}</span>
     </div>
@@ -3837,8 +3839,8 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               )}
 
               <div className="photon-stats-grid">
-                <WalletStatCard label="Available" value={`${formatBtcValue(btcBalance, 8)} BTC`} tone="positive" />
-                <WalletStatCard label="Pending" value={`${formatBtcValue(pendingBalance, 8)} BTC`} tone="warning" />
+                <WalletStatCard label="Available" value={`${formatBtcValue(btcBalance, 2)} BTC`} title={`${formatBtcValue(btcBalance, 8)} BTC`} tone="positive" />
+                <WalletStatCard label="Pending" value={`${formatBtcValue(pendingBalance, 2)} BTC`} title={`${formatBtcValue(pendingBalance, 8)} BTC`} tone="warning" />
                 <WalletStatCard label="Assets" value={String(assets.length)} />
               </div>
             </section>
@@ -3863,7 +3865,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                   type="button"
                 >⊡</button>
               </div>
-              <div className="address-bar-item">
+              <div className="address-bar-item address-bar-item-icp">
                 <span className="address-bar-badge icp">ICP</span>
                 <span className="address-bar-value">{truncateAddress(principalId) || 'No Principal'}</span>
                 <button
