@@ -16,6 +16,7 @@ import { QRCodeSVG } from 'qrcode.react'
 import { createRgbInvoice } from './utils/rgb-invoice'
 import { createRegtestLightningInvoice, createRegtestRgbInvoice, decodeRegtestLightningInvoice, decodeRegtestRgbInvoice, fetchRegtestChannelDashboard, fetchRegtestRgbBalance, fetchRegtestRgbRegistry, fetchRegtestRgbTransfers, mineRegtestBlocks, payRegtestLightningInvoice, refreshRegtestRgbTransfers, registerRgbInvoiceSecret, sendRegtestRgbInvoice, fetchUtxoFundingAddress, fetchUtxoSlots, redeemUtxoSlot, type UtxoSlot, type UtxoFundingAddressResponse } from './utils/rgb-wallet'
 import { LightningAnimation } from './components/LightningAnimation'
+import { StepIndicator } from './components/StepIndicator'
 import { fetchBtcActivities, type BitcoinActivity } from './utils/bitcoin-activities'
 
 
@@ -5491,6 +5492,8 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               <h2 className="receive-title">Send</h2>
             </div>
 
+            <StepIndicator current={0} />
+
             <div className="send-content send-entry-content">
 	              <div className="send-input-group send-surface-card">
 	                <label className="send-label">Receiver</label>
@@ -5534,6 +5537,8 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               <button className="send-back" onClick={() => setView('send')}>←</button>
               <h2 className="send-title">{sendMode === 'rgb' ? `Send ${sendRgbAssetLabel}` : sendMode === 'lightning' ? `Instant Pay ${sendRgbAssetLabel}` : 'Send BTC'}</h2>
             </div>
+
+            <StepIndicator current={1} />
 
             <div className="send-content">
               <div className="send-surface-card">
@@ -5680,6 +5685,8 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               <h2 className="send-title">{sendMode === 'rgb' ? 'Send RGB Asset' : sendMode === 'lightning' ? 'Pay Instantly' : 'Sign Transaction'}</h2>
             </div>
 
+            <StepIndicator current={2} />
+
             <div className="send-content">
               <div className="send-confirm-box">
                 <div className="send-confirm-route">
@@ -5759,6 +5766,8 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
             <div className="send-header">
               <h2 className="send-title">{sendMode === 'rgb' ? 'RGB Transfer Sent' : sendMode === 'lightning' ? 'Instant Payment Settled' : 'Sign Transaction'}</h2>
             </div>
+
+            <StepIndicator current={3} />
 
             <div className="send-content send-success-screen">
               <div className="send-success-icon">
