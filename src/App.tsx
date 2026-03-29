@@ -4160,6 +4160,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
           </div>
 
           <div className="receive-btc-content">
+            {copied && <div className="copy-toast">✓ Address copied!</div>}
             <div className="qr-container">
               <QRCodeSVG
                 value={walletAddress || btcAddress || 'no-address'}
@@ -4177,7 +4178,11 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
             </div>
 
             <div className="btc-address-box dark">
-              <span className="btc-address-text">{walletAddress || btcAddress || 'No address available'}</span>
+              {(() => {
+                const addr = walletAddress || btcAddress || ''
+                const display = addr.length > 20 ? `${addr.slice(0, 10)}...${addr.slice(-8)}` : addr || 'No address available'
+                return <span className="btc-address-text">{display}</span>
+              })()}
             </div>
           </div>
 
@@ -4186,7 +4191,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
             setCopied(true)
             setTimeout(() => setCopied(false), 2000)
           }}>
-            {copied ? '✓ Copied!' : '⧉ Copy bitcoin address'}
+            ⧉ Copy bitcoin address
           </button>
 
           {selectedNetwork === 'regtest' && (
@@ -4206,6 +4211,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
           </div>
 
           <div className="receive-btc-content">
+            {copied && <div className="copy-toast">✓ Address copied!</div>}
             <div className="receive-hero compact">
               <div className="flow-kicker">Bridge</div>
               <div className="flow-intro-title">Send BTC to the Lightning bridge</div>
@@ -4233,11 +4239,15 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               setCopied(true)
               setTimeout(() => setCopied(false), 2000)
             }} style={{ marginBottom: '1rem' }}>
-              {copied ? '✓ Copied!' : '⧉ Copy bitcoin address'}
+              ⧉ Copy bitcoin address
             </button>
 
             <div className="btc-address-box dark">
-              <span className="btc-address-text">{lightningAddress || 'No address available'}</span>
+              {(() => {
+                const addr = lightningAddress || ''
+                const display = addr.length > 20 ? `${addr.slice(0, 10)}...${addr.slice(-8)}` : addr || 'No address available'
+                return <span className="btc-address-text">{display}</span>
+              })()}
             </div>
           </div>
         </div>
