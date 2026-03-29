@@ -2769,6 +2769,189 @@ textarea:focus {
   background: linear-gradient(135deg, #f7931a, #e8830a) !important;
 }
 
+/* Asset Detail Screen */
+.asset-detail-container {
+  overflow-y: auto;
+}
+
+.asset-detail-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1.25rem 1rem 1rem;
+  gap: 0.4rem;
+}
+
+.asset-detail-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: #fff;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  margin-bottom: 0.4rem;
+}
+
+.asset-detail-name {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: #fff;
+}
+
+.asset-detail-id {
+  font-size: 0.72rem;
+  font-family: 'DM Mono', 'Monaco', 'Menlo', monospace;
+  color: rgba(255,255,255,0.4);
+  cursor: default;
+}
+
+.asset-detail-balances {
+  margin: 0 1rem 1rem;
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 16px;
+  overflow: hidden;
+  background: rgba(255,255,255,0.03);
+}
+
+.asset-detail-balance-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.asset-detail-balance-row:last-child {
+  border-bottom: none;
+}
+
+.asset-detail-balance-label {
+  font-size: 0.82rem;
+  color: rgba(255,255,255,0.5);
+}
+
+.asset-detail-balance-value {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #fff;
+  font-family: 'DM Mono', 'Monaco', 'Menlo', monospace;
+}
+
+.asset-detail-balance-value.muted  { color: rgba(255,255,255,0.5); }
+.asset-detail-balance-value.positive { color: #22c55e; }
+
+.asset-detail-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin: 0 1rem 1.25rem;
+}
+
+.asset-detail-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.75rem;
+  border-radius: 14px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.05);
+  color: #fff;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.asset-detail-btn:hover { background: rgba(255,255,255,0.09); transform: translateY(-1px); }
+.asset-detail-btn.receive { border-color: rgba(0,212,170,0.35); color: #00d4aa; }
+.asset-detail-btn.send    { border-color: rgba(247,147,26,0.35); color: #f7931a; }
+
+.asset-detail-activity {
+  padding: 0 1rem 2rem;
+}
+
+.asset-detail-activity-title {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.35);
+  margin-bottom: 0.75rem;
+}
+
+.asset-detail-empty {
+  text-align: center;
+  color: rgba(255,255,255,0.3);
+  font-size: 0.85rem;
+  padding: 1.5rem 0;
+}
+
+.asset-detail-tx {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.asset-detail-tx:last-child { border-bottom: none; }
+
+.asset-detail-tx-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.asset-detail-tx-icon.send    { background: rgba(247,147,26,0.12); color: #f7931a; }
+.asset-detail-tx-icon.receive { background: rgba(0,212,170,0.12); color: #00d4aa; }
+
+.asset-detail-tx-info { flex: 1; }
+
+.asset-detail-tx-type {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #fff;
+}
+
+.asset-detail-tx-date {
+  font-size: 0.72rem;
+  color: rgba(255,255,255,0.4);
+  margin-top: 2px;
+}
+
+.asset-detail-tx-right { text-align: right; }
+
+.asset-detail-tx-amount {
+  font-size: 0.88rem;
+  font-weight: 700;
+  font-family: 'DM Mono', 'Monaco', 'Menlo', monospace;
+}
+
+.asset-detail-tx-amount.send    { color: #f7931a; }
+.asset-detail-tx-amount.receive { color: #00d4aa; }
+
+.asset-detail-tx-status {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-top: 2px;
+}
+
+.asset-detail-tx-status.confirmed  { color: #22c55e; }
+.asset-detail-tx-status.pending    { color: #f59e0b; }
+.asset-detail-tx-status.confirming { color: #60a5fa; }
+
 /* Receive RGB Screen */
 .receive-rgb-container {
   height: 100vh;

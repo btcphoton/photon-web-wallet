@@ -21,7 +21,7 @@ import { ErrorBanner } from './components/ErrorBanner'
 import { fetchBtcActivities, type BitcoinActivity } from './utils/bitcoin-activities'
 
 
-type View = 'welcome' | 'unlock' | 'lock' | 'forgot' | 'create' | 'verify' | 'password' | 'restore' | 'dashboard' | 'receive' | 'receive-btc' | 'receive-rgb' | 'receive-lightning' | 'convert-lightning' | 'add-assets' | 'settings' | 'user-settings' | 'auto-lock-settings' | 'network-settings' | 'swap' | 'send' | 'send-amount' | 'send-confirm' | 'send-success' | 'utxos' | 'create-rgb-utxo' | 'create-utxo-confirm' | 'unlock-rgb-utxo' | 'unlock-utxo-confirm' | 'utxo-action-success' | 'faucet' | 'error-logs' | 'funding-address'
+type View = 'welcome' | 'unlock' | 'lock' | 'forgot' | 'create' | 'verify' | 'password' | 'restore' | 'dashboard' | 'receive' | 'receive-btc' | 'receive-rgb' | 'receive-lightning' | 'convert-lightning' | 'add-assets' | 'settings' | 'user-settings' | 'auto-lock-settings' | 'network-settings' | 'swap' | 'send' | 'send-amount' | 'send-confirm' | 'send-success' | 'utxos' | 'create-rgb-utxo' | 'create-utxo-confirm' | 'unlock-rgb-utxo' | 'unlock-utxo-confirm' | 'utxo-action-success' | 'faucet' | 'error-logs' | 'funding-address' | 'asset-detail'
 type Tab = 'assets' | 'activities'
 type Network = 'mainnet' | 'testnet3' | 'testnet4' | 'regtest'
 
@@ -172,6 +172,7 @@ function App() {
   const [restoreInput, setRestoreInput] = useState<string>('gasp attitude little organ palm crime layer answer dial twelve feed meadow')
   const [error, setError] = useState<string>('')
   const [activeTab, setActiveTab] = useState<Tab>('assets')
+  const [detailAsset, setDetailAsset] = useState<import('./utils/storage').Asset | null>(null)
 
   // Two-address system states
   const [walletAddress, setWalletAddress] = useState<string>('') // Main BTC wallet address
@@ -3928,7 +3929,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                 ) : (
                   <>
                     {assets.map((asset) => (
-                      <div key={asset.id} className="asset-item">
+                      <div key={asset.id} className="asset-item" onClick={() => { setDetailAsset(asset); setView('asset-detail') }} role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && (setDetailAsset(asset), setView('asset-detail'))}>
                         <div className="asset-left">
                           <div
                             className="asset-icon"
@@ -6625,6 +6626,85 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
           </div>
         )
       }
+
+      {/* Asset Detail Screen */}
+      {view === 'asset-detail' && detailAsset && (
+        <div className="receive-container asset-detail-container">
+          <div className="receive-header">
+            <button className="back-arrow" aria-label="Go back" onClick={() => setView('dashboard')}>←</button>
+            <h2 className="receive-title">{detailAsset.unit}</h2>
+          </div>
+
+          <div className="asset-detail-hero">
+            <div className="asset-detail-icon" style={{ background: detailAsset.color }}>
+              {detailAsset.name[0]}
+            </div>
+            <div className="asset-detail-name">{detailAsset.name}</div>
+            <div className="asset-detail-id" title={detailAsset.id}>
+              {detailAsset.id.length > 24 ? `${detailAsset.id.slice(0, 12)}...${detailAsset.id.slice(-8)}` : detailAsset.id}
+            </div>
+          </div>
+
+          <div className="asset-detail-balances">
+            <div className="asset-detail-balance-row">
+              <span className="asset-detail-balance-label">Available</span>
+              <span className="asset-detail-balance-value">{detailAsset.amount} {detailAsset.unit}</span>
+            </div>
+            {Number(detailAsset.rgbLockedUnconfirmed || 0) > 0 && (
+              <div className="asset-detail-balance-row">
+                <span className="asset-detail-balance-label">Unconfirmed</span>
+                <span className="asset-detail-balance-value muted">{detailAsset.rgbLockedUnconfirmed} {detailAsset.unit}</span>
+              </div>
+            )}
+            {Number(detailAsset.rgbOffchainInbound || 0) > 0 && (
+              <div className="asset-detail-balance-row">
+                <span className="asset-detail-balance-label">Incoming</span>
+                <span className="asset-detail-balance-value positive">{detailAsset.rgbOffchainInbound} {detailAsset.unit}</span>
+              </div>
+            )}
+            {Number(detailAsset.rgbOffchainOutbound || 0) > 0 && (
+              <div className="asset-detail-balance-row">
+                <span className="asset-detail-balance-label">Sending</span>
+                <span className="asset-detail-balance-value muted">{detailAsset.rgbOffchainOutbound} {detailAsset.unit}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="asset-detail-actions">
+            <button className="asset-detail-btn receive" onClick={() => setView('receive-rgb')}>
+              <span>↓</span> Receive
+            </button>
+            <button className="asset-detail-btn send" onClick={() => setView('send')}>
+              <span>↗</span> Send
+            </button>
+          </div>
+
+          <div className="asset-detail-activity">
+            <div className="asset-detail-activity-title">Activity</div>
+            {activities.filter(a => a.unit === detailAsset.unit).length === 0 ? (
+              <div className="asset-detail-empty">No transactions yet</div>
+            ) : (
+              activities.filter(a => a.unit === detailAsset.unit).map((activity, i) => (
+                <div key={i} className="asset-detail-tx">
+                  <div className={`asset-detail-tx-icon ${activity.type === 'Send' ? 'send' : 'receive'}`}>
+                    {activity.type === 'Send' ? '↑' : '↓'}
+                  </div>
+                  <div className="asset-detail-tx-info">
+                    <div className="asset-detail-tx-type">{activity.type}</div>
+                    <div className="asset-detail-tx-date">{activity.date}</div>
+                  </div>
+                  <div className="asset-detail-tx-right">
+                    <div className={`asset-detail-tx-amount ${activity.type === 'Send' ? 'send' : 'receive'}`}>
+                      {activity.type === 'Send' ? '-' : '+'}{activity.amount} {detailAsset.unit}
+                    </div>
+                    <div className={`asset-detail-tx-status ${activity.status.toLowerCase()}`}>{activity.status}</div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
     </>
   )
 }
