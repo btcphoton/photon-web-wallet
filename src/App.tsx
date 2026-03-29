@@ -17,10 +17,11 @@ import { createRgbInvoice } from './utils/rgb-invoice'
 import { createRegtestLightningInvoice, createRegtestRgbInvoice, decodeRegtestLightningInvoice, decodeRegtestRgbInvoice, fetchRegtestChannelDashboard, fetchRegtestRgbBalance, fetchRegtestRgbRegistry, fetchRegtestRgbTransfers, mineRegtestBlocks, payRegtestLightningInvoice, refreshRegtestRgbTransfers, registerRgbInvoiceSecret, sendRegtestRgbInvoice, fetchUtxoFundingAddress, fetchUtxoSlots, redeemUtxoSlot, type UtxoSlot, type UtxoFundingAddressResponse } from './utils/rgb-wallet'
 import { LightningAnimation } from './components/LightningAnimation'
 import { StepIndicator } from './components/StepIndicator'
+import { ErrorBanner } from './components/ErrorBanner'
 import { fetchBtcActivities, type BitcoinActivity } from './utils/bitcoin-activities'
 
 
-type View = 'welcome' | 'unlock' | 'lock' | 'forgot' | 'create' | 'verify' | 'password' | 'restore' | 'dashboard' | 'receive' | 'receive-btc' | 'receive-rgb' | 'receive-lightning' | 'convert-lightning' | 'add-assets' | 'settings' | 'user-settings' | 'auto-lock-settings' | 'network-settings' | 'swap' | 'send' | 'send-amount' | 'send-confirm' | 'send-success' | 'utxos' | 'create-rgb-utxo' | 'create-utxo-confirm' | 'unlock-rgb-utxo' | 'unlock-utxo-confirm' | 'utxo-action-success' | 'faucet' | 'error-logs' | 'funding-address'
+type View = 'welcome' | 'unlock' | 'lock' | 'forgot' | 'create' | 'verify' | 'password' | 'restore' | 'dashboard' | 'receive' | 'receive-btc' | 'receive-rgb' | 'receive-lightning' | 'convert-lightning' | 'add-assets' | 'settings' | 'user-settings' | 'auto-lock-settings' | 'network-settings' | 'swap' | 'send' | 'send-amount' | 'send-confirm' | 'send-success' | 'utxos' | 'create-rgb-utxo' | 'create-utxo-confirm' | 'unlock-rgb-utxo' | 'unlock-utxo-confirm' | 'utxo-action-success' | 'faucet' | 'error-logs' | 'funding-address' | 'asset-detail'
 type Tab = 'assets' | 'activities'
 type Network = 'mainnet' | 'testnet3' | 'testnet4' | 'regtest'
 
@@ -147,13 +148,15 @@ function WalletStatCard({
   label,
   value,
   tone = 'default',
+  title,
 }: {
   label: string
   value: string
   tone?: 'default' | 'positive' | 'warning'
+  title?: string
 }) {
   return (
-    <div className={`wallet-stat-card wallet-stat-${tone}`}>
+    <div className={`wallet-stat-card wallet-stat-${tone}`} title={title ?? value}>
       <span className="wallet-stat-label">{label}</span>
       <span className="wallet-stat-value">{value}</span>
     </div>
@@ -169,6 +172,7 @@ function App() {
   const [restoreInput, setRestoreInput] = useState<string>('gasp attitude little organ palm crime layer answer dial twelve feed meadow')
   const [error, setError] = useState<string>('')
   const [activeTab, setActiveTab] = useState<Tab>('assets')
+  const [detailAsset, setDetailAsset] = useState<import('./utils/storage').Asset | null>(null)
 
   // Two-address system states
   const [walletAddress, setWalletAddress] = useState<string>('') // Main BTC wallet address
@@ -3417,7 +3421,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
             </div>
           </div>
 
-          {error && <p className="error-text">{error}</p>}
+          {error && <ErrorBanner message={error} />}
 
           <button
             className="btn-primary continue-btn"
@@ -3462,7 +3466,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
             </div>
           </div>
 
-          {error && <p className="error-text">{error}</p>}
+          {error && <ErrorBanner message={error} />}
 
           <button
             className="btn-primary continue-btn"
@@ -3557,7 +3561,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
             ))}
           </div>
 
-          {error && <p className="error-text">{error}</p>}
+          {error && <ErrorBanner message={error} />}
 
           <button
             className="btn-primary continue-btn"
@@ -3625,7 +3629,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
             </div>
           </div>
 
-          {error && <p className="error-text">{error}</p>}
+          {error && <ErrorBanner message={error} />}
 
           <button
             className="btn-primary continue-btn"
@@ -3665,7 +3669,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
           >
             Use Test Wallet
           </button>
-          {error && <p className="error-text">{error}</p>}
+          {error && <ErrorBanner message={error} />}
           <div className="button-group">
             <button className="btn-secondary" onClick={() => setView('welcome')}>
               Back
@@ -3807,12 +3811,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                 {pendingBalance > 0 ? ` + ${formatBtcValue(pendingBalance, 8)} pending` : ''}
               </div>
 
-              {balanceError && (
-                <div className="balance-error">
-                  <span className="error-icon">⚠️</span>
-                  <span className="error-text">{balanceError}</span>
-                </div>
-              )}
+              {balanceError && <ErrorBanner message={balanceError} />}
 
               {showBalanceInfo && (
                 <>
@@ -3841,8 +3840,8 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               )}
 
               <div className="photon-stats-grid">
-                <WalletStatCard label="Available" value={`${formatBtcValue(btcBalance, 8)} BTC`} tone="positive" />
-                <WalletStatCard label="Pending" value={`${formatBtcValue(pendingBalance, 8)} BTC`} tone="warning" />
+                <WalletStatCard label="Available" value={`${formatBtcValue(btcBalance, 2)} BTC`} title={`${formatBtcValue(btcBalance, 8)} BTC`} tone="positive" />
+                <WalletStatCard label="Pending" value={`${formatBtcValue(pendingBalance, 2)} BTC`} title={`${formatBtcValue(pendingBalance, 8)} BTC`} tone="warning" />
                 <WalletStatCard label="Assets" value={String(assets.length)} />
               </div>
             </section>
@@ -3867,7 +3866,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                   type="button"
                 >⊡</button>
               </div>
-              <div className="address-bar-item">
+              <div className="address-bar-item address-bar-item-icp">
                 <span className="address-bar-badge icp">ICP</span>
                 <span className="address-bar-value">{truncateAddress(principalId) || 'No Principal'}</span>
                 <button
@@ -3930,7 +3929,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                 ) : (
                   <>
                     {assets.map((asset) => (
-                      <div key={asset.id} className="asset-item">
+                      <div key={asset.id} className="asset-item" onClick={() => { setDetailAsset(asset); setView('asset-detail') }} role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && (setDetailAsset(asset), setView('asset-detail'))}>
                         <div className="asset-left">
                           <div
                             className="asset-icon"
@@ -4347,12 +4346,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                 )}
 
                 {/* Error Display */}
-                {rgbError && (
-                  <div className="rgb-error-box">
-                    <span className="error-icon">⚠</span>
-                    <span className="error-text">{rgbError}</span>
-                  </div>
-                )}
+                {rgbError && <ErrorBanner message={rgbError} />}
               </div>
 
               {/* Generate Invoice Button */}
@@ -4635,12 +4629,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                   </div>
                 </div>
 
-                {lightningReceiveError && (
-                  <div className="rgb-error-box">
-                    <span className="error-icon">⚠</span>
-                    <span className="error-text">{lightningReceiveError}</span>
-                  </div>
-                )}
+                {lightningReceiveError && <ErrorBanner message={lightningReceiveError} />}
               </div>
 
               <button
@@ -4790,9 +4779,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
             />
 
             {addAssetError && (
-              <div className="rgb-error-box add-asset-status">
-                <span className="error-text">{addAssetError}</span>
-              </div>
+              <ErrorBanner message={addAssetError} />
             )}
 
             {addAssetSuccess && (
@@ -4994,7 +4981,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               )}
             </div>
 
-            {error && <p className="error-text">{error}</p>}
+            {error && <ErrorBanner message={error} />}
             {settingsSaved && <p className="success-text">✓ Settings saved successfully!</p>}
 
             <button
@@ -5251,7 +5238,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               <span className="settings-hint">Enter RGB proxy URL (e.g., http://89.117.52.115:3000/json-rpc)</span>
             </div>
 
-            {error && <p className="error-text">{error}</p>}
+            {error && <ErrorBanner message={error} />}
             {networkSettingsSaved && <p className="success-text">✓ Network settings saved successfully!</p>}
 
             <button
@@ -5437,19 +5424,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
             </div>
 
             {/* Error/Success Messages */}
-            {swapError && (
-              <div style={{
-                padding: '0.75rem',
-                margin: '1rem 0',
-                background: 'rgba(239, 68, 68, 0.1)',
-                border: '1px solid rgba(239, 68, 68, 0.3)',
-                borderRadius: '8px',
-                color: '#ef4444',
-                fontSize: '0.875rem'
-              }}>
-                {swapError}
-              </div>
-            )}
+            {swapError && <ErrorBanner message={swapError} />}
 
             {swapSuccess && (
               <div style={{
@@ -5741,11 +5716,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                 </div>
               )}
 
-              {sendError && (
-                <div className="send-error-box">
-                  <span>{sendError}</span>
-                </div>
-              )}
+              {sendError && <ErrorBanner message={sendError} />}
 
               <button
                 className="send-next-btn"
@@ -5900,11 +5871,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                   Amount: {(Number(selectedUnlockUtxo.value) / 100000000).toFixed(4)} BTC
                 </div>
               </div>
-              {unlockUtxoError && (
-                <div className="unlock-error-box">
-                  {unlockUtxoError}
-                </div>
-              )}
+              {unlockUtxoError && <ErrorBanner message={unlockUtxoError} />}
               <button
                 className="btn-primary modal-confirm unlock-confirm-btn"
                 onClick={() => {
@@ -5952,11 +5919,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                 <button className={`utxo-tab-btn ${utxoTab === 'unlockable' ? 'active' : ''}`} onClick={() => setUtxoTab('unlockable')}>Unlockable</button>
               </div>
 
-              {rgbClassificationError && (
-                <div className="utxo-banner error">
-                  <div>⚠️ {rgbClassificationError}</div>
-                </div>
-              )}
+              {rgbClassificationError && <ErrorBanner message={rgbClassificationError} />}
 
               <div className="utxo-content">
                 {loadingUtxos ? (
@@ -6042,9 +6005,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                                 </div>
                               )
                             })}
-                            {redeemError && (
-                              <div className="utxo-banner error" style={{ marginTop: '0.5rem' }}><div>⚠️ {redeemError}</div></div>
-                            )}
+                            {redeemError && <ErrorBanner message={redeemError} />}
                           </div>
                         )}
                       </>
@@ -6665,6 +6626,85 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
           </div>
         )
       }
+
+      {/* Asset Detail Screen */}
+      {view === 'asset-detail' && detailAsset && (
+        <div className="receive-container asset-detail-container">
+          <div className="receive-header">
+            <button className="back-arrow" aria-label="Go back" onClick={() => setView('dashboard')}>←</button>
+            <h2 className="receive-title">{detailAsset.unit}</h2>
+          </div>
+
+          <div className="asset-detail-hero">
+            <div className="asset-detail-icon" style={{ background: detailAsset.color }}>
+              {detailAsset.name[0]}
+            </div>
+            <div className="asset-detail-name">{detailAsset.name}</div>
+            <div className="asset-detail-id" title={detailAsset.id}>
+              {detailAsset.id.length > 24 ? `${detailAsset.id.slice(0, 12)}...${detailAsset.id.slice(-8)}` : detailAsset.id}
+            </div>
+          </div>
+
+          <div className="asset-detail-balances">
+            <div className="asset-detail-balance-row">
+              <span className="asset-detail-balance-label">Available</span>
+              <span className="asset-detail-balance-value">{detailAsset.amount} {detailAsset.unit}</span>
+            </div>
+            {Number(detailAsset.rgbLockedUnconfirmed || 0) > 0 && (
+              <div className="asset-detail-balance-row">
+                <span className="asset-detail-balance-label">Unconfirmed</span>
+                <span className="asset-detail-balance-value muted">{detailAsset.rgbLockedUnconfirmed} {detailAsset.unit}</span>
+              </div>
+            )}
+            {Number(detailAsset.rgbOffchainInbound || 0) > 0 && (
+              <div className="asset-detail-balance-row">
+                <span className="asset-detail-balance-label">Incoming</span>
+                <span className="asset-detail-balance-value positive">{detailAsset.rgbOffchainInbound} {detailAsset.unit}</span>
+              </div>
+            )}
+            {Number(detailAsset.rgbOffchainOutbound || 0) > 0 && (
+              <div className="asset-detail-balance-row">
+                <span className="asset-detail-balance-label">Sending</span>
+                <span className="asset-detail-balance-value muted">{detailAsset.rgbOffchainOutbound} {detailAsset.unit}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="asset-detail-actions">
+            <button className="asset-detail-btn receive" onClick={() => setView('receive-rgb')}>
+              <span>↓</span> Receive
+            </button>
+            <button className="asset-detail-btn send" onClick={() => setView('send')}>
+              <span>↗</span> Send
+            </button>
+          </div>
+
+          <div className="asset-detail-activity">
+            <div className="asset-detail-activity-title">Activity</div>
+            {activities.filter(a => a.unit === detailAsset.unit).length === 0 ? (
+              <div className="asset-detail-empty">No transactions yet</div>
+            ) : (
+              activities.filter(a => a.unit === detailAsset.unit).map((activity, i) => (
+                <div key={i} className="asset-detail-tx">
+                  <div className={`asset-detail-tx-icon ${activity.type === 'Send' ? 'send' : 'receive'}`}>
+                    {activity.type === 'Send' ? '↑' : '↓'}
+                  </div>
+                  <div className="asset-detail-tx-info">
+                    <div className="asset-detail-tx-type">{activity.type}</div>
+                    <div className="asset-detail-tx-date">{activity.date}</div>
+                  </div>
+                  <div className="asset-detail-tx-right">
+                    <div className={`asset-detail-tx-amount ${activity.type === 'Send' ? 'send' : 'receive'}`}>
+                      {activity.type === 'Send' ? '-' : '+'}{activity.amount} {detailAsset.unit}
+                    </div>
+                    <div className={`asset-detail-tx-status ${activity.status.toLowerCase()}`}>{activity.status}</div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
     </>
   )
 }
