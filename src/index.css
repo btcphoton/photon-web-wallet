@@ -551,12 +551,25 @@ body {
 }
 
 /* Wallet Container - Wrapper for scroll-based UX */
+/* View transition — applied to all top-level screen containers */
+@keyframes view-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
 .wallet-wrapper {
   display: flex;
   flex-direction: column;
   height: 100vh;
   max-width: 100%;
   overflow: hidden;
+  animation: view-slide-in 0.22s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
 }
 
 /* Original wallet-container kept for compatibility */
@@ -2486,6 +2499,7 @@ textarea:focus {
   padding: 0 0 1rem;
   overflow: hidden;
   max-width: 100%;
+  animation: view-slide-in 0.22s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
 }
 
 .receive-header {
@@ -3432,6 +3446,7 @@ textarea:focus {
   gap: 1.5rem;
   padding: 1rem 0;
   min-height: 600px;
+  animation: view-slide-in 0.22s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
 }
 
 .settings-content {
@@ -3970,6 +3985,7 @@ textarea:focus {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  animation: view-slide-in 0.22s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
 }
 
 .send-screen {
