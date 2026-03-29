@@ -817,6 +817,32 @@ body {
   text-align: center;
 }
 
+.error-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.65rem 0.85rem;
+  margin: 0.5rem 1rem;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.28);
+  border-left: 3px solid rgba(239, 68, 68, 0.7);
+  border-radius: 10px;
+  animation: view-slide-in 0.18s ease both;
+}
+
+.error-banner-icon {
+  font-size: 0.85rem;
+  color: #f87171;
+  flex-shrink: 0;
+  margin-top: 0.05rem;
+}
+
+.error-banner-text {
+  font-size: 0.83rem;
+  color: #fca5a5;
+  line-height: 1.45;
+}
+
 .address-row {
   display: flex;
   align-items: center;
