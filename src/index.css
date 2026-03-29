@@ -169,10 +169,11 @@ body {
   position: relative;
   overflow: hidden;
   background:
-    radial-gradient(circle at top right, rgba(247, 147, 26, 0.22), transparent 34%),
-    linear-gradient(180deg, rgba(32, 23, 15, 0.96) 0%, rgba(17, 17, 17, 0.98) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 24px 44px rgba(0, 0, 0, 0.34);
+    radial-gradient(ellipse at 80% 0%, rgba(247, 147, 26, 0.32), transparent 55%),
+    radial-gradient(ellipse at 20% 110%, rgba(247, 147, 26, 0.14), transparent 50%),
+    linear-gradient(180deg, rgba(32, 23, 15, 0.97) 0%, rgba(17, 17, 17, 0.99) 100%);
+  border: 1px solid rgba(247, 147, 26, 0.18);
+  box-shadow: 0 24px 44px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(247, 147, 26, 0.06) inset;
 }
 
 .photon-balance-panel::before {
@@ -225,6 +226,7 @@ body {
   font-weight: 900;
   letter-spacing: -0.06em;
   color: #fff;
+  font-family: 'DM Mono', 'Monaco', 'Menlo', monospace;
 }
 
 .photon-balance-unit {
@@ -261,8 +263,9 @@ body {
   padding: 0.8rem 0.85rem;
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(10px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 .wallet-stat-label {
@@ -338,7 +341,7 @@ body {
 
 .address-bar-value {
   flex: 1;
-  font-family: 'Monaco', 'Menlo', monospace;
+  font-family: 'DM Mono', 'Monaco', 'Menlo', monospace;
   font-size: 0.82rem;
   color: rgba(255, 255, 255, 0.75);
   white-space: nowrap;
@@ -434,7 +437,7 @@ body {
 
 .wallet-identity-value .address-text {
   display: block;
-  font-family: 'Monaco', 'Menlo', monospace;
+  font-family: 'DM Mono', 'Monaco', 'Menlo', monospace;
   color: #edf3f9;
   font-size: 0.88rem;
   line-height: 1.4;
@@ -493,17 +496,45 @@ body {
   text-align: left;
   border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.08);
+  border-top-width: 2px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.03));
   color: inherit;
   cursor: pointer;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
-  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+}
+
+.action-card-receive {
+  border-top-color: rgba(0, 212, 170, 0.55);
+}
+
+.action-card-send {
+  border-top-color: rgba(247, 147, 26, 0.65);
+}
+
+.action-card-utxos {
+  border-top-color: rgba(139, 92, 246, 0.55);
 }
 
 .photon-action-card:hover {
-  transform: translateY(-1px);
+  transform: translateY(-2px);
   border-color: rgba(255, 255, 255, 0.14);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.065), rgba(255, 255, 255, 0.04));
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.04));
+}
+
+.action-card-receive:hover {
+  border-top-color: rgba(0, 212, 170, 0.85);
+  box-shadow: 0 6px 20px rgba(0, 212, 170, 0.12);
+}
+
+.action-card-send:hover {
+  border-top-color: rgba(247, 147, 26, 0.9);
+  box-shadow: 0 6px 20px rgba(247, 147, 26, 0.15);
+}
+
+.action-card-utxos:hover {
+  border-top-color: rgba(139, 92, 246, 0.85);
+  box-shadow: 0 6px 20px rgba(139, 92, 246, 0.12);
 }
 
 .dashboard-content-panel {
@@ -703,6 +734,7 @@ body {
   font-weight: 800;
   color: #fff;
   letter-spacing: -0.04em;
+  font-family: 'DM Mono', 'Monaco', 'Menlo', monospace;
 }
 
 /* Skeleton loader for balance */
@@ -789,7 +821,7 @@ body {
 }
 
 .address-text {
-  font-family: 'Monaco', 'Menlo', monospace;
+  font-family: 'DM Mono', 'Monaco', 'Menlo', monospace;
   font-size: 0.85rem;
   color: rgba(255, 255, 255, 0.7);
 }
@@ -1010,15 +1042,20 @@ body {
   padding: 1rem;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.03));
   backdrop-filter: blur(10px);
-  border-radius: 12px;
+  border-radius: 14px;
   cursor: pointer;
   transition: all 0.2s ease;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-left: 3px solid rgba(247, 147, 26, 0.2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .asset-item:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.12);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.04));
+  border-color: rgba(255, 255, 255, 0.14);
+  border-left-color: rgba(247, 147, 26, 0.55);
+  transform: translateX(2px);
+  box-shadow: -2px 0 12px rgba(247, 147, 26, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 .asset-left {
@@ -2607,11 +2644,11 @@ textarea:focus {
 }
 
 .qr-container {
-  background: #fff;
-  padding: 1rem;
-  border-radius: 16px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-  margin-bottom: 1.5rem;
+  background: #ffffff;
+  padding: 1.25rem;
+  border-radius: 20px;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.12), 0 8px 32px rgba(0, 0, 0, 0.45);
+  margin-bottom: 1.25rem;
 }
 
 .btc-address-box {
@@ -2624,8 +2661,8 @@ textarea:focus {
 
 .btc-address-box.dark {
   background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 18px 32px rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
 }
 
 .btc-address-text {
@@ -2634,10 +2671,40 @@ textarea:focus {
   word-break: break-all;
   line-height: 1.5;
   display: block;
+  text-align: center;
+  font-family: 'DM Mono', 'Monaco', 'Menlo', monospace;
+  letter-spacing: 0.02em;
 }
 
 .btc-address-box.dark .btc-address-text {
-  color: rgba(255, 255, 255, 0.82);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+/* Copy toast */
+@keyframes toast-in-out {
+  0%   { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  15%  { opacity: 1; transform: translateX(-50%) translateY(0); }
+  75%  { opacity: 1; transform: translateX(-50%) translateY(0); }
+  100% { opacity: 0; transform: translateX(-50%) translateY(-4px); }
+}
+
+.copy-toast {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(247, 147, 26, 0.95);
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 0.5rem 1.25rem;
+  border-radius: 30px;
+  pointer-events: none;
+  animation: toast-in-out 2s ease forwards;
+  z-index: 9999;
+  white-space: nowrap;
+  box-shadow: 0 4px 16px rgba(247, 147, 26, 0.4);
 }
 
 .copy-btc-btn {
@@ -3041,7 +3108,7 @@ textarea:focus {
 }
 
 .rgb-invoice-text {
-  font-family: 'Monaco', 'Menlo', monospace;
+  font-family: 'DM Mono', 'Monaco', 'Menlo', monospace;
   font-size: 0.66rem;
   color: rgba(255, 255, 255, 0.7);
   line-height: 1.3;
@@ -3445,7 +3512,7 @@ textarea:focus {
   backdrop-filter: blur(10px);
   color: #fff;
   font-size: 0.9rem;
-  font-family: 'Monaco', 'Menlo', monospace;
+  font-family: 'DM Mono', 'Monaco', 'Menlo', monospace;
   transition: all 0.2s ease;
 }
 
@@ -3825,6 +3892,77 @@ textarea:focus {
 }
 
 /* Send Screen Styles */
+/* Step Indicator */
+.step-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.6rem 1rem 0.5rem;
+  gap: 0;
+}
+
+.step-item {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.step-node {
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.68rem;
+  font-weight: 700;
+  flex-shrink: 0;
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.35);
+  transition: all 0.2s ease;
+}
+
+.step-node.active {
+  background: rgba(247, 147, 26, 0.18);
+  border-color: rgba(247, 147, 26, 0.7);
+  color: #f7931a;
+  box-shadow: 0 0 10px rgba(247, 147, 26, 0.3);
+}
+
+.step-node.done {
+  background: rgba(0, 212, 170, 0.15);
+  border-color: rgba(0, 212, 170, 0.6);
+  color: #00d4aa;
+  font-size: 0.7rem;
+}
+
+.step-label {
+  font-size: 0.6rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.28);
+  margin: 0 0.3rem;
+  white-space: nowrap;
+}
+
+.step-label.active {
+  color: rgba(247, 147, 26, 0.9);
+  font-weight: 700;
+}
+
+.step-connector {
+  width: 1.4rem;
+  height: 1.5px;
+  background: rgba(255, 255, 255, 0.1);
+  flex-shrink: 0;
+  transition: background 0.2s ease;
+}
+
+.step-connector.done {
+  background: rgba(0, 212, 170, 0.45);
+}
+
 .send-container {
   background: linear-gradient(180deg, #0a0a0a 0%, #131313 100%);
   min-height: 100vh;
@@ -4382,7 +4520,7 @@ textarea:focus {
   font-size: 0.92rem;
   font-weight: 600;
   color: #f8fafc;
-  font-family: 'Monaco', 'Menlo', monospace;
+  font-family: 'DM Mono', 'Monaco', 'Menlo', monospace;
 }
 
 .send-fee-row.total .send-fee-label {

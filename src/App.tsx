@@ -16,6 +16,7 @@ import { QRCodeSVG } from 'qrcode.react'
 import { createRgbInvoice } from './utils/rgb-invoice'
 import { createRegtestLightningInvoice, createRegtestRgbInvoice, decodeRegtestLightningInvoice, decodeRegtestRgbInvoice, fetchRegtestChannelDashboard, fetchRegtestRgbBalance, fetchRegtestRgbRegistry, fetchRegtestRgbTransfers, mineRegtestBlocks, payRegtestLightningInvoice, refreshRegtestRgbTransfers, registerRgbInvoiceSecret, sendRegtestRgbInvoice, fetchUtxoFundingAddress, fetchUtxoSlots, redeemUtxoSlot, type UtxoSlot, type UtxoFundingAddressResponse } from './utils/rgb-wallet'
 import { LightningAnimation } from './components/LightningAnimation'
+import { StepIndicator } from './components/StepIndicator'
 import { fetchBtcActivities, type BitcoinActivity } from './utils/bitcoin-activities'
 
 
@@ -3408,6 +3409,8 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               <button
                 className="toggle-password"
                 onClick={() => setShowUnlockPassword(!showUnlockPassword)}
+                aria-label={showUnlockPassword ? 'Hide password' : 'Show password'}
+                aria-pressed={showUnlockPassword}
               >
                 {showUnlockPassword ? '👁' : '👁‍🗨'}
               </button>
@@ -3451,6 +3454,8 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               <button
                 className="toggle-password"
                 onClick={() => setShowUnlockPassword(!showUnlockPassword)}
+                aria-label={showUnlockPassword ? 'Hide password' : 'Show password'}
+                aria-pressed={showUnlockPassword}
               >
                 {showUnlockPassword ? '👁' : '👁‍🗨'}
               </button>
@@ -3477,7 +3482,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
       {view === 'forgot' && (
         <div className="card-container forgot-container">
           <div className="password-header">
-            <button className="back-arrow" onClick={() => setView('lock')}>←</button>
+            <button className="back-arrow" aria-label="Go back" onClick={() => setView('lock')}>←</button>
             <h2 className="card-title">Reset Wallet</h2>
           </div>
 
@@ -3526,7 +3531,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
       {view === 'verify' && (
         <div className="card-container">
           <div className="password-header">
-            <button className="back-arrow" onClick={() => setView('create')}>←</button>
+            <button className="back-arrow" aria-label="Go back" onClick={() => setView('create')}>←</button>
             <h2 className="card-title">Verify Recovery Phrase</h2>
           </div>
           <div className="progress-bar">
@@ -3567,7 +3572,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
       {view === 'password' && (
         <div className="card-container">
           <div className="password-header">
-            <button className="back-arrow" onClick={() => setView('verify')}>←</button>
+            <button className="back-arrow" aria-label="Go back" onClick={() => setView('verify')}>←</button>
             <h2 className="card-title">Create a password</h2>
           </div>
           <div className="progress-bar">
@@ -3591,6 +3596,8 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               <button
                 className="toggle-password"
                 onClick={() => setShowPassword(!showPassword)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                aria-pressed={showPassword}
               >
                 {showPassword ? '👁' : '👁‍🗨'}
               </button>
@@ -3610,6 +3617,8 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               <button
                 className="toggle-password"
                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+                aria-pressed={showConfirmPassword}
               >
                 {showConfirmPassword ? '👁' : '👁‍🗨'}
               </button>
@@ -3872,17 +3881,17 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
 
             <section className="dashboard-section">
               <div className="photon-actions-grid">
-                <button className="photon-action-card" onClick={() => setView('receive')}>
+                <button className="photon-action-card action-card-receive" onClick={() => setView('receive')}>
                   <div className="action-icon receive">↓</div>
                   <span className="action-label">Receive</span>
                   <span className="action-subtext">Bitcoin address and RGB invoices</span>
                 </button>
-                <button className="photon-action-card" onClick={() => setView('send')}>
+                <button className="photon-action-card action-card-send" onClick={() => setView('send')}>
                   <div className="action-icon send">↗</div>
                   <span className="action-label">Send</span>
                   <span className="action-subtext">Broadcast Bitcoin transactions</span>
                 </button>
-                <button className="photon-action-card" onClick={handleViewUtxos}>
+                <button className="photon-action-card action-card-utxos" onClick={handleViewUtxos}>
                   <div className="action-icon utxos">▤</div>
                   <span className="action-label">UTXOs</span>
                   <span className="action-subtext">Manage RGB holder outputs</span>
@@ -4083,7 +4092,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
       {view === 'receive' && (
         <div className="receive-container">
           <div className="receive-header">
-            <button className="back-arrow" onClick={() => setView('dashboard')}>←</button>
+            <button className="back-arrow" aria-label="Go back" onClick={() => setView('dashboard')}>←</button>
             <h2 className="receive-title">Receive</h2>
           </div>
 
@@ -4147,11 +4156,12 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
       {view === 'receive-btc' && (
         <div className="receive-container">
           <div className="receive-header">
-            <button className="back-arrow" onClick={() => setView('receive')}>←</button>
+            <button className="back-arrow" aria-label="Go back" onClick={() => setView('receive')}>←</button>
             <h2 className="receive-title">Receive Bitcoin</h2>
           </div>
 
           <div className="receive-btc-content">
+            {copied && <div className="copy-toast">✓ Address copied!</div>}
             <div className="qr-container">
               <QRCodeSVG
                 value={walletAddress || btcAddress || 'no-address'}
@@ -4169,7 +4179,11 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
             </div>
 
             <div className="btc-address-box dark">
-              <span className="btc-address-text">{walletAddress || btcAddress || 'No address available'}</span>
+              {(() => {
+                const addr = walletAddress || btcAddress || ''
+                const display = addr.length > 20 ? `${addr.slice(0, 10)}...${addr.slice(-8)}` : addr || 'No address available'
+                return <span className="btc-address-text">{display}</span>
+              })()}
             </div>
           </div>
 
@@ -4178,7 +4192,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
             setCopied(true)
             setTimeout(() => setCopied(false), 2000)
           }}>
-            {copied ? '✓ Copied!' : '⧉ Copy bitcoin address'}
+            ⧉ Copy bitcoin address
           </button>
 
           {selectedNetwork === 'regtest' && (
@@ -4193,11 +4207,12 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
       {view === 'convert-lightning' && (
         <div className="receive-container">
           <div className="receive-header">
-            <button className="back-arrow" onClick={() => setView('receive')}>←</button>
+            <button className="back-arrow" aria-label="Go back" onClick={() => setView('receive')}>←</button>
             <h2 className="receive-title">Convert Bitcoin to ⚡ Lightning</h2>
           </div>
 
           <div className="receive-btc-content">
+            {copied && <div className="copy-toast">✓ Address copied!</div>}
             <div className="receive-hero compact">
               <div className="flow-kicker">Bridge</div>
               <div className="flow-intro-title">Send BTC to the Lightning bridge</div>
@@ -4225,11 +4240,15 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               setCopied(true)
               setTimeout(() => setCopied(false), 2000)
             }} style={{ marginBottom: '1rem' }}>
-              {copied ? '✓ Copied!' : '⧉ Copy bitcoin address'}
+              ⧉ Copy bitcoin address
             </button>
 
             <div className="btc-address-box dark">
-              <span className="btc-address-text">{lightningAddress || 'No address available'}</span>
+              {(() => {
+                const addr = lightningAddress || ''
+                const display = addr.length > 20 ? `${addr.slice(0, 10)}...${addr.slice(-8)}` : addr || 'No address available'
+                return <span className="btc-address-text">{display}</span>
+              })()}
             </div>
           </div>
         </div>
@@ -4239,7 +4258,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
       {view === 'receive-rgb' && (
         <div className="receive-container receive-rgb-container">
           <div className="receive-header">
-            <button className="back-arrow" onClick={() => {
+            <button className="back-arrow" aria-label="Go back" onClick={() => {
               setView('receive')
               setRgbInvoiceStep('form')
               setRgbInvoice('')
@@ -4559,7 +4578,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
       {view === 'receive-lightning' && (
         <div className="receive-container receive-rgb-container">
           <div className="receive-header">
-            <button className="back-arrow" onClick={() => {
+            <button className="back-arrow" aria-label="Go back" onClick={() => {
               setView('receive')
               setLightningReceiveStep('form')
               setLightningReceiveInvoice('')
@@ -4745,7 +4764,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
       {view === 'add-assets' && (
         <div className="receive-container add-assets-container">
           <div className="receive-header">
-            <button className="back-arrow" onClick={() => setView('dashboard')}>←</button>
+            <button className="back-arrow" aria-label="Go back" onClick={() => setView('dashboard')}>←</button>
             <h2 className="receive-title">Add Assets</h2>
             <a
               href="https://photonbolt.xyz/asset/issue"
@@ -4807,7 +4826,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
       {view === 'settings' && (
         <div className="settings-container">
           <div className="password-header">
-            <button className="back-arrow" onClick={() => setView('dashboard')}>←</button>
+            <button className="back-arrow" aria-label="Go back" onClick={() => setView('dashboard')}>←</button>
             <h2 className="card-title">Admin</h2>
           </div>
 
@@ -5020,7 +5039,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
       {view === 'error-logs' && (
         <div className="settings-container">
           <div className="password-header">
-            <button className="back-arrow" onClick={() => setView('settings')}>←</button>
+            <button className="back-arrow" aria-label="Go back" onClick={() => setView('settings')}>←</button>
             <h2 className="card-title">Error Logs</h2>
             <button
               className="reset-link"
@@ -5085,7 +5104,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
       {view === 'user-settings' && (
         <div className="settings-container">
           <div className="password-header">
-            <button className="back-arrow" onClick={() => setView('dashboard')}>←</button>
+            <button className="back-arrow" aria-label="Go back" onClick={() => setView('dashboard')}>←</button>
             <h2 className="card-title">Settings</h2>
           </div>
 
@@ -5132,7 +5151,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
       {view === 'auto-lock-settings' && (
         <div className="settings-container">
           <div className="password-header">
-            <button className="back-arrow" onClick={() => setView('user-settings')}>←</button>
+            <button className="back-arrow" aria-label="Go back" onClick={() => setView('user-settings')}>←</button>
             <h2 className="card-title">Auto-lock Timer</h2>
           </div>
 
@@ -5176,7 +5195,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
       {view === 'network-settings' && (
         <div className="settings-container">
           <div className="password-header">
-            <button className="back-arrow" onClick={() => setView('dashboard')}>←</button>
+            <button className="back-arrow" aria-label="Go back" onClick={() => setView('dashboard')}>←</button>
             <h2 className="card-title">Network Settings</h2>
             <div className="connection-status">
               <span className={`status-dot status-${connectionStatus}`}></span>
@@ -5259,7 +5278,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
       {view === 'faucet' && (
         <div className="settings-container">
           <div className="password-header">
-            <button className="back-arrow" onClick={() => setView('dashboard')}>←</button>
+            <button className="back-arrow" aria-label="Go back" onClick={() => setView('dashboard')}>←</button>
             <h2 className="card-title">Faucet</h2>
           </div>
 
@@ -5327,7 +5346,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
       {view === 'swap' && (
         <div className="swap-container">
           <div className="swap-header">
-            <button className="swap-close" onClick={() => setView('receive')}>✕</button>
+            <button className="swap-close" aria-label="Close" onClick={() => setView('receive')}>✕</button>
             <h2 className="swap-title">Swap</h2>
           </div>
 
@@ -5469,9 +5488,11 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
         view === 'send' && (
           <div className="receive-container send-screen">
             <div className="receive-header">
-              <button className="back-arrow" onClick={() => setView('dashboard')}>←</button>
+              <button className="back-arrow" aria-label="Go back" onClick={() => setView('dashboard')}>←</button>
               <h2 className="receive-title">Send</h2>
             </div>
+
+            <StepIndicator current={0} />
 
             <div className="send-content send-entry-content">
 	              <div className="send-input-group send-surface-card">
@@ -5516,6 +5537,8 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               <button className="send-back" onClick={() => setView('send')}>←</button>
               <h2 className="send-title">{sendMode === 'rgb' ? `Send ${sendRgbAssetLabel}` : sendMode === 'lightning' ? `Instant Pay ${sendRgbAssetLabel}` : 'Send BTC'}</h2>
             </div>
+
+            <StepIndicator current={1} />
 
             <div className="send-content">
               <div className="send-surface-card">
@@ -5662,6 +5685,8 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               <h2 className="send-title">{sendMode === 'rgb' ? 'Send RGB Asset' : sendMode === 'lightning' ? 'Pay Instantly' : 'Sign Transaction'}</h2>
             </div>
 
+            <StepIndicator current={2} />
+
             <div className="send-content">
               <div className="send-confirm-box">
                 <div className="send-confirm-route">
@@ -5742,6 +5767,8 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               <h2 className="send-title">{sendMode === 'rgb' ? 'RGB Transfer Sent' : sendMode === 'lightning' ? 'Instant Payment Settled' : 'Sign Transaction'}</h2>
             </div>
 
+            <StepIndicator current={3} />
+
             <div className="send-content send-success-screen">
               <div className="send-success-icon">
                 <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
@@ -5820,10 +5847,10 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
       {
         showNetworkModal && (
           <div className="modal-overlay" onClick={() => setShowNetworkModal(false)}>
-            <div className="network-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="network-modal" role="dialog" aria-modal="true" aria-label="Switch Network" onClick={(e) => e.stopPropagation()}>
               <div className="network-modal-header">
                 <h3 className="network-modal-title">Switch Network</h3>
-                <button className="network-close-btn" onClick={() => setShowNetworkModal(false)}>×</button>
+                <button className="network-close-btn" aria-label="Close" onClick={() => setShowNetworkModal(false)}>×</button>
               </div>
               <div className="network-list">
                 {networks.map((network) => (
@@ -5850,9 +5877,10 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
 
       {showUnlockUtxoModal && selectedUnlockUtxo && (
         <div className="modal-overlay" onClick={closeUnlockUtxoModal}>
-          <div className="notice-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="notice-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
             <button
               className="network-close-btn"
+              aria-label="Close"
               onClick={closeUnlockUtxoModal}
               style={{ position: 'absolute', top: '0.75rem', right: '0.75rem' }}
             >
@@ -5897,7 +5925,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
         view === 'utxos' && (
           <div className="wallet-wrapper utxo-screen">
             <div className="wallet-header">
-              <button className="back-arrow" onClick={() => setView('dashboard')}>←</button>
+              <button className="back-arrow" aria-label="Go back" onClick={() => setView('dashboard')}>←</button>
               <h2 className="utxo-header-title">RGB UTXOs</h2>
               <button
                 onClick={() => {
@@ -6162,7 +6190,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
       {view === 'funding-address' && (
         <div className="wallet-wrapper">
           <div className="wallet-header">
-            <button className="back-arrow" onClick={() => setView('utxos')}>←</button>
+            <button className="back-arrow" aria-label="Go back" onClick={() => setView('utxos')}>←</button>
             <h2 className="utxo-header-title">Create UTXO Slot</h2>
           </div>
           <div className="wallet-scroll-container" style={{ padding: '1rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -6218,7 +6246,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
       {view === 'unlock-rgb-utxo' && selectedUnlockUtxo && (
         <div className="wallet-container" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
           <div className="wallet-header">
-            <button className="back-arrow" onClick={() => setView('utxos')}>←</button>
+            <button className="back-arrow" aria-label="Go back" onClick={() => setView('utxos')}>←</button>
             <h2 className="utxo-header-title">Unlock RGB UTXO</h2>
           </div>
 
@@ -6273,7 +6301,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
       {view === 'unlock-utxo-confirm' && selectedUnlockUtxo && (
         <div className="wallet-container" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
           <div className="wallet-header">
-            <button className="back-arrow" onClick={() => setView('unlock-rgb-utxo')}>←</button>
+            <button className="back-arrow" aria-label="Go back" onClick={() => setView('unlock-rgb-utxo')}>←</button>
             <h2 className="utxo-header-title">Sign Transaction</h2>
           </div>
 
@@ -6378,7 +6406,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
         view === 'create-rgb-utxo' && (
           <div className="wallet-container" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
             <div className="wallet-header">
-              <button className="back-arrow" onClick={() => setView('utxos')}>←</button>
+              <button className="back-arrow" aria-label="Go back" onClick={() => setView('utxos')}>←</button>
               <h2 className="utxo-header-title">Create RGB UTXO</h2>
             </div>
 
@@ -6466,7 +6494,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
         view === 'create-utxo-confirm' && (
           <div className="wallet-container utxo-confirm-shell">
             <div className="wallet-header">
-              <button className="back-arrow" onClick={() => setView('create-rgb-utxo')}>←</button>
+              <button className="back-arrow" aria-label="Go back" onClick={() => setView('create-rgb-utxo')}>←</button>
               <h2 className="utxo-header-title">Sign Transaction</h2>
             </div>
 
