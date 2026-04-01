@@ -499,8 +499,29 @@ function App() {
   }
 
   const getRegtestWalletKey = async () => {
-    const storedIdentity = await getStorageData(['principalId'])
-    const stableId = storedIdentity.principalId || principalId || walletAddress || coloredAddress || 'anonymous'
+    const storedIdentity = await getStorageData([
+      'currentAccountId',
+      'principalId',
+      'btcAddress_regtest',
+      'walletAddress_regtest',
+      'coloredAddress_regtest',
+      'btcAddress',
+      'walletAddress',
+      'coloredAddress',
+    ])
+    const stableId =
+      storedIdentity.currentAccountId ||
+      storedIdentity.btcAddress_regtest ||
+      storedIdentity.walletAddress_regtest ||
+      storedIdentity.coloredAddress_regtest ||
+      storedIdentity.principalId ||
+      storedIdentity.btcAddress ||
+      storedIdentity.walletAddress ||
+      storedIdentity.coloredAddress ||
+      principalId ||
+      walletAddress ||
+      coloredAddress ||
+      'anonymous'
     return `extension-${stableId}-regtest`
   }
 
@@ -4074,7 +4095,9 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
 
             {activeTab === 'assets' && (
               <div className="asset-list">
-                <div className="section-inline-note">Tracked assets for {(networks.find((n) => n.id === selectedNetwork)?.name || 'Bitcoin').replace('Bitcoin ', '')}.</div>
+                <div className="section-inline-note">
+                  Tracked assets for {(networks.find((n) => n.id === selectedNetwork)?.name || 'Bitcoin').replace('Bitcoin ', '')}. Pending in/out badges show unsettled RGB movement, not extra spendable balance.
+                </div>
                 {assets.length === 0 ? (
                   <div className="assets-empty">
                     <div className="empty-icon">🗃️</div>
@@ -4105,17 +4128,17 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                             </span>
                             {Number(asset.rgbOffchainInbound || 0) > 0 && (
                               <span className="asset-state-badge incoming">
-                                ↓ {asset.rgbOffchainInbound} {asset.unit} incoming
+                                ↓ {asset.rgbOffchainInbound} {asset.unit} pending in
                               </span>
                             )}
                             {Number(asset.rgbLockedUnconfirmed || 0) > 0 && (
                               <span className="asset-state-badge confirming">
-                                ⏳ {asset.rgbLockedUnconfirmed} {asset.unit} confirming…
+                                ⏳ {asset.rgbLockedUnconfirmed} {asset.unit} awaiting confirmation
                               </span>
                             )}
                             {Number(asset.rgbOffchainOutbound || 0) > 0 && (
                               <span className="asset-state-badge outbound">
-                                ↑ {asset.rgbOffchainOutbound} {asset.unit} sending
+                                ↑ {asset.rgbOffchainOutbound} {asset.unit} pending out
                               </span>
                             )}
                             {asset.rgbLockReason === 'Locked (Missing Secret)' && (
