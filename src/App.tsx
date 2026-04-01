@@ -5080,22 +5080,29 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               )}
 
               {issueAssetReadiness?.utxoFundingAddress && (
-                <p className="issue-asset-helper">
-                  Fund this address with at least {issueAssetReadiness.minimumFundingSats.toLocaleString()} sats before issuing:
-                  <br />
-                  <code>{issueAssetReadiness.utxoFundingAddress}</code>
-                </p>
+                <div className="issue-asset-callout">
+                  <p className="issue-asset-callout-title">Fund this address before issuing</p>
+                  <p className="issue-asset-helper">
+                    Send at least {issueAssetReadiness.minimumFundingSats.toLocaleString()} sats to this address, then wait for confirmation.
+                  </p>
+                  <code className="issue-asset-address">{issueAssetReadiness.utxoFundingAddress}</code>
+                </div>
               )}
 
-              <label className="issue-asset-checkbox">
-                <input
-                  type="checkbox"
-                  checked={issueAssetPublicRegistry}
-                  onChange={(e) => setIssueAssetPublicRegistry(e.target.checked)}
-                  disabled
-                />
-                <span>List issued asset in Asset Registry (required)</span>
-              </label>
+              <div className="issue-asset-callout issue-asset-callout-secondary">
+                <label className="issue-asset-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={issueAssetPublicRegistry}
+                    onChange={(e) => setIssueAssetPublicRegistry(e.target.checked)}
+                    disabled
+                  />
+                  <span>List issued asset in Asset Registry (required)</span>
+                </label>
+                <p className="issue-asset-helper">
+                  Every issued asset is published to the registry in this phase so it can be discovered and imported by other wallets.
+                </p>
+              </div>
             </div>
 
             {issueAssetError && <ErrorBanner message={issueAssetError} />}
@@ -5104,6 +5111,9 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               <div className="issue-asset-success">
                 <p className="success-text add-asset-status">
                   Issued {issueAssetSuccess.asset.ticker} successfully and added it to this wallet.
+                </p>
+                <p className="issue-asset-helper">
+                  The full initial supply was assigned to this wallet at issuance time.
                 </p>
                 <div className="issue-readiness-pill">
                   <span>Contract ID</span>
