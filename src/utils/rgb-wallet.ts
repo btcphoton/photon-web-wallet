@@ -146,6 +146,27 @@ export interface RgbRegistryAsset {
     schema_id?: string | null
 }
 
+export interface RgbIssueAssetReadinessResponse {
+    ok: true
+    walletKey: string
+    network: string
+    nodeAccountRef: string
+    utxoFundingAddress: string | null
+    confirmedFundingSats: number
+    confirmedUtxoCount: number
+    freeSlotCount: number
+    minimumFundingSats: number
+    isReady: boolean
+}
+
+export interface RgbIssueAssetResponse {
+    ok: true
+    walletKey: string
+    issuanceId: string
+    asset: RgbRegistryAsset
+    registryListed: boolean
+}
+
 export interface RgbChannelDashboardNode {
     nodeLabel: string
     accountRef: string
@@ -553,6 +574,79 @@ export async function fetchRegtestChannelDashboard(): Promise<RgbChannelDashboar
     }
 
     return data as RgbChannelDashboardResponse
+}
+
+export async function fetchRegtestIssueAssetReadiness(params: {
+    walletKey?: string
+}): Promise<RgbIssueAssetReadinessResponse> {
+    const apiBase = await getRegtestRgbApiBase()
+    const headers: Record<string, string> = {}
+    if (params.walletKey) {
+        headers['x-photon-wallet-key'] = params.walletKey
+    }
+
+    const response = await fetch(`${apiBase}/rgb/issue-asset-readiness`, {
+        method: 'GET',
+        headers,
+    })
+
+    if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(errorText || `RGB asset issuance readiness failed with status ${response.status}`)
+    }
+
+    const data = await response.json()
+    if (!data.ok) {
+        throw new Error(data.error || 'RGB asset issuance readiness failed')
+    }
+
+    return data as RgbIssueAssetReadinessResponse
+}
+
+export async function issueRegtestRgbAsset(params: {
+    walletKey?: string
+    name: string
+    ticker: string
+    precision: number
+    totalSupply: number
+    description?: string
+    publicRegistry?: boolean
+}): Promise<RgbIssueAssetResponse> {
+    const apiBase = await getRegtestRgbApiBase()
+    const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+    }
+
+    if (params.walletKey) {
+        headers['x-photon-wallet-key'] = params.walletKey
+    }
+
+    const response = await fetch(`${apiBase}/rgb/issue-asset`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+            schema: 'NIA',
+            name: params.name,
+            ticker: params.ticker,
+            precision: params.precision,
+            totalSupply: params.totalSupply,
+            description: params.description,
+            publicRegistry: params.publicRegistry ?? true,
+            network: 'regtest',
+        }),
+    })
+
+    if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(errorText || `RGB asset issuance failed with status ${response.status}`)
+    }
+
+    const data = await response.json()
+    if (!data.ok) {
+        throw new Error(data.error || 'RGB asset issuance failed')
+    }
+
+    return data as RgbIssueAssetResponse
 }
 
 export async function refreshRegtestRgbTransfers(params: {

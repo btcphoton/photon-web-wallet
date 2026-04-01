@@ -14,14 +14,14 @@ import type { Asset } from './utils/storage'
 import { BACKEND_PROFILES, DEFAULT_BACKEND_PROFILE_ID, getBackendProfileById, getDefaultElectrumServer, getDefaultRgbProxy, type BackendProfileId } from './utils/backend-config'
 import { QRCodeSVG } from 'qrcode.react'
 import { createRgbInvoice } from './utils/rgb-invoice'
-import { createRegtestLightningInvoice, createRegtestRgbInvoice, decodeRegtestLightningInvoice, decodeRegtestRgbInvoice, fetchRegtestChannelDashboard, fetchRegtestRgbBalance, fetchRegtestRgbRegistry, fetchRegtestRgbTransfers, mineRegtestBlocks, payRegtestLightningInvoice, refreshRegtestRgbTransfers, registerRgbInvoiceSecret, sendRegtestRgbInvoice, fetchUtxoFundingAddress, fetchUtxoSlots, redeemUtxoSlot, type UtxoSlot, type UtxoFundingAddressResponse } from './utils/rgb-wallet'
+import { createRegtestLightningInvoice, createRegtestRgbInvoice, decodeRegtestLightningInvoice, decodeRegtestRgbInvoice, fetchRegtestChannelDashboard, fetchRegtestIssueAssetReadiness, fetchRegtestRgbBalance, fetchRegtestRgbRegistry, fetchRegtestRgbTransfers, issueRegtestRgbAsset, mineRegtestBlocks, payRegtestLightningInvoice, refreshRegtestRgbTransfers, registerRgbInvoiceSecret, sendRegtestRgbInvoice, fetchUtxoFundingAddress, fetchUtxoSlots, redeemUtxoSlot, type RgbIssueAssetReadinessResponse, type RgbIssueAssetResponse, type UtxoSlot, type UtxoFundingAddressResponse } from './utils/rgb-wallet'
 import { LightningAnimation } from './components/LightningAnimation'
 import { StepIndicator } from './components/StepIndicator'
 import { ErrorBanner } from './components/ErrorBanner'
 import { fetchBtcActivities, type BitcoinActivity } from './utils/bitcoin-activities'
 
 
-type View = 'welcome' | 'unlock' | 'lock' | 'forgot' | 'create' | 'verify' | 'password' | 'restore' | 'dashboard' | 'receive' | 'receive-btc' | 'receive-rgb' | 'receive-lightning' | 'convert-lightning' | 'add-assets' | 'settings' | 'user-settings' | 'auto-lock-settings' | 'network-settings' | 'swap' | 'send' | 'send-amount' | 'send-confirm' | 'send-success' | 'utxos' | 'create-rgb-utxo' | 'create-utxo-confirm' | 'unlock-rgb-utxo' | 'unlock-utxo-confirm' | 'utxo-action-success' | 'faucet' | 'error-logs' | 'funding-address' | 'asset-detail'
+type View = 'welcome' | 'unlock' | 'lock' | 'forgot' | 'create' | 'verify' | 'password' | 'restore' | 'dashboard' | 'receive' | 'receive-btc' | 'receive-rgb' | 'receive-lightning' | 'convert-lightning' | 'add-assets' | 'issue-asset' | 'settings' | 'user-settings' | 'auto-lock-settings' | 'network-settings' | 'swap' | 'send' | 'send-amount' | 'send-confirm' | 'send-success' | 'utxos' | 'create-rgb-utxo' | 'create-utxo-confirm' | 'unlock-rgb-utxo' | 'unlock-utxo-confirm' | 'utxo-action-success' | 'faucet' | 'error-logs' | 'funding-address' | 'asset-detail'
 type Tab = 'assets' | 'activities'
 type Network = 'mainnet' | 'testnet3' | 'testnet4' | 'regtest'
 
@@ -243,6 +243,17 @@ function App() {
   const [addAssetError, setAddAssetError] = useState<string>('')
   const [addAssetSuccess, setAddAssetSuccess] = useState<string>('')
   const [importingAsset, setImportingAsset] = useState<boolean>(false)
+  const [issueAssetName, setIssueAssetName] = useState<string>('')
+  const [issueAssetTicker, setIssueAssetTicker] = useState<string>('')
+  const [issueAssetPrecision, setIssueAssetPrecision] = useState<string>('0')
+  const [issueAssetSupply, setIssueAssetSupply] = useState<string>('')
+  const [issueAssetDescription, setIssueAssetDescription] = useState<string>('')
+  const [issueAssetPublicRegistry, setIssueAssetPublicRegistry] = useState<boolean>(true)
+  const [issueAssetError, setIssueAssetError] = useState<string>('')
+  const [issueAssetSuccess, setIssueAssetSuccess] = useState<RgbIssueAssetResponse | null>(null)
+  const [issueAssetSubmitting, setIssueAssetSubmitting] = useState<boolean>(false)
+  const [issueAssetLoadingReadiness, setIssueAssetLoadingReadiness] = useState<boolean>(false)
+  const [issueAssetReadiness, setIssueAssetReadiness] = useState<RgbIssueAssetReadinessResponse | null>(null)
 
   // Balance states for two-address system
   const [btcBalance, setBtcBalance] = useState<string>('0.00000000') // Wallet balance (main)
@@ -677,6 +688,136 @@ function App() {
     )
 
     return updatedAssets
+  }
+
+  const persistAssetForCurrentNetwork = async (asset: Asset, contractId?: string | null) => {
+    const assetsKey = getNetworkAssetsKey(selectedNetwork)
+    const contractsKey = getNetworkContractsKey(selectedNetwork)
+    const storageResult = await getStorageData([assetsKey, contractsKey])
+
+    const storedAssetsRaw = storageResult[assetsKey]
+    const storedContractsRaw = storageResult[contractsKey]
+
+    const storedAssets = typeof storedAssetsRaw === 'string'
+      ? JSON.parse(storedAssetsRaw) as Asset[]
+      : []
+    const storedContracts = typeof storedContractsRaw === 'string'
+      ? JSON.parse(storedContractsRaw) as Record<string, string>
+      : {}
+
+    const alreadyImported = storedAssets.some((entry) => entry.id === asset.id)
+    const updatedAssets = alreadyImported
+      ? storedAssets.map((entry) => entry.id === asset.id ? { ...entry, ...asset } : entry)
+      : [...storedAssets, asset]
+
+    const updatedContracts = contractId
+      ? { ...storedContracts, [asset.id]: contractId }
+      : storedContracts
+
+    await setStorageData({
+      [assetsKey]: JSON.stringify(updatedAssets),
+      [contractsKey]: JSON.stringify(updatedContracts),
+    })
+
+    setAssets(updatedAssets)
+    return { alreadyImported, updatedAssets, updatedContracts }
+  }
+
+  const loadIssueAssetReadiness = async () => {
+    if (selectedNetwork !== 'regtest') {
+      setIssueAssetReadiness(null)
+      setIssueAssetError('RGB asset issuance is currently available only on regtest.')
+      return
+    }
+
+    setIssueAssetLoadingReadiness(true)
+    try {
+      const walletKey = await getRegtestWalletKey()
+      const readiness = await fetchRegtestIssueAssetReadiness({ walletKey })
+      setIssueAssetReadiness(readiness)
+      if (issueAssetError === 'Failed to load issuance readiness.') {
+        setIssueAssetError('')
+      }
+    } catch (error) {
+      console.error('Error loading RGB asset issuance readiness:', error)
+      setIssueAssetReadiness(null)
+      setIssueAssetError('Failed to load issuance readiness.')
+    } finally {
+      setIssueAssetLoadingReadiness(false)
+    }
+  }
+
+  const openIssueAssetView = () => {
+    setIssueAssetError('')
+    setIssueAssetSuccess(null)
+    setView('issue-asset')
+  }
+
+  const handleIssueAssetSubmit = async () => {
+    if (selectedNetwork !== 'regtest') {
+      setIssueAssetError('RGB asset issuance is currently available only on regtest.')
+      return
+    }
+
+    const normalizedName = issueAssetName.trim()
+    const normalizedTicker = issueAssetTicker.trim().toUpperCase()
+    const precisionValue = Math.trunc(Number(issueAssetPrecision))
+    const totalSupplyValue = Math.trunc(Number(issueAssetSupply))
+
+    if (!normalizedName) {
+      setIssueAssetError('Asset name is required.')
+      return
+    }
+    if (!/^[A-Z0-9]{3,8}$/.test(normalizedTicker)) {
+      setIssueAssetError('Ticker must be 3-8 uppercase letters or numbers.')
+      return
+    }
+    if (!Number.isInteger(precisionValue) || precisionValue < 0 || precisionValue > 18) {
+      setIssueAssetError('Precision must be an integer between 0 and 18.')
+      return
+    }
+    if (!Number.isInteger(totalSupplyValue) || totalSupplyValue <= 0) {
+      setIssueAssetError('Total supply must be a positive integer.')
+      return
+    }
+
+    setIssueAssetSubmitting(true)
+    setIssueAssetError('')
+    setIssueAssetSuccess(null)
+
+    try {
+      const walletKey = await getRegtestWalletKey()
+      const result = await issueRegtestRgbAsset({
+        walletKey,
+        name: normalizedName,
+        ticker: normalizedTicker,
+        precision: precisionValue,
+        totalSupply: totalSupplyValue,
+        description: issueAssetDescription.trim(),
+        publicRegistry: issueAssetPublicRegistry,
+      })
+
+      await persistAssetForCurrentNetwork({
+        id: buildAssetIdFromTicker(result.asset.ticker),
+        name: result.asset.token_name,
+        amount: String(result.asset.total_supply),
+        unit: result.asset.ticker,
+        color: result.asset.ticker.toUpperCase() === 'PHO' ? '#38bdf8' : '#f8fafc',
+      }, result.asset.contract_id)
+
+      setIssueAssetSuccess(result)
+      setIssueAssetName('')
+      setIssueAssetTicker('')
+      setIssueAssetPrecision('0')
+      setIssueAssetSupply('')
+      setIssueAssetDescription('')
+      await loadIssueAssetReadiness()
+    } catch (error: any) {
+      console.error('RGB asset issuance failed:', error)
+      setIssueAssetError(error.message || 'Failed to issue RGB asset.')
+    } finally {
+      setIssueAssetSubmitting(false)
+    }
   }
 
   const handleImportAsset = async () => {
@@ -1488,6 +1629,12 @@ function App() {
       setPendingBalance(0)
     }
   }, [activities])
+
+  useEffect(() => {
+    if (view === 'issue-asset') {
+      loadIssueAssetReadiness()
+    }
+  }, [view, selectedNetwork])
 
 
   // Handle network switch
@@ -4772,14 +4919,13 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
           <div className="receive-header">
             <button className="back-arrow" aria-label="Go back" onClick={() => setView('dashboard')}>←</button>
             <h2 className="receive-title">Add Assets</h2>
-            <a
-              href="https://photonbolt.xyz/asset/issue"
-              target="_blank"
-              rel="noopener noreferrer"
+            <button
+              type="button"
               className="issue-assets-link"
+              onClick={openIssueAssetView}
             >
               Issue assets
-            </a>
+            </button>
           </div>
 
           <div className="add-assets-content">
@@ -4822,6 +4968,175 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
             onClick={handleImportAsset}
           >
             {importingAsset ? 'Importing...' : 'Import'}
+          </button>
+        </div>
+      )}
+
+      {/* Issue Asset Screen */}
+      {view === 'issue-asset' && (
+        <div className="receive-container add-assets-container">
+          <div className="receive-header">
+            <button className="back-arrow" aria-label="Go back" onClick={() => setView('add-assets')}>←</button>
+            <h2 className="receive-title">Issue Asset</h2>
+            <button
+              type="button"
+              className="issue-assets-link"
+              onClick={loadIssueAssetReadiness}
+              disabled={issueAssetLoadingReadiness}
+            >
+              {issueAssetLoadingReadiness ? 'Checking…' : 'Refresh'}
+            </button>
+          </div>
+
+          <div className="add-assets-content issue-asset-content">
+            <div className="issue-asset-grid">
+              <label className="issue-asset-field">
+                <span className="issue-asset-label">Asset name</span>
+                <input
+                  type="text"
+                  className="token-input"
+                  placeholder="Photon Token"
+                  value={issueAssetName}
+                  onChange={(e) => setIssueAssetName(e.target.value)}
+                />
+              </label>
+
+              <label className="issue-asset-field">
+                <span className="issue-asset-label">Ticker</span>
+                <input
+                  type="text"
+                  className="token-input"
+                  placeholder="PHO"
+                  value={issueAssetTicker}
+                  onChange={(e) => setIssueAssetTicker(e.target.value.toUpperCase())}
+                  maxLength={8}
+                />
+              </label>
+
+              <label className="issue-asset-field">
+                <span className="issue-asset-label">Precision</span>
+                <input
+                  type="number"
+                  className="token-input"
+                  min={0}
+                  max={18}
+                  value={issueAssetPrecision}
+                  onChange={(e) => setIssueAssetPrecision(e.target.value)}
+                />
+              </label>
+
+              <label className="issue-asset-field">
+                <span className="issue-asset-label">Total supply</span>
+                <input
+                  type="number"
+                  className="token-input"
+                  min={1}
+                  step={1}
+                  placeholder="1000000"
+                  value={issueAssetSupply}
+                  onChange={(e) => setIssueAssetSupply(e.target.value)}
+                />
+              </label>
+            </div>
+
+            <label className="issue-asset-field">
+              <span className="issue-asset-label">Description</span>
+              <textarea
+                className="token-input issue-asset-textarea"
+                placeholder="Short description for the registry"
+                value={issueAssetDescription}
+                onChange={(e) => setIssueAssetDescription(e.target.value)}
+                rows={3}
+              />
+            </label>
+
+            <div className="issue-asset-readiness">
+              <div className="issue-asset-readiness-header">
+                <strong>Funding readiness</strong>
+                <span>{selectedNetwork === 'regtest' ? 'Regtest only' : 'Unsupported network'}</span>
+              </div>
+
+              {issueAssetReadiness ? (
+                <div className="issue-asset-readiness-grid">
+                  <div className="issue-readiness-pill">
+                    <span>Assigned node</span>
+                    <strong>{issueAssetReadiness.nodeAccountRef}</strong>
+                  </div>
+                  <div className="issue-readiness-pill">
+                    <span>Funding sats</span>
+                    <strong>{issueAssetReadiness.confirmedFundingSats.toLocaleString()}</strong>
+                  </div>
+                  <div className="issue-readiness-pill">
+                    <span>Confirmed UTXOs</span>
+                    <strong>{issueAssetReadiness.confirmedUtxoCount}</strong>
+                  </div>
+                  <div className="issue-readiness-pill">
+                    <span>FREE slots</span>
+                    <strong>{issueAssetReadiness.freeSlotCount}</strong>
+                  </div>
+                </div>
+              ) : (
+                <p className="issue-asset-helper">Loading issuance funding status from the backend.</p>
+              )}
+
+              {issueAssetReadiness?.utxoFundingAddress && (
+                <p className="issue-asset-helper">
+                  Fund this address with at least {issueAssetReadiness.minimumFundingSats.toLocaleString()} sats before issuing:
+                  <br />
+                  <code>{issueAssetReadiness.utxoFundingAddress}</code>
+                </p>
+              )}
+
+              <label className="issue-asset-checkbox">
+                <input
+                  type="checkbox"
+                  checked={issueAssetPublicRegistry}
+                  onChange={(e) => setIssueAssetPublicRegistry(e.target.checked)}
+                  disabled
+                />
+                <span>List issued asset in Asset Registry (required)</span>
+              </label>
+            </div>
+
+            {issueAssetError && <ErrorBanner message={issueAssetError} />}
+
+            {issueAssetSuccess && (
+              <div className="issue-asset-success">
+                <p className="success-text add-asset-status">
+                  Issued {issueAssetSuccess.asset.ticker} successfully and added it to this wallet.
+                </p>
+                <div className="issue-readiness-pill">
+                  <span>Contract ID</span>
+                  <strong className="issue-contract-id">{issueAssetSuccess.asset.contract_id}</strong>
+                </div>
+                <div className="asset-registry-row">
+                  <span className="registry-text">View the issued asset in the public registry</span>
+                  <a
+                    href="https://faucet.photonbolt.xyz/asset-registry.html"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="registry-link"
+                  >
+                    Asset Registry ↗
+                  </a>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <button
+            className="btn-secondary import-btn"
+            disabled={
+              issueAssetSubmitting ||
+              selectedNetwork !== 'regtest' ||
+              !issueAssetReadiness?.isReady ||
+              !issueAssetName.trim() ||
+              !issueAssetTicker.trim() ||
+              !issueAssetSupply.trim()
+            }
+            onClick={handleIssueAssetSubmit}
+          >
+            {issueAssetSubmitting ? 'Issuing...' : 'Issue RGB Asset'}
           </button>
         </div>
       )}

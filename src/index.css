@@ -3557,10 +3557,20 @@ textarea:focus {
   font-size: 0.9rem;
   font-weight: 500;
   white-space: nowrap;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
 }
 
 .issue-assets-link:hover {
   text-decoration: underline;
+}
+
+.issue-assets-link:disabled {
+  opacity: 0.6;
+  cursor: default;
+  text-decoration: none;
 }
 
 .token-input {
@@ -3621,6 +3631,120 @@ textarea:focus {
   background: linear-gradient(135deg, #f7931a, #e67e00);
   color: #0f172a;
   box-shadow: 0 6px 16px rgba(247, 147, 26, 0.35);
+}
+
+.issue-asset-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.issue-asset-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.issue-asset-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.issue-asset-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #374151;
+}
+
+.issue-asset-textarea {
+  resize: vertical;
+  min-height: 92px;
+}
+
+.issue-asset-readiness {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 16px;
+  padding: 1rem;
+  background: rgba(247, 147, 26, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.issue-asset-readiness-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: center;
+  font-size: 0.85rem;
+  color: #6b7280;
+}
+
+.issue-asset-readiness-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.issue-readiness-pill {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  border-radius: 12px;
+  padding: 0.85rem 0.9rem;
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.issue-readiness-pill span {
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+
+.issue-readiness-pill strong {
+  font-size: 0.92rem;
+  color: #111827;
+  word-break: break-word;
+}
+
+.issue-contract-id {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.8rem;
+}
+
+.issue-asset-helper {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: #4b5563;
+}
+
+.issue-asset-helper code {
+  display: inline-block;
+  margin-top: 0.35rem;
+  word-break: break-all;
+}
+
+.issue-asset-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-size: 0.85rem;
+  color: #374151;
+}
+
+.issue-asset-success {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+@media (max-width: 640px) {
+  .issue-asset-grid,
+  .issue-asset-readiness-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .import-btn:not(:disabled):hover {
