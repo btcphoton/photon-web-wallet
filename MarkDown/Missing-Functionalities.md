@@ -258,6 +258,38 @@ Missing:
 Missing:
 
 1. Delivery status
+
+### 10. Same-node wallets path
+
+Missing:
+
+1. A first-class transfer path for wallet-to-wallet sends where both wallets resolve to the same
+   RGB Lightning node account ref
+2. Backend logic that detects "same sender node" before calling `/sendpayment`
+3. A transfer model that records same-node sends as internal wallet transfers rather than as normal
+   Lightning payments
+4. UI route messaging that distinguishes true Lightning from internal same-node settlement
+
+Recommended plan:
+
+1. Keep the current self-transfer rejection for real Lightning.
+2. Before `pay-lightning` calls `/sendpayment`, resolve the receiver wallet for the stored invoice.
+3. Compare sender `rgb_account_ref` and receiver `rgb_account_ref`.
+4. If the refs differ, continue with normal Lightning flow.
+5. If the refs match, switch to a backend-managed same-node wallets flow.
+6. In that same-node flow:
+   - validate invoice ownership and status
+   - validate sender balance
+   - create linked outgoing and incoming `rgb_transfers` rows
+   - record `transfer_events`
+   - derive updated sender and receiver balances
+   - expose the result back to the wallet as `route: internal_same_node`
+
+Why this is preferred over a middle node:
+
+1. It avoids self-pay rejection without introducing a custodial relay hop.
+2. It avoids a two-leg "payment A succeeds but payment B fails" failure mode.
+3. It fits the current backend-centric architecture better than synthetic relay forwarding.
 2. Validation status
 3. Receiver confirmation
 4. Proof completion state

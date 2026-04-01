@@ -1404,10 +1404,13 @@ function App() {
                     transfer.direction === 'incoming' ||
                     transfer.kind?.startsWith('Receive') ||
                     transfer.kind === 'LightningReceive'
+                  const isInternalSameNode = transfer.metadata?.route === 'internal_same_node'
                   const isLightning =
+                    !isInternalSameNode && (
                     transfer.kind?.startsWith('Lightning') ||
                     transfer.metadata?.route === 'lightning' ||
                     transfer.txid === null
+                    )
                   const paymentHash =
                     transfer.metadata && typeof transfer.metadata.payment_hash === 'string'
                       ? transfer.metadata.payment_hash
@@ -1424,9 +1427,17 @@ function App() {
                       : 'Pending',
                     timestamp,
                     unit: assetMeta.unit,
-                    route: isLightning ? 'lightning' : 'onchain',
-                    settlementLabel: isLightning ? 'Instant Settlement' : 'On-Chain Settlement',
-                    note: isLightning
+                    route: isInternalSameNode ? 'internal' : isLightning ? 'lightning' : 'onchain',
+                    settlementLabel: isInternalSameNode
+                      ? 'Same-Node Transfer'
+                      : isLightning
+                        ? 'Instant Settlement'
+                        : 'On-Chain Settlement',
+                    note: isInternalSameNode
+                      ? `${isReceive ? 'Received' : 'Sent'} on same node${paymentHash
+                        ? ` • ${paymentHash.slice(0, 8)}...`
+                        : ''}`
+                      : isLightning
                       ? `${isReceive ? 'Received' : 'Sent'} via Lightning${paymentHash
                         ? ` • ${paymentHash.slice(0, 8)}...`
                         : ''}`
@@ -4033,9 +4044,11 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                               }}
                             >
                               <div className="activity-left">
-                                <div className={`activity-icon-circle ${activity.route === 'lightning' ? 'lightning' : activity.type.toLowerCase()}`}>
+                                <div className={`activity-icon-circle ${activity.route === 'lightning' || activity.route === 'internal' ? 'lightning' : activity.type.toLowerCase()}`}>
                                   {activity.route === 'lightning' ? (
                                     <span className="activity-lightning-icon">⚡</span>
+                                  ) : activity.route === 'internal' ? (
+                                    <span className="activity-lightning-icon">⇄</span>
                                   ) : activity.type === 'Receive' ? (
                                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M19 12l-7 7-7-7" /></svg>
                                   ) : (
@@ -4044,11 +4057,15 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                                 </div>
                                 <div className="activity-info">
                                   <span className="activity-type">
-                                    {activity.route === 'lightning' ? `${activity.type} Instantly` : activity.type}
+                                    {activity.route === 'lightning'
+                                      ? `${activity.type} Instantly`
+                                      : activity.route === 'internal'
+                                        ? `${activity.type} Same Node`
+                                        : activity.type}
                                   </span>
                                   <div className="activity-tx-row">
                                     <span className="activity-txid">
-                                      {activity.route === 'lightning'
+                                      {activity.route === 'lightning' || activity.route === 'internal'
                                         ? (activity.settlementLabel || 'Instant Settlement')
                                         : `tx: ${shortTxid}`}
                                     </span>

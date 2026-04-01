@@ -114,6 +114,99 @@ After Lightning send success, the wallet schedules a delayed refresh:
 
 The Lightning balance shown to the wallet comes from the backend response and later refresh calls.
 
+## Same-Node Wallets
+
+If the sender wallet and receiver wallet are both assigned to the same RGB Lightning node account
+ref, the payment should not use the normal Lightning path.
+
+Why:
+
+1. The receiver invoice is created on that node.
+2. The sender payment is also attempted from that same node.
+3. The backend currently detects that the decoded invoice `payee_pubkey` matches the sender node
+   pubkey and rejects the payment as a self-transfer.
+
+Recommended design:
+
+1. Keep true Lightning only for wallet pairs that resolve to different node account refs.
+2. Add a dedicated same-node wallet transfer path for wallet pairs that resolve to the same node
+   account ref.
+3. Treat that path as a backend-managed internal transfer, not as an RGB Lightning payment.
+
+### Same-Node Wallet Transfer Plan
+
+1. Invoice creation:
+   - The receiver still calls `POST /api/rgb/ln-invoice`.
+   - The backend stores the invoice together with the receiver wallet id and resolved node account
+     ref.
+   - The invoice remains the receiver-facing request object, but it is marked as eligible for
+     same-node resolution if the payer later resolves to the same node.
+
+2. Preflight on send:
+   - The sender still pastes the invoice into the send form.
+   - The backend decodes the invoice using the sender wallet context.
+   - The backend resolves:
+     - sender wallet id
+     - sender account ref
+     - receiver wallet id for the stored invoice
+     - receiver account ref
+   - If sender and receiver account refs are different, continue with normal
+     `POST /api/rgb/pay-lightning`.
+   - If sender and receiver account refs are the same, switch to the same-node wallet transfer
+     flow.
+
+3. Validation rules:
+   - The invoice must exist in backend storage.
+   - The invoice must still be open and unused.
+   - The asset id and asset amount must match the decoded invoice.
+   - Sender and receiver wallet ids must be different.
+   - Both wallets must resolve to the same RGB node account ref.
+   - Sender wallet must have sufficient spendable or off-chain outbound balance for that asset.
+
+4. Execution:
+   - Do not call `/sendpayment`.
+   - Create an outgoing transfer row for the sender wallet.
+   - Create an incoming transfer row for the receiver wallet.
+   - Link both rows through a shared correlation id such as `same_node_transfer_id`.
+   - Mark metadata with:
+     - `route: internal_same_node`
+     - `transfer_kind: SameNodeWalletTransfer`
+     - `node_account_ref`
+     - `invoice`
+     - `payment_hash` if available from the decoded invoice, otherwise `null`
+   - Record append-only `transfer_events` rows for creation, acceptance, settlement, and failure.
+
+5. Balance reconciliation:
+   - Recompute sender and receiver wallet-scoped asset balances immediately after creating the
+     linked transfer rows.
+   - Preserve the existing refresh pipeline so later node sync still reconciles backend state
+     against node state.
+   - If node runtime data later disagrees with the internal transfer rows, surface that as a
+     reconciliation error rather than silently mutating history.
+
+6. UI behavior:
+   - Show a distinct route label such as `Same-node transfer`.
+   - Do not tell the user that the payment used Lightning.
+   - Show the transfer in activity history as instant but internal.
+
+### Backend Changes
+
+1. Add an invoice lookup helper that resolves the stored invoice owner wallet and account ref.
+2. Add a preflight branch in the send flow before calling `/sendpayment`.
+3. Add a new execution helper such as `executeSameNodeWalletTransfer(...)`.
+4. Add a dedicated transfer kind and route metadata.
+5. Add idempotency protection so replaying the same invoice does not create duplicate internal
+   transfers.
+
+### Database Changes
+
+1. Extend `rgb_invoices` or related invoice storage so Lightning invoices can be mapped back to the
+   receiver wallet that created them.
+2. Add a correlation column on `rgb_transfers`, for example `same_node_transfer_id`.
+3. Add settlement and audit events in `transfer_events`.
+4. Optionally add a dedicated `same_node_transfers` table if the team wants an explicit workflow
+   object instead of only linked transfer rows.
+
 ## Mermaid Diagram
 
 ```mermaid

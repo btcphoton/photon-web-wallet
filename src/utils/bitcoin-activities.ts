@@ -12,7 +12,7 @@ export interface BitcoinActivity {
     blockHeight?: number;
     timestamp?: number;
     unit?: string;
-    route?: 'onchain' | 'lightning';
+    route?: 'onchain' | 'lightning' | 'internal';
     settlementLabel?: string;
     note?: string;
 }
