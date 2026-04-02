@@ -24,11 +24,31 @@ export const BACKEND_PROFILES: BackendProfileDefinition[] = [
     },
 ];
 
-const PUBLIC_ELECTRUM_DEFAULT = 'ssl://electrum.iriswallet.com:50013';
-const PUBLIC_RGB_PROXY_DEFAULT = 'http://89.117.52.115:3000/json-rpc';
-const PHOTON_REGTEST_ELECTRUM = 'ssl://dev-index.photonbolt.xyz:50002';
-const PHOTON_REGTEST_RGB_PROXY = 'https://dev-proxy.photonbolt.xyz/json-rpc';
-export const PHOTON_REGTEST_API_BASE = 'https://faucet.photonbolt.xyz/api';
+function envString(value: string | undefined, fallback: string): string {
+    const trimmed = value?.trim();
+    return trimmed ? trimmed : fallback;
+}
+
+export const PUBLIC_ELECTRUM_DEFAULT = envString(
+    import.meta.env.VITE_PUBLIC_ELECTRUM_DEFAULT,
+    'ssl://electrum.iriswallet.com:50013'
+);
+export const PUBLIC_RGB_PROXY_DEFAULT = envString(
+    import.meta.env.VITE_PUBLIC_RGB_PROXY_DEFAULT,
+    'http://89.117.52.115:3000/json-rpc'
+);
+export const PHOTON_REGTEST_ELECTRUM = envString(
+    import.meta.env.VITE_PHOTON_REGTEST_ELECTRUM,
+    'ssl://dev-index.photonbolt.xyz:50002'
+);
+export const PHOTON_REGTEST_RGB_PROXY = envString(
+    import.meta.env.VITE_PHOTON_REGTEST_RGB_PROXY,
+    'https://dev-proxy.photonbolt.xyz/json-rpc'
+);
+export const PHOTON_REGTEST_API_BASE = envString(
+    import.meta.env.VITE_PHOTON_REGTEST_API_BASE,
+    'https://faucet.photonbolt.xyz/api'
+);
 
 export const getDefaultElectrumServer = (
     network: WalletNetwork,

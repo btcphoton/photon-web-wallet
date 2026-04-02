@@ -121,3 +121,28 @@ npm run build
 
 - Tracked example: `public/photonlabs.example.txt`
 - Local-only override: `public/photonlabs.txt`
+
+## Endpoint Configuration
+
+The wallet separates public-network defaults from Photon regtest defaults through Vite environment variables.
+
+Copy `.env.example` to `.env` when you need to override endpoint defaults for a build:
+
+```bash
+cp .env.example .env
+```
+
+Available variables:
+
+- `VITE_PUBLIC_ELECTRUM_DEFAULT`
+- `VITE_PUBLIC_RGB_PROXY_DEFAULT`
+- `VITE_PHOTON_REGTEST_ELECTRUM`
+- `VITE_PHOTON_REGTEST_RGB_PROXY`
+- `VITE_PHOTON_REGTEST_API_BASE`
+
+These values control:
+
+- public Electrum and RGB proxy defaults for non-regtest networks
+- Photon regtest Electrum, RGB proxy, and faucet API endpoints for the `photon-dev-regtest` profile
+
+If `.env` is not present, the current built-in defaults remain unchanged.
