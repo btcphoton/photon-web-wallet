@@ -1931,6 +1931,19 @@ function App() {
 
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false)
 
+  const selectableRgbAssets = assets.filter((asset) => asset.id !== 'bitcoin' && asset.id !== 'lightning-btc')
+
+  useEffect(() => {
+    if (view !== 'receive-lightning') {
+      return
+    }
+
+    const selectedAssetStillExists = selectableRgbAssets.some((asset) => asset.id === lightningReceiveAsset)
+    if (!selectedAssetStillExists) {
+      setLightningReceiveAsset(selectableRgbAssets[0]?.id || '')
+    }
+  }, [view, selectableRgbAssets, lightningReceiveAsset])
+
   const handleRefreshBalance = async () => {
     if (!mnemonic || !walletAddress || isRefreshing) return
     setIsRefreshing(true)
@@ -4342,6 +4355,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               setLightningReceiveStep('form')
               setLightningReceiveInvoice('')
               setLightningReceiveError('')
+              setLightningReceiveAsset(selectableRgbAssets[0]?.id || '')
             }}>
               <span className="receive-option-icon lightning">⚡</span>
               <span className="receive-option-copy">
@@ -4825,13 +4839,17 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                       className="rgb-select"
                       value={lightningReceiveAsset}
                       onChange={(e) => setLightningReceiveAsset(e.target.value)}
+                      disabled={selectableRgbAssets.length === 0}
                     >
-                      {assets.filter(a => a.id !== 'bitcoin' && a.id !== 'lightning-btc').map((asset) => (
+                      {selectableRgbAssets.map((asset) => (
                         <option key={asset.id} value={asset.id}>{asset.name}</option>
                       ))}
                     </select>
                     <span className="rgb-select-arrow">▾</span>
                   </div>
+                  {selectableRgbAssets.length === 0 && (
+                    <p className="rgb-helper-text">Import an RGB asset into this wallet before generating a Lightning invoice.</p>
+                  )}
                 </div>
 
                 <div className="rgb-field">
@@ -4871,9 +4889,13 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                       throw new Error('Instant PHO receive is currently enabled for regtest only')
                     }
 
-                    const selectedAsset = assets.find((asset) => asset.id === lightningReceiveAsset)
+                    const selectedAsset = selectableRgbAssets.find((asset) => asset.id === lightningReceiveAsset)
                     if (!selectedAsset) {
-                      throw new Error('Select an RGB asset before generating a Lightning invoice.')
+                      throw new Error(
+                        selectableRgbAssets.length === 0
+                          ? 'Import an RGB asset into this wallet before generating a Lightning invoice.'
+                          : 'Select an RGB asset before generating a Lightning invoice.'
+                      )
                     }
 
                     const invoiceAmount = Math.floor(parseFloat(lightningReceiveAmount) || 0)
