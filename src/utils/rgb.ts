@@ -1,4 +1,5 @@
 import { getStorageData } from './storage';
+import { PUBLIC_RGB_PROXY_DEFAULT } from './backend-config';
 
 /**
  * RGB Allocation - represents an RGB asset allocation on a UTXO
@@ -73,7 +74,7 @@ export const queryRgbProxy = async <T = any>(
     try {
         // Get RGB proxy URL from storage
         const storage = await getStorageData(['rgbProxy']);
-        const rgbProxyUrl = storage.rgbProxy || 'http://89.117.52.115:3000/json-rpc';
+        const rgbProxyUrl = storage.rgbProxy || PUBLIC_RGB_PROXY_DEFAULT;
 
         // Construct JSON-RPC 2.0 request
         const request: RgbProxyRequest = {

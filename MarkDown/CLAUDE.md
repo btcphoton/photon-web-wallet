@@ -86,7 +86,7 @@ RGB colored assets are bound to UTXOs in the UTXOHolder account. The wallet enfo
 - **Blockstream** — UTXO fetching, transaction broadcast
 - **Mempool.space** — Transaction history, fee estimation
 - **Electrum** (`ssl://electrum.iriswallet.com:50013`) — Configurable network connectivity
-- **RGB Proxy** (`http://89.117.52.115:3000/json-rpc`) — RGB asset management
+- **RGB Proxy** (`https://dev-proxy.photonbolt.xyz/json-rpc`) — RGB asset management
 - **ICP** (`https://ic0.app`) — ckBTC, canister interactions
 - **CoinGecko** — BTC/USD price
 

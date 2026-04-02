@@ -11,7 +11,7 @@ import { convertLBTCtoBTC } from './utils/ckbtc-withdrawal'
 import { getErrorLogs, clearErrorLogs, type ErrorLog } from './utils/error-logger'
 import { getStorageData, setStorageData, removeStorageData, getNetworkAddressKey, getNetworkAssetsKey, getNetworkContractsKey, testnet3DefaultAssets, mainnetDefaultAssets, type StorageData } from './utils/storage'
 import type { Asset } from './utils/storage'
-import { BACKEND_PROFILES, DEFAULT_BACKEND_PROFILE_ID, getBackendProfileById, getDefaultElectrumServer, getDefaultRgbProxy, type BackendProfileId } from './utils/backend-config'
+import { BACKEND_PROFILES, DEFAULT_BACKEND_PROFILE_ID, PUBLIC_RGB_PROXY_DEFAULT, getBackendProfileById, getDefaultElectrumServer, getDefaultRgbProxy, type BackendProfileId } from './utils/backend-config'
 import { QRCodeSVG } from 'qrcode.react'
 import { createRgbInvoice } from './utils/rgb-invoice'
 import { createRegtestLightningInvoice, createRegtestRgbInvoice, decodeRegtestLightningInvoice, decodeRegtestRgbInvoice, fetchRegtestChannelDashboard, fetchRegtestIssueAssetReadiness, fetchRegtestRgbBalance, fetchRegtestRgbRegistry, fetchRegtestRgbTransfers, issueRegtestRgbAsset, mineRegtestBlocks, payRegtestLightningInvoice, refreshRegtestRgbTransfers, registerRgbInvoiceSecret, sendRegtestRgbInvoice, fetchUtxoFundingAddress, fetchUtxoSlots, redeemUtxoSlot, type RgbIssueAssetReadinessResponse, type RgbIssueAssetResponse, type UtxoSlot, type UtxoFundingAddressResponse } from './utils/rgb-wallet'
@@ -301,7 +301,7 @@ function App() {
   // Network settings states with defaults
   const [backendProfileId, setBackendProfileId] = useState<BackendProfileId>(DEFAULT_BACKEND_PROFILE_ID)
   const [electrumServer, setElectrumServer] = useState<string>('ssl://electrum.iriswallet.com:50013')
-  const [rgbProxy, setRgbProxy] = useState<string>('http://89.117.52.115:3000/json-rpc')
+  const [rgbProxy, setRgbProxy] = useState<string>(PUBLIC_RGB_PROXY_DEFAULT)
   const [networkSettingsSaved, setNetworkSettingsSaved] = useState<boolean>(false)
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting')
 
@@ -3501,7 +3501,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
 
         // Get RGB proxy URL from storage or use default
         const storageData = await getStorageData(['rgbProxy'])
-        const rgbProxyUrl = (storageData.rgbProxy as string) || 'http://89.117.52.115:3000/json-rpc'
+        const rgbProxyUrl = (storageData.rgbProxy as string) || PUBLIC_RGB_PROXY_DEFAULT
 
         const syncedAuxiliaryAddresses =
           addressGenerationMethod === 'bitcoin'
@@ -5993,11 +5993,11 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               <input
                 type="text"
                 className="settings-input"
-                placeholder="e.g., http://89.117.52.115:3000/json-rpc"
+                placeholder="e.g., https://dev-proxy.photonbolt.xyz/json-rpc"
                 value={rgbProxy}
                 onChange={(e) => setRgbProxy(e.target.value)}
               />
-              <span className="settings-hint">Enter RGB proxy URL (e.g., http://89.117.52.115:3000/json-rpc)</span>
+              <span className="settings-hint">Enter RGB proxy URL (e.g., https://dev-proxy.photonbolt.xyz/json-rpc)</span>
             </div>
 
             {error && <ErrorBanner message={error} />}

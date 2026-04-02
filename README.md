@@ -147,6 +147,10 @@ These values control:
 
 If `.env` is not present, the current built-in defaults remain unchanged.
 
+The real `.env` file is local-only and should not be committed. The tracked template is:
+
+- `.env.example`
+
 ## Shared Regtest Script Defaults
 
 Regtest bootstrap scripts now read shared constants from:
@@ -170,3 +174,27 @@ bash scripts/add-shared-rgb-node.sh
 ```
 
 Use this shared file when regtest bootstrap values change so scripts and developer docs do not drift independently.
+
+## Hard-Coded Value Audit
+
+Use the repo audit helper when checking for embedded secrets or stale environment-specific literals:
+
+```bash
+bash scripts/audit-hardcoded-values.sh
+```
+
+You can also supply a narrower pattern:
+
+```bash
+bash scripts/audit-hardcoded-values.sh 'api[_-]?key|password|mnemonic'
+```
+
+The audit intentionally skips noisy/generated paths such as:
+
+- `dist/`
+- `node_modules/`
+- `logs/`
+- local `.env` files
+- local `public/photonlabs.txt`
+
+That keeps the scan focused on tracked source files instead of generated or local-only artifacts.

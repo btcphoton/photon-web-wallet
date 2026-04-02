@@ -11,7 +11,11 @@ node_modules
 dist
 dist-ssr
 *.local
+.env
+.env.*
+!.env.example
 public/photonlabs.txt
+.audit-report.txt
 
 # Editor directories and files
 .vscode/*

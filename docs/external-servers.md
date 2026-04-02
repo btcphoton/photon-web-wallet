@@ -17,8 +17,8 @@ The Photon Labs Wallet application interacts with several external servers and s
 
 ## 2. RGB Asset Management
 *   **RGB Proxy**:
-    *   **Default**: `http://89.117.52.115:3000/json-rpc`
-    *   **Alternative**: `https://proxy.iriswallet.com/0.2/json-rpc`
+    *   **Default**: `https://dev-proxy.photonbolt.xyz/json-rpc`
+    *   **Alternative**: Configurable in the wallet settings and build-time endpoint env vars
     *   **Purpose**: Essential for RGB asset identification, issuance, and managing the "Isolation Wall" between regular Bitcoin and Colored (RGB) UTXOs.
 
 ## 3. Backend & Smart Contract Infrastructure
