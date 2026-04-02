@@ -60,6 +60,40 @@
 }</code></pre>
       </div>
 
+      <h2>Read Asset Inventory</h2>
+      <div class="code-block">
+        <div class="code-header">
+          <span>JavaScript</span>
+          <button class="copy-btn" data-copy="#tx-assets">Copy</button>
+        </div>
+        <pre id="tx-assets"><code>async function loadAssets() {
+  await window.photon.connect();
+
+  const assets = await window.photon.getAssets();
+  console.log("Imported assets", assets);
+
+  return assets;
+}</code></pre>
+      </div>
+
+      <h2>Read One Asset Balance</h2>
+      <div class="code-block">
+        <div class="code-header">
+          <span>JavaScript</span>
+          <button class="copy-btn" data-copy="#tx-asset-balance">Copy</button>
+        </div>
+        <pre id="tx-asset-balance"><code>async function loadPhoBalance() {
+  await window.photon.connect();
+
+  const balance = await window.photon.getAssetBalance({
+    assetId: "PHO"
+  });
+
+  console.log("PHO balance", balance);
+  return balance;
+}</code></pre>
+      </div>
+
       <h2>Import RGB Asset</h2>
       <p>
         On regtest, a connected dApp can import a public Photon registry asset directly into the active wallet by contract ID, ticker, or name.
@@ -78,6 +112,37 @@
   const result = await photon.importAsset({ contractId });
   console.log("Imported asset", result.asset);
   console.log("Already imported?", result.alreadyImported);
+}</code></pre>
+      </div>
+
+      <h2>Send BTC Funding</h2>
+      <div class="code-block">
+        <div class="code-header">
+          <span>JavaScript</span>
+          <button class="copy-btn" data-copy="#tx-funding">Copy</button>
+        </div>
+        <pre id="tx-funding"><code>async function fundAddress(address, amountSats) {
+  await window.photon.connect();
+
+  return window.photon.sendBtcFunding({
+    address,
+    amountSats
+  });
+}</code></pre>
+      </div>
+
+      <h2>Pay RGB Lightning Invoice</h2>
+      <div class="code-block">
+        <div class="code-header">
+          <span>JavaScript</span>
+          <button class="copy-btn" data-copy="#tx-rgb-pay">Copy</button>
+        </div>
+        <pre id="tx-rgb-pay"><code>async function payRgbInvoice(invoice) {
+  await window.photon.connect();
+
+  const result = await window.photon.payRgbInvoice({ invoice });
+  console.log("RGB payment result", result);
+  return result;
 }</code></pre>
       </div>
 

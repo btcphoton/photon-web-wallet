@@ -81,6 +81,22 @@
           <h3>Can I read balance without connecting?</h3>
           <p>No. Treat balance reads as permissioned data and request connection first.</p>
         </section>
+        <section class="card">
+          <h3>Can a site import an RGB asset into the wallet?</h3>
+          <p>Yes. On regtest, use <code>importAsset()</code> with a Photon registry contract id, ticker, or name after the user connects the site.</p>
+        </section>
+        <section class="card">
+          <h3>How do I read asset inventory?</h3>
+          <p>Call <code>getAssets()</code> for the imported asset list and <code>getAssetBalance()</code> for one asset balance.</p>
+        </section>
+        <section class="card">
+          <h3>What is <code>sendBtcFunding()</code> for?</h3>
+          <p>It is an approved BTC send helper for funding or collateral flows where your app supplies the destination address and satoshi amount.</p>
+        </section>
+        <section class="card">
+          <h3>What is <code>payRgbInvoice()</code> for?</h3>
+          <p>It pays an RGB Lightning invoice through the wallet on regtest after the user approves the request.</p>
+        </section>
       </div>
 
       <h2>Recommended Error Messages</h2>

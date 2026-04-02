@@ -150,9 +150,65 @@ export function PhotonConnectButton() {
         </section>
         <section class="card">
           <h3>Privileged Methods</h3>
-          <p><code>getBalance</code>, <code>signTransaction</code>, <code>sendTransaction</code>, and <code>signMessage</code> should be treated as permissioned actions.</p>
+          <p><code>getBalance</code>, <code>getAssets</code>, <code>getAssetBalance</code>, <code>importAsset</code>, <code>signTransaction</code>, <code>sendTransaction</code>, <code>sendBtcFunding</code>, <code>payRgbInvoice</code>, and <code>signMessage</code> should be treated as permissioned actions.</p>
         </section>
       </div>
+
+      <h2>Connected Method Surface</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Method</th>
+            <th>When to call it</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>getAccounts()</code></td>
+            <td>After connection, when you need the active wallet address.</td>
+          </tr>
+          <tr>
+            <td><code>getNetwork()</code></td>
+            <td>Before rendering any network-specific send, receive, or import flow.</td>
+          </tr>
+          <tr>
+            <td><code>getBalance()</code></td>
+            <td>When showing the BTC summary for the connected user.</td>
+          </tr>
+          <tr>
+            <td><code>getAssets()</code></td>
+            <td>When your app needs the wallet's imported asset inventory.</td>
+          </tr>
+          <tr>
+            <td><code>getAssetBalance()</code></td>
+            <td>When you need one asset balance without iterating the full asset list.</td>
+          </tr>
+          <tr>
+            <td><code>importAsset()</code></td>
+            <td>When your dApp wants to add a public regtest RGB asset directly into the wallet.</td>
+          </tr>
+          <tr>
+            <td><code>signTransaction()</code></td>
+            <td>For preview-oriented BTC flows that need signed hex only.</td>
+          </tr>
+          <tr>
+            <td><code>sendTransaction()</code></td>
+            <td>For normal approved BTC transfers.</td>
+          </tr>
+          <tr>
+            <td><code>sendBtcFunding()</code></td>
+            <td>For explicit BTC collateral or funding transfers to an app-provided address.</td>
+          </tr>
+          <tr>
+            <td><code>payRgbInvoice()</code></td>
+            <td>For regtest RGB Lightning invoice approval and payment.</td>
+          </tr>
+          <tr>
+            <td><code>signMessage()</code></td>
+            <td>For wallet ownership challenges and signed approvals.</td>
+          </tr>
+        </tbody>
+      </table>
 
       <div class="callout warn">
         <p><strong>Do not auto-call <code>connect()</code> on page load.</strong> It is better UX and better security posture to request connection only after the user clicks a wallet action.</p>

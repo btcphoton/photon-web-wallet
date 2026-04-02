@@ -509,18 +509,21 @@ function App() {
       'walletAddress',
       'coloredAddress',
     ])
-    const stableId =
-      storedIdentity.currentAccountId ||
-      storedIdentity.btcAddress_regtest ||
+    const activeRegtestAddress =
+      walletAddress ||
+      btcAddress ||
+      coloredAddress ||
       storedIdentity.walletAddress_regtest ||
-      storedIdentity.coloredAddress_regtest ||
+      storedIdentity.btcAddress_regtest ||
+      storedIdentity.coloredAddress_regtest
+    const stableId =
+      activeRegtestAddress ||
       storedIdentity.principalId ||
+      storedIdentity.currentAccountId ||
       storedIdentity.btcAddress ||
       storedIdentity.walletAddress ||
       storedIdentity.coloredAddress ||
       principalId ||
-      walletAddress ||
-      coloredAddress ||
       'anonymous'
     return `extension-${stableId}-regtest`
   }

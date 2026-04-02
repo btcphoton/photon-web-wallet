@@ -68,7 +68,7 @@
         </section>
         <section class="card">
           <h3>Simple Public Surface</h3>
-          <p>The current public methods are <code>connect</code>, <code>disconnect</code>, <code>getAccounts</code>, <code>getNetwork</code>, <code>getBalance</code>, <code>getAssets</code>, <code>getAssetBalance</code>, <code>importAsset</code>, <code>signTransaction</code>, <code>sendTransaction</code>, and <code>signMessage</code>.</p>
+          <p>The current public methods are <code>connect</code>, <code>disconnect</code>, <code>getAccounts</code>, <code>getNetwork</code>, <code>getBalance</code>, <code>getAssets</code>, <code>getAssetBalance</code>, <code>importAsset</code>, <code>signTransaction</code>, <code>sendTransaction</code>, <code>sendBtcFunding</code>, <code>payRgbInvoice</code>, and <code>signMessage</code>.</p>
         </section>
       </div>
 
@@ -134,6 +134,16 @@ if (!photon) {
             <td>Displaying the wallet's BTC balance.</td>
           </tr>
           <tr>
+            <td><code>await photon.getAssets()</code></td>
+            <td><code>WalletAsset[]</code></td>
+            <td>Reading the currently stored asset list for the active wallet and network.</td>
+          </tr>
+          <tr>
+            <td><code>await photon.getAssetBalance({ assetId })</code></td>
+            <td><code>string</code></td>
+            <td>Reading the balance for one imported asset by asset id, ticker, unit, or contract id.</td>
+          </tr>
+          <tr>
             <td><code>await photon.importAsset({ contractId })</code></td>
             <td><code>{ asset, network, imported, alreadyImported }</code></td>
             <td>Adding a regtest RGB asset from the Photon registry directly into the active wallet.</td>
@@ -147,6 +157,16 @@ if (!photon) {
             <td><code>await photon.sendTransaction(tx)</code></td>
             <td><code>txid</code></td>
             <td>Preparing, approving, signing, and broadcasting a BTC transaction.</td>
+          </tr>
+          <tr>
+            <td><code>await photon.sendBtcFunding({ address, amountSats })</code></td>
+            <td><code>object</code></td>
+            <td>Sending explicit BTC collateral or funding to a target address with approval.</td>
+          </tr>
+          <tr>
+            <td><code>await photon.payRgbInvoice({ invoice })</code></td>
+            <td><code>object</code></td>
+            <td>Approving and paying an RGB Lightning invoice through the wallet on regtest.</td>
           </tr>
           <tr>
             <td><code>await photon.signMessage(message)</code></td>

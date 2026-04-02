@@ -146,6 +146,45 @@
 }</code></pre>
       </div>
 
+      <h2>Example 5: Import Then Inspect an RGB Asset</h2>
+      <div class="code-block">
+        <div class="code-header">
+          <span>JavaScript</span>
+          <button class="copy-btn" data-copy="#ex-import-asset">Copy</button>
+        </div>
+        <pre id="ex-import-asset"><code>async function importAndReadAsset(contractId) {
+  const photon = window.photon;
+  if (!photon) throw new Error("Install PhotonBolt Wallet first");
+
+  await photon.connect();
+
+  const imported = await photon.importAsset({ contractId });
+  const assets = await photon.getAssets();
+  const balance = await photon.getAssetBalance({ assetId: imported.asset.contractId });
+
+  return { imported, assets, balance };
+}</code></pre>
+      </div>
+
+      <h2>Example 6: Approve BTC Funding and RGB Invoice Payment</h2>
+      <div class="code-block">
+        <div class="code-header">
+          <span>JavaScript</span>
+          <button class="copy-btn" data-copy="#ex-funding-rgb">Copy</button>
+        </div>
+        <pre id="ex-funding-rgb"><code>async function approveFundingAndRgbPayment({ address, amountSats, invoice }) {
+  const photon = window.photon;
+  if (!photon) throw new Error("Install PhotonBolt Wallet first");
+
+  await photon.connect();
+
+  const btcFunding = await photon.sendBtcFunding({ address, amountSats });
+  const rgbPayment = await photon.payRgbInvoice({ invoice });
+
+  return { btcFunding, rgbPayment };
+}</code></pre>
+      </div>
+
       <div class="footer">
         Need integration details first? Start with <a href="/developer-guides/getting-started/">Getting Started</a>.
       </div>

@@ -149,11 +149,25 @@ export const loadWalletContext = async (): Promise<WalletContext> => {
 }
 
 export const getRegtestExtensionWalletKey = async (): Promise<string> => {
-  const storedIdentity = await getStorageData(['principalId', 'walletAddress', 'coloredAddress'])
-  const stableId =
-    storedIdentity.principalId ||
+  const storedIdentity = await getStorageData([
+    'principalId',
+    'btcAddress_regtest',
+    'walletAddress_regtest',
+    'coloredAddress_regtest',
+    'btcAddress',
+    'walletAddress',
+    'coloredAddress',
+  ])
+  const activeRegtestAddress =
+    storedIdentity.walletAddress_regtest ||
+    storedIdentity.btcAddress_regtest ||
+    storedIdentity.coloredAddress_regtest ||
     storedIdentity.walletAddress ||
-    storedIdentity.coloredAddress ||
+    storedIdentity.btcAddress ||
+    storedIdentity.coloredAddress
+  const stableId =
+    activeRegtestAddress ||
+    storedIdentity.principalId ||
     'anonymous'
   return `extension-${stableId}-regtest`
 }
