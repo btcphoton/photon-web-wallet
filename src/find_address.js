@@ -58,14 +58,34 @@ async function findDerivationPath(mnemonic, targetAddress, isTestnet = true) {
     return { found: false };
 }
 
-// Usage Example
-const mnemonic = "gasp attitude little organ palm crime layer answer dial twelve feed meadow";
-const target = "tb1py9am4avtccxud45qwsfxuf7vt5s552lsu39fh47mjm5k0xfsxlpqd8pxak";
+async function main() {
+    const mnemonic = process.env.PHOTON_TEST_MNEMONIC || process.argv[2] || '';
+    const target = process.env.PHOTON_TARGET_ADDRESS || process.argv[3] || '';
+    const networkArg = (process.env.PHOTON_TARGET_NETWORK || process.argv[4] || 'testnet3').toLowerCase();
+    const isTestnet = networkArg !== 'mainnet';
 
-findDerivationPath(mnemonic, target).then(result => {
+    if (!mnemonic || !target) {
+        console.error('Usage: node src/find_address.js "<mnemonic>" "<targetAddress>" [mainnet|testnet3]');
+        console.error('Or set PHOTON_TEST_MNEMONIC and PHOTON_TARGET_ADDRESS in your local shell.');
+        process.exit(1);
+    }
+
+    if (!bip39.validateMnemonic(mnemonic)) {
+        console.error('Invalid mnemonic phrase.');
+        process.exit(1);
+    }
+
+    const result = await findDerivationPath(mnemonic, target, isTestnet);
     if (result.found) {
         console.log(`Success! Found at path: ${result.path}`);
-    } else {
-        console.log("Address not found within search limits.");
+        return;
     }
+
+    console.log('Address not found within search limits.');
+    process.exit(2);
+}
+
+main().catch((error) => {
+    console.error(error.message || error);
+    process.exit(1);
 });

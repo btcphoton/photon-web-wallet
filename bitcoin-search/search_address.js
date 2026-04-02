@@ -52,8 +52,28 @@ async function findAddress(mnemonic, targetAddress) {
     return null;
 }
 
-// --- CONFIGURATION ---
-const MY_MNEMONIC = "gasp attitude little organ palm crime layer answer dial twelve feed meadow";
-const TARGET = "tb1pyzsrsnu84dmrtvthpvxfjd88pk60h3q394ulaq2q5dqun3wrj2eqcwlxsw";
+async function main() {
+    const mnemonic = process.env.PHOTON_TEST_MNEMONIC || process.argv[2] || '';
+    const target = process.env.PHOTON_TARGET_ADDRESS || process.argv[3] || '';
 
-findAddress(MY_MNEMONIC, TARGET);
+    if (!mnemonic || !target) {
+        console.error('Usage: node bitcoin-search/search_address.js "<mnemonic>" "<targetAddress>"');
+        console.error('Or set PHOTON_TEST_MNEMONIC and PHOTON_TARGET_ADDRESS in your local shell.');
+        process.exit(1);
+    }
+
+    if (!bip39.validateMnemonic(mnemonic)) {
+        console.error('Invalid mnemonic phrase.');
+        process.exit(1);
+    }
+
+    const path = await findAddress(mnemonic, target);
+    if (!path) {
+        process.exit(2);
+    }
+}
+
+main().catch((error) => {
+    console.error(error.message || error);
+    process.exit(1);
+});

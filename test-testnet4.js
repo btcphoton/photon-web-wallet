@@ -1,11 +1,16 @@
 import { deriveBitcoinAddress } from './src/utils/bitcoin-address';
 
-// Test mnemonic (replace with your actual test mnemonic or use this one)
-const testMnemonic = 'gasp attitude little organ palm crime layer answer dial twelve feed meadow';
-
 async function testTestNet4Addresses() {
     console.log('Testing TestNet 4 Address Generation\n');
     console.log('='.repeat(60));
+
+    const testMnemonic = process.env.PHOTON_TEST_MNEMONIC || process.argv[2] || '';
+
+    if (!testMnemonic) {
+        console.error('Usage: node test-testnet4.js "<mnemonic>"');
+        console.error('Or set PHOTON_TEST_MNEMONIC in your local shell.');
+        process.exit(1);
+    }
 
     try {
         // Test Vanilla Account (Account 0) - Main receiving address

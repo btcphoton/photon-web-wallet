@@ -3,7 +3,8 @@
 https://htlc.me/
 cab1c9c6-319e-4e0f-ae58-e0b10006397e
 
-gasp attitude little organ palm crime layer answer dial twelve feed meadow rehan123
+[local test mnemonic removed]
+[local test password removed]
 
 Mainnet oazba-2qaaa-aaaau-ac66a-cai
 TestNet ja2nc-uiaaa-aaaaf-qc4la-cai

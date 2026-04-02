@@ -116,28 +116,37 @@ async function findMultipleAddresses(mnemonic, targets, isTestnet = true) {
     return results;
 }
 
-// ===== MAIN EXECUTION =====
+async function main() {
+    const mnemonic = process.env.PHOTON_TEST_MNEMONIC || process.argv[2] || '';
+    const targetsRaw = process.env.PHOTON_TARGETS_JSON || process.argv[3] || '';
+    const networkArg = (process.env.PHOTON_TARGET_NETWORK || process.argv[4] || 'testnet3').toLowerCase();
+    const isTestnet = networkArg !== 'mainnet';
 
-const mnemonic = "gasp attitude little organ palm crime layer answer dial twelve feed meadow";
-
-// Define the three addresses to find
-const targetAddresses = [
-    {
-        label: "Main Balance",
-        address: "tb1pyzsrsnu84dmrtvthpvxfjd88pk60h3q394ulaq2q5dqun3wrj2eqcwlxsw"
-    },
-    {
-        label: "UTXOs Holder",
-        address: "tb1py9am4avtccxud45qwsfxuf7vt5s552lsu39fh47mjm5k0xfsxlpqd8pxak"
-    },
-    {
-        label: "Dust Balance",
-        address: "tb1p7eajc8sk3nwr9fq6pfl2yvzzyfv7elstyvuwl497x3u7zre738hqrrntjf"
+    if (!mnemonic || !targetsRaw) {
+        console.error('Usage: node bitcoin-search/find_address.js "<mnemonic>" \'[{"label":"Name","address":"tb1..."}]\' [mainnet|testnet3]');
+        console.error('Or set PHOTON_TEST_MNEMONIC and PHOTON_TARGETS_JSON in your local shell.');
+        process.exit(1);
     }
-];
 
-// Search for all three addresses
-findMultipleAddresses(mnemonic, targetAddresses, true).then(results => {
+    if (!bip39.validateMnemonic(mnemonic)) {
+        console.error('Invalid mnemonic phrase.');
+        process.exit(1);
+    }
+
+    let targetAddresses;
+    try {
+        targetAddresses = JSON.parse(targetsRaw);
+    } catch (error) {
+        console.error('Invalid target JSON.');
+        process.exit(1);
+    }
+
+    if (!Array.isArray(targetAddresses) || targetAddresses.length === 0) {
+        console.error('Target JSON must be a non-empty array.');
+        process.exit(1);
+    }
+
+    const results = await findMultipleAddresses(mnemonic, targetAddresses, isTestnet);
     console.log('\n=== SEARCH RESULTS ===\n');
 
     if (results.size === targetAddresses.length) {
@@ -149,24 +158,31 @@ findMultipleAddresses(mnemonic, targetAddresses, true).then(results => {
             console.log(`  Path: ${result.path}`);
             console.log(`  Account: ${result.account}, Index: ${result.index}\n`);
         });
-    } else {
-        console.log(`Found ${results.size} out of ${targetAddresses.length} addresses.\n`);
-
-        if (results.size > 0) {
-            results.forEach((result) => {
-                console.log(`${result.label}:`);
-                console.log(`  Address: ${result.address}`);
-                console.log(`  Path: ${result.path}`);
-                console.log(`  Account: ${result.account}, Index: ${result.index}\n`);
-            });
-        }
-
-        console.log('Missing addresses:');
-        targetAddresses.forEach(target => {
-            if (!results.has(target.label)) {
-                console.log(`  ❌ ${target.label}`);
-            }
-        });
-        console.log('\nTry increasing maxAccounts or maxAddressIndex in the code.');
+        return;
     }
+
+    console.log(`Found ${results.size} out of ${targetAddresses.length} addresses.\n`);
+
+    if (results.size > 0) {
+        results.forEach((result) => {
+            console.log(`${result.label}:`);
+            console.log(`  Address: ${result.address}`);
+            console.log(`  Path: ${result.path}`);
+            console.log(`  Account: ${result.account}, Index: ${result.index}\n`);
+        });
+    }
+
+    console.log('Missing addresses:');
+    targetAddresses.forEach(target => {
+        if (!results.has(target.label)) {
+            console.log(`  ❌ ${target.label}`);
+        }
+    });
+    console.log('\nTry increasing maxAccounts or maxAddressIndex in the code.');
+    process.exit(2);
+}
+
+main().catch((error) => {
+    console.error(error.message || error);
+    process.exit(1);
 });

@@ -63,19 +63,37 @@ async function findBitLightAddress(mnemonic, targetAddress, isTestnet = true) {
     return { found: false };
 }
 
-// --- CONFIGURATION ---
-//const mnemonic = "gasp attitude little organ palm crime layer answer dial twelve feed meadow";
-const mnemonic = "gasp attitude little organ palm crime layer answer dial twelve feed meadow";
+async function main() {
+    const mnemonic = process.env.PHOTON_TEST_MNEMONIC || process.argv[2] || '';
+    const target = process.env.PHOTON_TARGET_ADDRESS || process.argv[3] || '';
+    const networkArg = (process.env.PHOTON_TARGET_NETWORK || process.argv[4] || 'testnet3').toLowerCase();
+    const isTestnet = networkArg !== 'mainnet';
 
-const target = "tb1q6h4qvlufaqsa588gfxs2q6qfxydm8ewaqtq5e2";
+    if (!mnemonic || !target) {
+        console.error('Usage: node bitcoin-search/findaddress.js "<mnemonic>" "<targetAddress>" [mainnet|testnet3]');
+        console.error('Or set PHOTON_TEST_MNEMONIC and PHOTON_TARGET_ADDRESS in your local shell.');
+        process.exit(1);
+    }
 
-findBitLightAddress(mnemonic, target).then(result => {
+    if (!bip39.validateMnemonic(mnemonic)) {
+        console.error('Invalid mnemonic phrase.');
+        process.exit(1);
+    }
+
+    const result = await findBitLightAddress(mnemonic, target, isTestnet);
     if (result.found) {
         console.log("\n✅ SUCCESS!");
         console.log(`Path:    ${result.path}`);
         console.log(`Address: ${result.address}`);
-    } else {
-        console.log("\n❌ Address not found within specialized BitLight branches.");
-        console.log("Tip: If this is an active RGB seal, it may be 'tweaked' with a contract hash.");
+        return;
     }
+
+    console.log("\n❌ Address not found within specialized BitLight branches.");
+    console.log("Tip: If this is an active RGB seal, it may be 'tweaked' with a contract hash.");
+    process.exit(2);
+}
+
+main().catch((error) => {
+    console.error(error.message || error);
+    process.exit(1);
 });
