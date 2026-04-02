@@ -503,7 +503,15 @@ export const prepareTransaction = async (
   }
 
   const totalInputSats = vanillaUtxos.reduce((sum, utxo) => sum + BigInt(utxo.value), 0n)
-  const estimatedFeeSats = estimateFee(vanillaUtxos.length, 2, feeRate)
+  const estimatedFeeWithChangeSats = estimateFee(vanillaUtxos.length, 2, feeRate)
+  const totalSpendWithChangeSats = amountSats + BigInt(estimatedFeeWithChangeSats)
+  const changeWithChangeSats = totalInputSats - totalSpendWithChangeSats
+  const estimatedFeeNoChangeSats = estimateFee(vanillaUtxos.length, 1, feeRate)
+  const totalSpendNoChangeSats = amountSats + BigInt(estimatedFeeNoChangeSats)
+  const changeNoChangeSats = totalInputSats - totalSpendNoChangeSats
+
+  const useNoChange = changeWithChangeSats <= 546n && changeNoChangeSats >= 0n
+  const estimatedFeeSats = useNoChange ? estimatedFeeNoChangeSats : estimatedFeeWithChangeSats
   const totalSpendSats = amountSats + BigInt(estimatedFeeSats)
   const changeSats = totalInputSats - totalSpendSats
 
@@ -511,7 +519,7 @@ export const prepareTransaction = async (
     throw new Error(`Insufficient funds. Need ${satoshisToBtc(Number(totalSpendSats))} BTC including fees.`)
   }
 
-  const hasChange = changeSats > 546n
+  const hasChange = !useNoChange && changeSats > 546n
   const changeAddress = hasChange
     ? await deriveBitcoinAddress(context.mnemonic!, context.network, 86, 0, 1, context.changeIndex)
     : null
@@ -524,6 +532,9 @@ export const prepareTransaction = async (
     feeRate,
     context.network,
     context.changeIndex,
+    {
+      consumeAllNoChange: useNoChange,
+    }
   )
 
   if (maxIndex > context.addressIndex) {

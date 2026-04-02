@@ -310,6 +310,7 @@ function App() {
   const [sendLightningMsats, setSendLightningMsats] = useState<number>(0)
   const [sendPaymentHash, setSendPaymentHash] = useState<string>('')
   const [maxSendableAmount, setMaxSendableAmount] = useState<string>('0.00000000')
+  const [sendUseMax, setSendUseMax] = useState<boolean>(false)
   const [sendFeeOption, setSendFeeOption] = useState<'slow' | 'avg' | 'fast' | 'custom'>('fast')
   const [sendUserBalance, setSendUserBalance] = useState<string>('0.00000000')
   const [sendEstimatedFees, setSendEstimatedFees] = useState<bigint[]>([2n, 3n, 5n]) // Default: [slow, avg, fast]
@@ -1933,6 +1934,47 @@ function App() {
 
   const selectableRgbAssets = assets.filter((asset) => asset.id !== 'bitcoin' && asset.id !== 'lightning-btc')
 
+  const getSpendableVanillaSummary = async () => {
+    if (!mnemonic || !walletAddress) {
+      return {
+        utxos: [] as UTXO[],
+        count: 0,
+        totalSats: 0n,
+      }
+    }
+
+    if (addressGenerationMethod === 'bitcoin') {
+      const effectiveIndex = Math.max(addressIndex, changeIndex)
+      const { utxos: discoveryUtxos } = await performDiscoveryScan(mnemonic, selectedNetwork, effectiveIndex)
+      const vanillaUtxos = discoveryUtxos
+        .filter((utxo) => utxo.account === 'vanilla')
+        .map((utxo) => ({
+          txid: utxo.txid,
+          vout: utxo.vout,
+          value: utxo.value,
+          address: utxo.address,
+          derivationPath: utxo.derivationPath,
+          account: utxo.account as 'vanilla',
+          chain: utxo.chain as 0 | 1,
+          index: utxo.index as number,
+        }))
+
+      return {
+        utxos: vanillaUtxos,
+        count: vanillaUtxos.length,
+        totalSats: vanillaUtxos.reduce((sum, utxo) => sum + BigInt(utxo.value), 0n),
+      }
+    }
+
+    const canisterNetwork = mapNetworkToCanister(selectedNetwork)
+    const utxos = await getUtxos(walletAddress, canisterNetwork)
+    return {
+      utxos: [] as UTXO[],
+      count: utxos?.length || 0,
+      totalSats: (utxos || []).reduce((sum, utxo) => sum + BigInt(Number(utxo.value || 0)), 0n),
+    }
+  }
+
   useEffect(() => {
     if (view !== 'receive-lightning') {
       return
@@ -2342,39 +2384,22 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
       const feeRateMap = { slow: 0, avg: 1, fast: 2, custom: 2 }
       const feeIndex = feeRateMap[sendFeeOption as 'slow' | 'avg' | 'fast' | 'custom'] || 2
       const feeRate = Number(sendEstimatedFees[feeIndex])
+      const vanillaSummary = await getSpendableVanillaSummary()
+      const inputCount = Math.max(vanillaSummary.count, 1)
 
-      let numUTXOs = 0
-
-      // Fetch UTXOs to get accurate count
-      if (addressGenerationMethod === 'bitcoin') {
-        // Fetch from blockchain
-        const utxos = await fetchUTXOsFromBlockchain(walletAddress, selectedNetwork)
-        numUTXOs = utxos?.length || 0
-      } else {
-        // Fetch from canister
-        try {
-          const canisterNetwork = mapNetworkToCanister(selectedNetwork)
-          const utxos = await getUtxos(walletAddress, canisterNetwork)
-          numUTXOs = utxos?.length || 0
-        } catch (e) {
-          // If canister fails, estimate with 1 UTXO
-          numUTXOs = 1
-        }
-      }
-
-      // Calculate transaction size using the user's formula
-      // For Max, we have 1 output (recipient) and no change
-      const estimatedFeeSats = estimateFee(numUTXOs, 1, feeRate)
-      const estimatedFeeBtc = estimatedFeeSats / 100000000
-
-      // Calculate max sendable amount
-      const balanceBtc = parseFloat(btcBalance)
-      const maxSendable = Math.max(0, balanceBtc - estimatedFeeBtc)
+      // Max spend must use a no-change fee estimate so the final transaction
+      // consumes the selected UTXOs cleanly without failing at signing time.
+      const estimatedFeeSats = estimateFee(inputCount, 1, feeRate)
+      const maxSendableSats = vanillaSummary.totalSats > 0n
+        ? vanillaSummary.totalSats - BigInt(estimatedFeeSats)
+        : BigInt(Math.max(0, Math.floor(parseFloat(btcBalance) * 100000000) - estimatedFeeSats))
+      const maxSendable = Math.max(0, Number(maxSendableSats > 0n ? maxSendableSats : 0n) / 100000000)
 
       // Set the amount
+      setSendUseMax(true)
       setSendAmount(maxSendable.toFixed(8))
 
-      console.log(`Max calculation: Balance=${balanceBtc}, Fee=${estimatedFeeBtc}, Max=${maxSendable}, UTXOs=${numUTXOs}`)
+      console.log(`Max calculation: Fee=${estimatedFeeSats}, Max=${maxSendable}, UTXOs=${inputCount}`)
     } catch (error) {
       console.error('Error calculating max amount:', error)
       // Fallback
@@ -2385,6 +2410,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
       const estimatedFeeBtc = estimatedFeeSats / 100000000
       const balanceBtc = parseFloat(btcBalance)
       const maxSendable = Math.max(0, balanceBtc - estimatedFeeBtc)
+      setSendUseMax(true)
       setSendAmount(maxSendable.toFixed(8))
     }
   }
@@ -2545,20 +2571,13 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
           const feeIndex = feeRateMap[sendFeeOption as 'slow' | 'avg' | 'fast' | 'custom'] || 2
           const feeRate = Number(sendEstimatedFees[feeIndex])
 
-          let numUTXOs = 0
-          if (addressGenerationMethod === 'bitcoin') {
-            const utxos = await fetchUTXOsFromBlockchain(walletAddress, selectedNetwork)
-            numUTXOs = utxos?.length || 0
-          } else {
-            const canisterNetwork = mapNetworkToCanister(selectedNetwork)
-            const utxos = await getUtxos(walletAddress, canisterNetwork)
-            numUTXOs = utxos?.length || 0
-          }
-
-          const estimatedFeeSats = estimateFee(numUTXOs || 1, 1, feeRate)
-          const estimatedFeeBtc = estimatedFeeSats / 100000000
-          const balanceBtc = parseFloat(btcBalance)
-          const max = Math.max(0, balanceBtc - estimatedFeeBtc)
+          const vanillaSummary = await getSpendableVanillaSummary()
+          const inputCount = Math.max(vanillaSummary.count, 1)
+          const estimatedFeeSats = estimateFee(inputCount, 1, feeRate)
+          const maxSats = vanillaSummary.totalSats > 0n
+            ? vanillaSummary.totalSats - BigInt(estimatedFeeSats)
+            : BigInt(Math.max(0, Math.floor(parseFloat(btcBalance) * 100000000) - estimatedFeeSats))
+          const max = Math.max(0, Number(maxSats > 0n ? maxSats : 0n) / 100000000)
           setMaxSendableAmount(max.toFixed(8))
         } catch (e) {
           console.error('Error calculating max sendable:', e)
@@ -2566,7 +2585,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
       }
     }
     calculateMax()
-  }, [view, btcBalance, sendEstimatedFees, sendFeeOption, walletAddress, selectedNetwork, sendMode, sendAmount])
+  }, [view, btcBalance, sendEstimatedFees, sendFeeOption, walletAddress, selectedNetwork, sendMode, sendAmount, mnemonic, addressGenerationMethod, addressIndex, changeIndex])
 
   const sendAmountNumber = Number(sendAmount || 0)
   const maxSendableNumber = Number(maxSendableAmount || 0)
@@ -2714,6 +2733,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
     setSendRgbAssetId('')
     setSendRgbAssetLabel('RGB Asset')
     setSendAmount('')
+    setSendUseMax(false)
     setSendLightningMsats(0)
     setSendNetworkFee('0')
     setView('send-amount')
@@ -2764,31 +2784,21 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
 
       let numUTXOs = 1 // Default to 1 if we can't fetch
 
-      // Fetch UTXOs to get accurate count for fee calculation
       if (mnemonic && walletAddress) {
         try {
-          if (addressGenerationMethod === 'bitcoin') {
-            // Fetch from blockchain
-            const utxos = await fetchUTXOsFromBlockchain(walletAddress, selectedNetwork)
-            numUTXOs = utxos?.length || 1
-          } else {
-            // Fetch from canister
-            const canisterNetwork = mapNetworkToCanister(selectedNetwork)
-            const utxos = await getUtxos(walletAddress, canisterNetwork)
-            numUTXOs = utxos?.length || 1
-          }
+          const vanillaSummary = await getSpendableVanillaSummary()
+          numUTXOs = Math.max(vanillaSummary.count, 1)
         } catch (e) {
           console.warn('Could not fetch UTXOs for fee estimation, using 1 UTXO estimate:', e)
         }
       }
 
-      // Calculate actual transaction size based on UTXOs using the user's formula
-      // For a standard send, we have 2 outputs (recipient + change)
-      const networkFeeSats = estimateFee(numUTXOs, 2, Number(feeRate))
+      const outputsCount = sendUseMax ? 1 : 2
+      const networkFeeSats = estimateFee(numUTXOs, outputsCount, Number(feeRate))
       const networkFeeBtc = (networkFeeSats / 100000000).toFixed(8)
       setSendNetworkFee(networkFeeBtc)
 
-      console.log(`Fee calculation: ${numUTXOs} UTXOs, 2 outputs, ${feeRate} sat/vB = ${networkFeeSats} sats`)
+      console.log(`Fee calculation: ${numUTXOs} UTXOs, ${outputsCount} outputs, ${feeRate} sat/vB = ${networkFeeSats} sats`)
 
       setSendError('')
       setView('send-confirm')
@@ -3016,7 +3026,8 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
           amountSats,
           feeRate,
           selectedNetwork,
-          changeIndex
+          changeIndex,
+          { consumeAllNoChange: sendUseMax }
         )
 
         // Increment and save change index
@@ -5995,6 +6006,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                         }
                         const val = e.target.value;
                         if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                          setSendUseMax(false)
                           const numVal = parseFloat(val);
                           const maxNum = parseFloat(maxSendableAmount);
                           if (!isNaN(numVal) && numVal > maxNum) {

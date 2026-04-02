@@ -191,7 +191,10 @@ export const signAndSendVanilla = async (
     amountToSend: number | bigint,
     feeRate: number = 3,
     network: WalletNetwork = 'mainnet',
-    changeIndex: number = 0
+    changeIndex: number = 0,
+    options?: {
+        consumeAllNoChange?: boolean
+    }
 ): Promise<string> => {
     const btcNetwork = getBitcoinJsNetwork(network);
 
@@ -253,20 +256,33 @@ export const signAndSendVanilla = async (
     });
 
     // 4. Calculate & Add Change Output
-    // Use the precise fee estimation formula
-    const fee = BigInt(estimateFee(utxos.length, 2, feeRate));
-    const changeValue = totalIn - amountBigInt - fee;
+    // Use a no-change path for explicit "send max" requests so the UI and signer
+    // agree on the exact spendable amount.
+    const feeWithChange = BigInt(estimateFee(utxos.length, 2, feeRate));
+    const changeValueWithChange = totalIn - amountBigInt - feeWithChange;
+    const allowNoChange = Boolean(options?.consumeAllNoChange);
 
-    if (changeValue > 546n) { // Dust limit check
+    if (changeValueWithChange > 546n && !allowNoChange) { // Dust limit check
         // Change goes to Vanilla Internal Chain (m/86'/n'/0'/1/index)
         const changeAddress = await deriveBitcoinAddress(mnemonic, network, 86, 0, 1, changeIndex);
         psbt.addOutput({
             address: changeAddress,
-            value: changeValue,
+            value: changeValueWithChange,
         });
-        console.log(`[Transaction] Added Vanilla change output of ${changeValue} sats to ${changeAddress}`);
-    } else if (changeValue < 0n) {
-        throw new Error(`Insufficient funds. Need ${amountBigInt + fee} sats, have ${totalIn} sats`);
+        console.log(`[Transaction] Added Vanilla change output of ${changeValueWithChange} sats to ${changeAddress}`);
+    } else {
+        const feeNoChange = BigInt(estimateFee(utxos.length, 1, feeRate));
+        const noChangeRemainder = totalIn - amountBigInt - feeNoChange;
+
+        if (noChangeRemainder < 0n) {
+            throw new Error(`Insufficient funds. Need ${amountBigInt + feeNoChange} sats, have ${totalIn} sats`);
+        }
+
+        if (!allowNoChange && changeValueWithChange < 0n) {
+            throw new Error(`Insufficient funds. Need ${amountBigInt + feeWithChange} sats, have ${totalIn} sats`);
+        }
+
+        console.log(`[Transaction] Using no-change spend path. Extra fee remainder: ${noChangeRemainder} sats`);
     }
 
     // 5. Sign and Extract
