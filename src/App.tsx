@@ -648,6 +648,7 @@ function App() {
       return sourceAssets
     }
 
+    const assetsKey = getNetworkAssetsKey(network)
     const contractsKey = getNetworkContractsKey(network)
     const contractSettings = await getStorageData([contractsKey])
     const storedContractMapRaw = contractSettings[contractsKey]
@@ -656,11 +657,42 @@ function App() {
         ? JSON.parse(storedContractMapRaw) as Record<string, string>
         : {}
 
+    let visibleRegistryContracts: Set<string> | null = null
+    try {
+      const registryAssets = await fetchRegtestRgbRegistry()
+      visibleRegistryContracts = new Set(
+        registryAssets
+          .map((entry) => entry.contract_id)
+          .filter((value): value is string => typeof value === 'string' && value.length > 0)
+      )
+    } catch (error) {
+      console.error('[RGB Balance] Registry sync unavailable, skipping archived asset pruning:', error)
+    }
+
+    const filteredAssets = sourceAssets.filter((asset) => {
+      const contractId = storedContractMap[asset.id]
+      if (!contractId || !visibleRegistryContracts) {
+        return true
+      }
+      return visibleRegistryContracts.has(contractId)
+    })
+
+    const filteredContractMap = Object.fromEntries(
+      Object.entries(storedContractMap).filter(([assetId, contractId]) => {
+        if (!visibleRegistryContracts || !contractId) {
+          return true
+        }
+        const stillVisible = visibleRegistryContracts.has(contractId)
+        const assetStillPresent = filteredAssets.some((asset) => asset.id === assetId)
+        return stillVisible && assetStillPresent
+      })
+    )
+
     const walletKey = await getRegtestWalletKey()
 
     const updatedAssets = await Promise.all(
-      sourceAssets.map(async (asset) => {
-        const contractId = storedContractMap[asset.id]
+      filteredAssets.map(async (asset) => {
+        const contractId = filteredContractMap[asset.id]
         if (!contractId) {
           return asset
         }
@@ -707,6 +739,11 @@ function App() {
         }
       })
     )
+
+    await setStorageData({
+      [assetsKey]: JSON.stringify(updatedAssets),
+      [contractsKey]: JSON.stringify(filteredContractMap),
+    })
 
     return updatedAssets
   }
