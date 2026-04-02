@@ -156,6 +156,12 @@ export interface RgbIssueAssetReadinessResponse {
     confirmedUtxoCount: number
     freeSlotCount: number
     minimumFundingSats: number
+    issuanceFundingReady: boolean
+    channelFundingTiming: 'during_issuance' | 'after_issuance'
+    requestedChannelFundingSats: number
+    requiredFundingSats: number
+    channelFundingReady: boolean
+    channelFundingShortfallSats: number
     isReady: boolean
 }
 
@@ -165,6 +171,19 @@ export interface RgbIssueAssetResponse {
     issuanceId: string
     asset: RgbRegistryAsset
     registryListed: boolean
+    ownership?: {
+        walletKey: string
+        nodeAccountRef: string
+        initialSupplyAssigned: string
+    }
+    bootstrapPlan?: {
+        enabled: boolean
+        liquidityPercentage: number | null
+        reservedAssetAmount: number
+        requestedChannelBtcSats: number | null
+        channelFundingTiming: 'during_issuance' | 'after_issuance' | null
+        lifecycleStatus: string
+    }
 }
 
 export interface RgbChannelDashboardNode {
@@ -578,14 +597,23 @@ export async function fetchRegtestChannelDashboard(): Promise<RgbChannelDashboar
 
 export async function fetchRegtestIssueAssetReadiness(params: {
     walletKey?: string
+    channelFundingSats?: number | null
+    channelFundingTiming?: 'during_issuance' | 'after_issuance'
 }): Promise<RgbIssueAssetReadinessResponse> {
     const apiBase = await getRegtestRgbApiBase()
     const headers: Record<string, string> = {}
     if (params.walletKey) {
         headers['x-photon-wallet-key'] = params.walletKey
     }
+    const query = new URLSearchParams()
+    if (params.channelFundingSats && params.channelFundingSats > 0) {
+        query.set('channelFundingSats', String(params.channelFundingSats))
+    }
+    if (params.channelFundingTiming) {
+        query.set('channelFundingTiming', params.channelFundingTiming)
+    }
 
-    const response = await fetch(`${apiBase}/rgb/issue-asset-readiness`, {
+    const response = await fetch(`${apiBase}/rgb/issue-asset-readiness${query.toString() ? `?${query.toString()}` : ''}`, {
         method: 'GET',
         headers,
     })
@@ -611,6 +639,10 @@ export async function issueRegtestRgbAsset(params: {
     totalSupply: number
     description?: string
     publicRegistry?: boolean
+    bootstrapLightning?: boolean
+    liquidityPercentage?: number | null
+    channelFundingSats?: number | null
+    channelFundingTiming?: 'during_issuance' | 'after_issuance'
 }): Promise<RgbIssueAssetResponse> {
     const apiBase = await getRegtestRgbApiBase()
     const headers: Record<string, string> = {
@@ -632,6 +664,10 @@ export async function issueRegtestRgbAsset(params: {
             totalSupply: params.totalSupply,
             description: params.description,
             publicRegistry: params.publicRegistry ?? true,
+            bootstrapLightning: params.bootstrapLightning ?? false,
+            liquidityPercentage: params.liquidityPercentage ?? null,
+            channelFundingSats: params.channelFundingSats ?? null,
+            channelFundingTiming: params.channelFundingTiming ?? 'after_issuance',
             network: 'regtest',
         }),
     })

@@ -249,6 +249,10 @@ function App() {
   const [issueAssetSupply, setIssueAssetSupply] = useState<string>('')
   const [issueAssetDescription, setIssueAssetDescription] = useState<string>('')
   const [issueAssetPublicRegistry, setIssueAssetPublicRegistry] = useState<boolean>(true)
+  const [issueAssetBootstrapLightning, setIssueAssetBootstrapLightning] = useState<boolean>(false)
+  const [issueAssetLiquidityPercentage, setIssueAssetLiquidityPercentage] = useState<string>('10')
+  const [issueAssetChannelFundingSats, setIssueAssetChannelFundingSats] = useState<string>('50000')
+  const [issueAssetChannelFundingTiming, setIssueAssetChannelFundingTiming] = useState<'during_issuance' | 'after_issuance'>('after_issuance')
   const [issueAssetError, setIssueAssetError] = useState<string>('')
   const [issueAssetSuccess, setIssueAssetSuccess] = useState<RgbIssueAssetResponse | null>(null)
   const [issueAssetSubmitting, setIssueAssetSubmitting] = useState<boolean>(false)
@@ -825,6 +829,14 @@ function App() {
     const normalizedTicker = issueAssetTicker.trim().toUpperCase()
     const precisionValue = Math.trunc(Number(issueAssetPrecision))
     const totalSupplyValue = Math.trunc(Number(issueAssetSupply))
+    const liquidityPercentageValue =
+      issueAssetBootstrapLightning && issueAssetLiquidityPercentage.trim()
+        ? Number(issueAssetLiquidityPercentage)
+        : null
+    const channelFundingSatsValue =
+      issueAssetBootstrapLightning && issueAssetChannelFundingSats.trim()
+        ? Math.trunc(Number(issueAssetChannelFundingSats))
+        : null
 
     if (!normalizedName) {
       setIssueAssetError('Asset name is required.')
@@ -842,6 +854,20 @@ function App() {
       setIssueAssetError('Total supply must be a positive integer.')
       return
     }
+    if (issueAssetBootstrapLightning) {
+      if (liquidityPercentageValue === null || !Number.isFinite(liquidityPercentageValue) || liquidityPercentageValue < 0 || liquidityPercentageValue > 100) {
+        setIssueAssetError('Liquidity percentage must be between 0 and 100.')
+        return
+      }
+      if (liquidityPercentageValue > 0 && Math.floor((totalSupplyValue * liquidityPercentageValue) / 100) <= 0) {
+        setIssueAssetError('Selected liquidity percentage does not reserve any RGB supply. Increase the percentage or total supply.')
+        return
+      }
+      if (channelFundingSatsValue === null || !Number.isInteger(channelFundingSatsValue) || channelFundingSatsValue <= 0) {
+        setIssueAssetError('Bitcoin channel funding must be a positive whole number of sats.')
+        return
+      }
+    }
 
     setIssueAssetSubmitting(true)
     setIssueAssetError('')
@@ -857,6 +883,10 @@ function App() {
         totalSupply: totalSupplyValue,
         description: issueAssetDescription.trim(),
         publicRegistry: issueAssetPublicRegistry,
+        bootstrapLightning: issueAssetBootstrapLightning,
+        liquidityPercentage: liquidityPercentageValue,
+        channelFundingSats: channelFundingSatsValue,
+        channelFundingTiming: issueAssetChannelFundingTiming,
       })
 
       await persistAssetForCurrentNetwork({
@@ -873,6 +903,10 @@ function App() {
       setIssueAssetPrecision('0')
       setIssueAssetSupply('')
       setIssueAssetDescription('')
+      setIssueAssetBootstrapLightning(false)
+      setIssueAssetLiquidityPercentage('10')
+      setIssueAssetChannelFundingSats('50000')
+      setIssueAssetChannelFundingTiming('after_issuance')
       await loadIssueAssetReadiness()
     } catch (error: any) {
       console.error('RGB asset issuance failed:', error)
@@ -5146,6 +5180,106 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               />
             </label>
 
+            <div className="issue-asset-callout issue-asset-callout-secondary">
+              <label className="issue-asset-checkbox">
+                <input
+                  type="checkbox"
+                  checked={issueAssetBootstrapLightning}
+                  onChange={(e) => setIssueAssetBootstrapLightning(e.target.checked)}
+                />
+                <span>Bootstrap primary RGB Lightning channel after issuance</span>
+              </label>
+              <p className="issue-asset-helper">
+                This stores the channel bootstrap plan with the issuance. The asset is still created first, and channel creation follows in the later bootstrap stages.
+              </p>
+            </div>
+
+            {issueAssetBootstrapLightning && (
+              <div className="issue-asset-bootstrap-grid">
+                <label className="issue-asset-field">
+                  <span className="issue-asset-label">Liquidity percentage</span>
+                  <input
+                    type="number"
+                    className="token-input"
+                    min={0}
+                    max={100}
+                    step="0.01"
+                    value={issueAssetLiquidityPercentage}
+                    onChange={(e) => setIssueAssetLiquidityPercentage(e.target.value)}
+                  />
+                  <p className="issue-asset-helper">
+                    Reserve part of the issued supply for the first channel inventory.
+                  </p>
+                </label>
+
+                <label className="issue-asset-field">
+                  <span className="issue-asset-label">Bitcoin channel funding (sats)</span>
+                  <input
+                    type="number"
+                    className="token-input"
+                    min={1}
+                    step={1}
+                    value={issueAssetChannelFundingSats}
+                    onChange={(e) => setIssueAssetChannelFundingSats(e.target.value)}
+                  />
+                  <p className="issue-asset-helper">
+                    Planned BTC side of the primary channel bootstrap.
+                  </p>
+                </label>
+
+                <label className="issue-asset-field issue-asset-field-span-2">
+                  <span className="issue-asset-label">Bitcoin funding timing</span>
+                  <div className="issue-asset-radio-row">
+                    <label className="issue-asset-radio">
+                      <input
+                        type="radio"
+                        name="issue-asset-channel-funding-timing"
+                        checked={issueAssetChannelFundingTiming === 'after_issuance'}
+                        onChange={() => setIssueAssetChannelFundingTiming('after_issuance')}
+                      />
+                      <span>Fund after issuance</span>
+                    </label>
+                    <label className="issue-asset-radio">
+                      <input
+                        type="radio"
+                        name="issue-asset-channel-funding-timing"
+                        checked={issueAssetChannelFundingTiming === 'during_issuance'}
+                        onChange={() => setIssueAssetChannelFundingTiming('during_issuance')}
+                      />
+                      <span>Commit during issuance</span>
+                    </label>
+                  </div>
+                  <p className="issue-asset-helper">
+                    Use <strong>{issueAssetChannelFundingTiming === 'during_issuance' ? 'during issuance' : 'after issuance'}</strong> to control when the backend expects the Bitcoin side to be funded.
+                  </p>
+                </label>
+
+                <div className="issue-asset-callout issue-asset-callout-secondary issue-asset-field-span-2">
+                  <p className="issue-asset-callout-title">Planned bootstrap reservation</p>
+                  <p className="issue-asset-helper">
+                    Reserved RGB supply:{' '}
+                    <strong>
+                      {(() => {
+                        const supply = Math.trunc(Number(issueAssetSupply))
+                        const percentage = Number(issueAssetLiquidityPercentage)
+                        if (!Number.isFinite(supply) || supply <= 0 || !Number.isFinite(percentage) || percentage < 0) {
+                          return '0'
+                        }
+                        return Math.floor((supply * percentage) / 100).toLocaleString()
+                      })()}
+                    </strong>
+                    {' '}units
+                  </p>
+                  <p className="issue-asset-helper">
+                    Planned lifecycle state after issuance:{' '}
+                    <strong>
+                      {Number(issueAssetChannelFundingSats) > 0 ? 'waiting_primary_channel' : 'waiting_btc_channel_funding'}
+                    </strong>
+                  </p>
+                </div>
+              </div>
+            )}
+
             <div className="issue-asset-readiness">
               <div className="issue-asset-readiness-header">
                 <strong>Funding readiness</strong>
@@ -5211,6 +5345,23 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                 <p className="issue-asset-helper">
                   The full initial supply was assigned to this wallet at issuance time.
                 </p>
+                {issueAssetSuccess.bootstrapPlan?.enabled && (
+                  <div className="issue-asset-callout issue-asset-callout-secondary">
+                    <p className="issue-asset-callout-title">Primary channel bootstrap plan saved</p>
+                    <p className="issue-asset-helper">
+                      Reserved supply: <strong>{issueAssetSuccess.bootstrapPlan.reservedAssetAmount.toLocaleString()}</strong> units
+                    </p>
+                    <p className="issue-asset-helper">
+                      Planned BTC funding: <strong>{(issueAssetSuccess.bootstrapPlan.requestedChannelBtcSats || 0).toLocaleString()}</strong> sats
+                    </p>
+                    <p className="issue-asset-helper">
+                      Funding timing: <strong>{issueAssetSuccess.bootstrapPlan.channelFundingTiming === 'during_issuance' ? 'during issuance' : 'after issuance'}</strong>
+                    </p>
+                    <p className="issue-asset-helper">
+                      Current lifecycle: <strong>{issueAssetSuccess.bootstrapPlan.lifecycleStatus}</strong>
+                    </p>
+                  </div>
+                )}
                 <div className="issue-readiness-pill">
                   <span>Contract ID</span>
                   <strong className="issue-contract-id">{issueAssetSuccess.asset.contract_id}</strong>
