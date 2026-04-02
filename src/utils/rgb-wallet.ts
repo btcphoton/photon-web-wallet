@@ -183,6 +183,9 @@ export interface RgbIssueAssetResponse {
         requestedChannelBtcSats: number | null
         channelFundingTiming: 'during_issuance' | 'after_issuance' | null
         lifecycleStatus: string
+        channelApplicationId?: string | null
+        channelId?: string | null
+        error?: string | null
     }
 }
 

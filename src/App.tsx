@@ -799,7 +799,15 @@ function App() {
     setIssueAssetLoadingReadiness(true)
     try {
       const walletKey = await getRegtestWalletKey()
-      const readiness = await fetchRegtestIssueAssetReadiness({ walletKey })
+      const requestedChannelFundingSats =
+        issueAssetBootstrapLightning && issueAssetChannelFundingSats.trim()
+          ? Math.trunc(Number(issueAssetChannelFundingSats))
+          : null
+      const readiness = await fetchRegtestIssueAssetReadiness({
+        walletKey,
+        channelFundingSats: requestedChannelFundingSats,
+        channelFundingTiming: issueAssetBootstrapLightning ? issueAssetChannelFundingTiming : 'after_issuance',
+      })
       setIssueAssetReadiness(readiness)
       if (issueAssetError === 'Failed to load issuance readiness.') {
         setIssueAssetError('')
@@ -817,6 +825,42 @@ function App() {
     setIssueAssetError('')
     setIssueAssetSuccess(null)
     setView('issue-asset')
+  }
+
+  const getIssueAssetLifecyclePresentation = (status?: string | null) => {
+    switch (status) {
+      case 'lightning_ready':
+        return {
+          label: 'Lightning Ready',
+          tone: 'ready' as const,
+          summary: 'The primary RGB Lightning channel is active and usable.',
+        }
+      case 'waiting_primary_channel':
+        return {
+          label: 'Waiting For Channel Open',
+          tone: 'progress' as const,
+          summary: 'Funding is satisfied and the backend is waiting for the primary channel to open.',
+        }
+      case 'waiting_btc_channel_funding':
+        return {
+          label: 'Waiting For BTC Funding',
+          tone: 'pending' as const,
+          summary: 'The asset is issued and listed, but the Bitcoin side of the primary channel still needs funding.',
+        }
+      case 'bootstrap_failed':
+        return {
+          label: 'Bootstrap Needs Attention',
+          tone: 'error' as const,
+          summary: 'The asset was issued, but the primary channel bootstrap setup failed and needs review.',
+        }
+      case 'issued_registry_only':
+      default:
+        return {
+          label: 'Registry Only',
+          tone: 'neutral' as const,
+          summary: 'The asset is issued and visible in the registry, but no Lightning bootstrap is active yet.',
+        }
+    }
   }
 
   const handleIssueAssetSubmit = async () => {
@@ -1731,6 +1775,12 @@ function App() {
       loadIssueAssetReadiness()
     }
   }, [view, selectedNetwork])
+
+  useEffect(() => {
+    if (view === 'issue-asset' && selectedNetwork === 'regtest') {
+      loadIssueAssetReadiness()
+    }
+  }, [issueAssetBootstrapLightning, issueAssetChannelFundingSats, issueAssetChannelFundingTiming])
 
 
   // Handle network switch
@@ -5304,6 +5354,22 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                     <span>FREE slots</span>
                     <strong>{issueAssetReadiness.freeSlotCount}</strong>
                   </div>
+                  <div className="issue-readiness-pill">
+                    <span>Required funding</span>
+                    <strong>{issueAssetReadiness.requiredFundingSats.toLocaleString()}</strong>
+                  </div>
+                  <div className="issue-readiness-pill">
+                    <span>Channel funding</span>
+                    <strong>
+                      {issueAssetReadiness.channelFundingTiming === 'during_issuance'
+                        ? issueAssetReadiness.channelFundingReady
+                          ? 'Ready now'
+                          : `${issueAssetReadiness.channelFundingShortfallSats.toLocaleString()} sats short`
+                        : issueAssetReadiness.requestedChannelFundingSats > 0
+                          ? 'Deferred until later'
+                          : 'Not requested'}
+                    </strong>
+                  </div>
                 </div>
               ) : (
                 <p className="issue-asset-helper">Loading issuance funding status from the backend.</p>
@@ -5313,7 +5379,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                 <div className="issue-asset-callout">
                   <p className="issue-asset-callout-title">Fund this address before issuing</p>
                   <p className="issue-asset-helper">
-                    Send at least {issueAssetReadiness.minimumFundingSats.toLocaleString()} sats to this address, then wait for confirmation.
+                    Send at least {issueAssetReadiness.requiredFundingSats.toLocaleString()} sats to this address, then wait for confirmation.
                   </p>
                   <code className="issue-asset-address">{issueAssetReadiness.utxoFundingAddress}</code>
                 </div>
@@ -5345,22 +5411,55 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                 <p className="issue-asset-helper">
                   The full initial supply was assigned to this wallet at issuance time.
                 </p>
-                {issueAssetSuccess.bootstrapPlan?.enabled && (
-                  <div className="issue-asset-callout issue-asset-callout-secondary">
-                    <p className="issue-asset-callout-title">Primary channel bootstrap plan saved</p>
-                    <p className="issue-asset-helper">
-                      Reserved supply: <strong>{issueAssetSuccess.bootstrapPlan.reservedAssetAmount.toLocaleString()}</strong> units
-                    </p>
-                    <p className="issue-asset-helper">
-                      Planned BTC funding: <strong>{(issueAssetSuccess.bootstrapPlan.requestedChannelBtcSats || 0).toLocaleString()}</strong> sats
-                    </p>
-                    <p className="issue-asset-helper">
-                      Funding timing: <strong>{issueAssetSuccess.bootstrapPlan.channelFundingTiming === 'during_issuance' ? 'during issuance' : 'after issuance'}</strong>
-                    </p>
-                    <p className="issue-asset-helper">
-                      Current lifecycle: <strong>{issueAssetSuccess.bootstrapPlan.lifecycleStatus}</strong>
-                    </p>
+                <div className={`issue-asset-status-card issue-asset-status-${getIssueAssetLifecyclePresentation(issueAssetSuccess.bootstrapPlan?.lifecycleStatus).tone}`}>
+                  <div className="issue-asset-status-header">
+                    <span className="issue-asset-status-badge">
+                      {getIssueAssetLifecyclePresentation(issueAssetSuccess.bootstrapPlan?.lifecycleStatus).label}
+                    </span>
+                    <span className="issue-asset-status-meta">
+                      {issueAssetSuccess.bootstrapPlan?.enabled ? 'Primary channel bootstrap tracked' : 'No Lightning bootstrap requested'}
+                    </span>
                   </div>
+                  <p className="issue-asset-helper">
+                    {getIssueAssetLifecyclePresentation(issueAssetSuccess.bootstrapPlan?.lifecycleStatus).summary}
+                  </p>
+                </div>
+                {issueAssetSuccess.bootstrapPlan?.enabled && (
+                  <>
+                    <div className="issue-asset-readiness-grid issue-asset-readiness-grid-success">
+                      <div className="issue-readiness-pill">
+                        <span>Reserved liquidity</span>
+                        <strong>{issueAssetSuccess.bootstrapPlan.reservedAssetAmount.toLocaleString()} units</strong>
+                      </div>
+                      <div className="issue-readiness-pill">
+                        <span>BTC funding plan</span>
+                        <strong>{(issueAssetSuccess.bootstrapPlan.requestedChannelBtcSats || 0).toLocaleString()} sats</strong>
+                      </div>
+                      <div className="issue-readiness-pill">
+                        <span>Funding timing</span>
+                        <strong>{issueAssetSuccess.bootstrapPlan.channelFundingTiming === 'during_issuance' ? 'During issuance' : 'After issuance'}</strong>
+                      </div>
+                      <div className="issue-readiness-pill">
+                        <span>Liquidity percentage</span>
+                        <strong>{issueAssetSuccess.bootstrapPlan.liquidityPercentage !== null ? `${issueAssetSuccess.bootstrapPlan.liquidityPercentage}%` : '—'}</strong>
+                      </div>
+                    </div>
+
+                    <div className="issue-asset-callout issue-asset-callout-secondary">
+                      <p className="issue-asset-callout-title">Primary channel bootstrap tracking</p>
+                      <p className="issue-asset-helper">
+                        Channel application: <strong>{issueAssetSuccess.bootstrapPlan.channelApplicationId || 'Not created'}</strong>
+                      </p>
+                      <p className="issue-asset-helper">
+                        Channel ID: <strong>{issueAssetSuccess.bootstrapPlan.channelId || 'Pending'}</strong>
+                      </p>
+                      {issueAssetSuccess.bootstrapPlan.error && (
+                        <p className="issue-asset-helper issue-asset-helper-error">
+                          Bootstrap error: <strong>{issueAssetSuccess.bootstrapPlan.error}</strong>
+                        </p>
+                      )}
+                    </div>
+                  </>
                 )}
                 <div className="issue-readiness-pill">
                   <span>Contract ID</span>
@@ -5387,6 +5486,9 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               issueAssetSubmitting ||
               selectedNetwork !== 'regtest' ||
               !issueAssetReadiness?.isReady ||
+              (issueAssetBootstrapLightning &&
+                issueAssetChannelFundingTiming === 'during_issuance' &&
+                !issueAssetReadiness?.channelFundingReady) ||
               !issueAssetName.trim() ||
               !issueAssetTicker.trim() ||
               !issueAssetSupply.trim()
