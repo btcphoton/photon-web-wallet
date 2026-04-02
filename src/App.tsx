@@ -51,6 +51,11 @@ interface ImportableAsset {
   contracts?: Partial<Record<Network, string>>
 }
 
+interface LocalTestWalletConfig {
+  mnemonic: string
+  password: string
+}
+
 const buildAssetIdFromTicker = (ticker: string) => {
   return ticker.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
 }
@@ -118,6 +123,13 @@ const PHOTON_PRICE_API = 'https://faucet.photonbolt.xyz/api/market/btc-usd'
 // and for non-regtest networks. Regtest always queries the live registry first.
 const importableAssets: ImportableAsset[] = []
 
+const PHOTON_LABS_CONFIG_PATH = 'photonlabs.txt'
+
+const isPlaceholderTestConfigValue = (value: string) => {
+  const normalized = value.trim()
+  return !normalized || normalized === '...'
+}
+
 function WalletHeaderButton({
   ariaLabel,
   onClick,
@@ -169,10 +181,11 @@ function App() {
   const [errorLogs, setErrorLogs] = useState<ErrorLog[]>([])
   const [mnemonic, setMnemonic] = useState<string>('')
   const [principalId, setPrincipalId] = useState<string>('')
-  const [restoreInput, setRestoreInput] = useState<string>('gasp attitude little organ palm crime layer answer dial twelve feed meadow')
+  const [restoreInput, setRestoreInput] = useState<string>('')
   const [error, setError] = useState<string>('')
   const [activeTab, setActiveTab] = useState<Tab>('assets')
   const [detailAsset, setDetailAsset] = useState<import('./utils/storage').Asset | null>(null)
+  const [localTestWalletConfig, setLocalTestWalletConfig] = useState<LocalTestWalletConfig | null>(null)
 
   // Two-address system states
   const [walletAddress, setWalletAddress] = useState<string>('') // Main BTC wallet address
@@ -410,6 +423,60 @@ function App() {
     const sendSats = Math.max(0, Number(selectedUnlockUtxo.value) - getUnlockFeeSats())
     return (sendSats / 100000000).toFixed(8)
   }
+
+  useEffect(() => {
+    let cancelled = false
+
+    const loadLocalTestWalletConfig = async () => {
+      try {
+        const fileUrl =
+          typeof chrome !== 'undefined' && chrome?.runtime?.getURL
+            ? chrome.runtime.getURL(PHOTON_LABS_CONFIG_PATH)
+            : `/${PHOTON_LABS_CONFIG_PATH}`
+        const response = await fetch(fileUrl, { cache: 'no-store' })
+
+        if (!response.ok) {
+          if (!cancelled) {
+            setLocalTestWalletConfig(null)
+          }
+          return
+        }
+
+        const raw = await response.text()
+        const parsed = JSON.parse(raw) as Partial<LocalTestWalletConfig>
+        const mnemonicValue = typeof parsed?.mnemonic === 'string' ? parsed.mnemonic.trim() : ''
+        const passwordValue = typeof parsed?.password === 'string' ? parsed.password.trim() : ''
+
+        if (
+          isPlaceholderTestConfigValue(mnemonicValue) ||
+          isPlaceholderTestConfigValue(passwordValue) ||
+          !validateMnemonic(mnemonicValue)
+        ) {
+          if (!cancelled) {
+            setLocalTestWalletConfig(null)
+          }
+          return
+        }
+
+        if (!cancelled) {
+          setLocalTestWalletConfig({
+            mnemonic: mnemonicValue,
+            password: passwordValue,
+          })
+        }
+      } catch {
+        if (!cancelled) {
+          setLocalTestWalletConfig(null)
+        }
+      }
+    }
+
+    void loadLocalTestWalletConfig()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const handleUnlockUtxo = async () => {
     if (!selectedUnlockUtxo) return
@@ -3967,16 +4034,18 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
             Continue
           </button>
 
-          <button
-            className="forgot-link"
-            onClick={() => {
-              setPassword('rehan123')
-              setConfirmPassword('rehan123')
-            }}
-            style={{ marginTop: '0.5rem', textDecoration: 'underline' }}
-          >
-            Use Test Password
-          </button>
+          {localTestWalletConfig && (
+            <button
+              className="forgot-link"
+              onClick={() => {
+                setPassword(localTestWalletConfig.password)
+                setConfirmPassword(localTestWalletConfig.password)
+              }}
+              style={{ marginTop: '0.5rem', textDecoration: 'underline' }}
+            >
+              Use Test Password
+            </button>
+          )}
         </div>
       )}
 
@@ -3989,13 +4058,15 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
             onChange={(e) => setRestoreInput(e.target.value)}
             placeholder="Enter mnemonic..."
           />
-          <button
-            className="forgot-link"
-            onClick={() => setRestoreInput('gasp attitude little organ palm crime layer answer dial twelve feed meadow')}
-            style={{ marginTop: '0.5rem', textDecoration: 'underline' }}
-          >
-            Use Test Wallet
-          </button>
+          {localTestWalletConfig && (
+            <button
+              className="forgot-link"
+              onClick={() => setRestoreInput(localTestWalletConfig.mnemonic)}
+              style={{ marginTop: '0.5rem', textDecoration: 'underline' }}
+            >
+              Use Test Wallet
+            </button>
+          )}
           {error && <ErrorBanner message={error} />}
           <div className="button-group">
             <button className="btn-secondary" onClick={() => setView('welcome')}>

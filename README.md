@@ -71,3 +71,53 @@ export default defineConfig([
   },
 ])
 ```
+
+## Local Test Wallet File
+
+The wallet can optionally expose `Use Test Wallet` and `Use Test Password` shortcuts for local QA only.
+
+Those controls are enabled only when a valid local file exists at:
+
+`public/photonlabs.txt`
+
+This file is intentionally ignored by git and should never be committed with real values.
+
+### Setup
+
+1. Copy the example file:
+
+```bash
+cp public/photonlabs.example.txt public/photonlabs.txt
+```
+
+2. Replace the placeholder values with a real mnemonic and password:
+
+```json
+{
+  "mnemonic": "your twelve word mnemonic here",
+  "password": "your-test-password"
+}
+```
+
+3. Run a build:
+
+```bash
+npm run build
+```
+
+4. Confirm the built extension contains:
+
+`dist/photonlabs.txt`
+
+5. Load or reload the unpacked extension from `dist/`.
+
+### Behavior
+
+- If `public/photonlabs.txt` is missing, the test controls stay hidden.
+- If the file exists but is malformed, empty, or still contains `"..."`, the test controls stay hidden.
+- If the file contains a valid mnemonic and password, the test controls become visible on the restore and password screens.
+
+### Files
+
+- Tracked example: `public/photonlabs.example.txt`
+- Local-only override: `public/photonlabs.txt`
