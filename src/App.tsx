@@ -56,6 +56,8 @@ interface LocalTestWalletConfig {
   password: string
 }
 
+type PasswordEntrySource = 'verify' | 'restore'
+
 const buildAssetIdFromTicker = (ticker: string) => {
   return ticker.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
 }
@@ -207,6 +209,7 @@ function App() {
   const [confirmPassword, setConfirmPassword] = useState<string>('')
   const [showPassword, setShowPassword] = useState<boolean>(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState<boolean>(false)
+  const [passwordEntrySource, setPasswordEntrySource] = useState<PasswordEntrySource>('verify')
 
   // Unlock password state
   const [unlockPassword, setUnlockPassword] = useState<string>('')
@@ -1982,6 +1985,7 @@ function App() {
     setPassword('')
     setConfirmPassword('')
     setError('')
+    setPasswordEntrySource('verify')
     setView('password')
   }
 
@@ -2205,6 +2209,7 @@ function App() {
     setPassword('')
     setConfirmPassword('')
     setError('')
+    setPasswordEntrySource('restore')
     setView('password')
   }
 
@@ -3970,7 +3975,13 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
       {view === 'password' && (
         <div className="card-container">
           <div className="password-header">
-            <button className="back-arrow" aria-label="Go back" onClick={() => setView('verify')}>←</button>
+            <button
+              className="back-arrow"
+              aria-label="Go back"
+              onClick={() => setView(passwordEntrySource === 'restore' ? 'restore' : 'verify')}
+            >
+              ←
+            </button>
             <h2 className="card-title">Create a password</h2>
           </div>
           <div className="progress-bar">
