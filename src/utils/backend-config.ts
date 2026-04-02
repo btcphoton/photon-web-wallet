@@ -35,7 +35,7 @@ export const PUBLIC_ELECTRUM_DEFAULT = envString(
 );
 export const PUBLIC_RGB_PROXY_DEFAULT = envString(
     import.meta.env.VITE_PUBLIC_RGB_PROXY_DEFAULT,
-    'http://89.117.52.115:3000/json-rpc'
+    'https://dev-proxy.photonbolt.xyz/json-rpc'
 );
 export const PHOTON_REGTEST_ELECTRUM = envString(
     import.meta.env.VITE_PHOTON_REGTEST_ELECTRUM,
