@@ -146,3 +146,27 @@ These values control:
 - Photon regtest Electrum, RGB proxy, and faucet API endpoints for the `photon-dev-regtest` profile
 
 If `.env` is not present, the current built-in defaults remain unchanged.
+
+## Shared Regtest Script Defaults
+
+Regtest bootstrap scripts now read shared constants from:
+
+`scripts/photon-regtest-defaults.sh`
+
+This file is the source of truth for script-level defaults such as:
+
+- Photon regtest Docker network name
+- issuer API base
+- bitcoind container name
+- regtest mining address
+- default PHO asset id, ticker, and display name
+
+Scripts can still be overridden per run with environment variables. Example:
+
+```bash
+PHOTON_REGTEST_MINE_ADDRESS=bcrt1... \
+PHOTON_REGTEST_PHO_ASSET_ID=rgb:... \
+bash scripts/add-shared-rgb-node.sh
+```
+
+Use this shared file when regtest bootstrap values change so scripts and developer docs do not drift independently.
