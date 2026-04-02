@@ -138,6 +138,10 @@ const ACCOUNT_SCOPED_PREFIXES = [
     'changeIndex_',
     'allDiscoveredAddresses_',
 ] as const
+const ADDRESS_SCOPED_REGTEST_KEYS = new Set<keyof StorageData>([
+    'assets_regtest',
+    'rgbContracts_regtest',
+])
 const ACCOUNT_METADATA_KEYS: (keyof StorageData)[] = ['currentAccountId', 'knownAccountIds']
 const LEGACY_ACCOUNT_MIGRATION_KEYS: (keyof StorageData)[] = [
     'mnemonic',
@@ -212,6 +216,98 @@ const isSensitiveAccountKey = (key: keyof StorageData): boolean => SENSITIVE_ACC
 
 const getAccountStorageKey = (accountId: string, key: keyof StorageData): string => {
     return `account:${accountId}:${String(key)}`
+}
+
+const getAddressScopedAccountStorageKey = (accountId: string, key: keyof StorageData, address: string): string => {
+    return `account:${accountId}:${String(key)}:${address}`
+}
+
+const normalizeScopedAddress = (value: unknown): string | undefined => {
+    if (typeof value !== 'string') {
+        return undefined
+    }
+
+    const normalized = value.trim()
+    return normalized.length > 0 ? normalized : undefined
+}
+
+const readAccountRegtestAddress = async (
+    accountId: string,
+    inlineData?: Partial<StorageData>,
+): Promise<string | undefined> => {
+    const inlineAddress =
+        normalizeScopedAddress(inlineData?.walletAddress_regtest) ||
+        normalizeScopedAddress(inlineData?.btcAddress_regtest) ||
+        normalizeScopedAddress(inlineData?.coloredAddress_regtest) ||
+        normalizeScopedAddress(inlineData?.walletAddress) ||
+        normalizeScopedAddress(inlineData?.btcAddress) ||
+        normalizeScopedAddress(inlineData?.coloredAddress)
+
+    if (inlineAddress) {
+        return inlineAddress
+    }
+
+    const rawAddressKeys = [
+        getAccountStorageKey(accountId, 'walletAddress_regtest'),
+        getAccountStorageKey(accountId, 'btcAddress_regtest'),
+        getAccountStorageKey(accountId, 'coloredAddress_regtest'),
+        getAccountStorageKey(accountId, 'walletAddress'),
+        getAccountStorageKey(accountId, 'btcAddress'),
+        getAccountStorageKey(accountId, 'coloredAddress'),
+    ]
+    const rawAddressData = await readStorageRecords(rawAddressKeys)
+
+    return (
+        normalizeScopedAddress(rawAddressData[getAccountStorageKey(accountId, 'walletAddress_regtest')]) ||
+        normalizeScopedAddress(rawAddressData[getAccountStorageKey(accountId, 'btcAddress_regtest')]) ||
+        normalizeScopedAddress(rawAddressData[getAccountStorageKey(accountId, 'coloredAddress_regtest')]) ||
+        normalizeScopedAddress(rawAddressData[getAccountStorageKey(accountId, 'walletAddress')]) ||
+        normalizeScopedAddress(rawAddressData[getAccountStorageKey(accountId, 'btcAddress')]) ||
+        normalizeScopedAddress(rawAddressData[getAccountStorageKey(accountId, 'coloredAddress')])
+    )
+}
+
+const resolveAccountStorageReadKeys = async (accountId: string, key: keyof StorageData): Promise<string[]> => {
+    const legacyKey = getAccountStorageKey(accountId, key)
+    if (!ADDRESS_SCOPED_REGTEST_KEYS.has(key)) {
+        return [legacyKey]
+    }
+
+    const regtestAddress = await readAccountRegtestAddress(accountId)
+    if (!regtestAddress) {
+        return [legacyKey]
+    }
+
+    return [
+        getAddressScopedAccountStorageKey(accountId, key, regtestAddress),
+    ]
+}
+
+const resolveAccountStorageWriteKey = async (
+    accountId: string,
+    key: keyof StorageData,
+    inlineData?: Partial<StorageData>,
+): Promise<{ storageKey: string; legacyKeysToRemove: string[] }> => {
+    const legacyKey = getAccountStorageKey(accountId, key)
+    if (!ADDRESS_SCOPED_REGTEST_KEYS.has(key)) {
+        return {
+            storageKey: legacyKey,
+            legacyKeysToRemove: [],
+        }
+    }
+
+    const regtestAddress = await readAccountRegtestAddress(accountId, inlineData)
+    if (!regtestAddress) {
+        return {
+            storageKey: legacyKey,
+            legacyKeysToRemove: [],
+        }
+    }
+
+    return {
+        storageKey: getAddressScopedAccountStorageKey(accountId, key, regtestAddress),
+        legacyKeysToRemove: [legacyKey],
+    }
 }
 
 // Check if chrome.storage is actually available and functional
@@ -442,7 +538,11 @@ export const getStorageData = (keys: (keyof StorageData)[]): Promise<Partial<Sto
         const directKeys = keys.filter((key) => !isAccountScopedKey(key))
         const scopedKeys = accountId ? keys.filter((key) => isAccountScopedKey(key)) : []
         const sensitiveDirectKeys = directKeys.filter(isSensitiveAccountKey)
-        const scopedStorageKeys = scopedKeys.map((key) => getAccountStorageKey(accountId as string, key))
+        const scopedReadKeyMap = new Map<keyof StorageData, string[]>()
+        for (const key of scopedKeys) {
+            scopedReadKeyMap.set(key, await resolveAccountStorageReadKeys(accountId as string, key))
+        }
+        const scopedStorageKeys = Array.from(scopedReadKeyMap.values()).flat()
         const sensitiveScopedStorageKeys = scopedKeys
             .filter(isSensitiveAccountKey)
             .map((key) => getAccountStorageKey(accountId as string, key))
@@ -463,9 +563,13 @@ export const getStorageData = (keys: (keyof StorageData)[]): Promise<Partial<Sto
 
         if (accountId) {
             scopedKeys.forEach((key) => {
-                const value = rawResult[getAccountStorageKey(accountId, key)]
-                if (value !== undefined) {
-                    result[key] = value as never
+                const candidateKeys = scopedReadKeyMap.get(key) || [getAccountStorageKey(accountId, key)]
+                for (const storageKey of candidateKeys) {
+                    const value = rawResult[storageKey]
+                    if (value !== undefined) {
+                        result[key] = value as never
+                        break
+                    }
                 }
             })
         }
@@ -487,31 +591,36 @@ export const setStorageData = (data: Partial<StorageData>): Promise<void> => {
         const sessionData: Record<string, unknown> = {}
         const removeLocalKeys: string[] = []
 
-        Object.entries(data).forEach(([rawKey, value]) => {
+        for (const [rawKey, value] of Object.entries(data)) {
             const key = rawKey as keyof StorageData
             if (value === undefined) {
-                return
+                continue
             }
 
-            const storageKey =
-                targetAccountId && isAccountScopedKey(key)
-                    ? getAccountStorageKey(targetAccountId, key)
-                    : String(key)
+            let storageKey = String(key)
+            let legacyKeysToRemove: string[] = []
+
+            if (targetAccountId && isAccountScopedKey(key)) {
+                const resolvedKey = await resolveAccountStorageWriteKey(targetAccountId, key, data)
+                storageKey = resolvedKey.storageKey
+                legacyKeysToRemove = resolvedKey.legacyKeysToRemove
+            }
 
             if (targetAccountId && isAccountScopedKey(key) && isSensitiveAccountKey(key)) {
                 sessionData[storageKey] = value
                 removeLocalKeys.push(storageKey)
-                return
+                continue
             }
 
             if (isSensitiveAccountKey(key)) {
                 sessionData[storageKey] = value
                 removeLocalKeys.push(storageKey)
-                return
+                continue
             }
 
             localData[storageKey] = value
-        })
+            legacyKeysToRemove.forEach((legacyKey) => removeLocalKeys.push(legacyKey))
+        }
 
         if (targetAccountId) {
             const metadata = await readStorageRecords(ACCOUNT_METADATA_KEYS.map(String))
