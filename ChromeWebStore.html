@@ -168,6 +168,25 @@
       <div class="badge">Manifest permissions: <code>storage</code>, <code>activeTab</code>, <code>&lt;all_urls&gt;</code></div>
     </section>
 
+    <section class="block">
+      <h2>Violation Response</h2>
+      <p class="ok">Ready for resubmission</p>
+      <div class="copy">Chrome Web Store violation reference: Purple Potassium
+
+Issue identified:
+- The extension previously requested the `scripting` permission without using the Chrome scripting API.
+
+Remediation completed:
+- Removed `scripting` from `public/manifest.json`
+- Confirmed there are no `chrome.scripting` or `browser.scripting` calls in the codebase
+- Submission notes updated to reflect the exact current permission set only
+
+Current requested permissions:
+- `storage`
+- `activeTab`
+- host permission: `<all_urls>`</div>
+    </section>
+
     <section class="grid">
       <article class="card">
         <h2>Single Purpose</h2>
@@ -260,6 +279,16 @@ PhotonBolt Wallet does not exist to browse the web, scrape content, inject ads, 
 - A content script relays requests between the page and the extension background worker.
 - Approval flows are shown to the user before sensitive actions such as connect, transaction approval, or signing are completed.
 - The extension's purpose is limited to wallet connectivity and wallet approvals for Bitcoin and RGB asset activity.</div>
+    </section>
+
+    <section class="block">
+      <h2>Resubmission Checklist</h2>
+      <div class="copy">Before uploading to the Chrome Web Store:
+- Upload the freshly built extension package from `dist/`
+- Recheck the generated manifest in the build output and confirm `scripting` is absent
+- Use the permission justifications on this page verbatim in the store listing where needed
+- Ensure the privacy policy and store description match the wallet-only purpose described here
+- Mention in reviewer notes that the previous rejection was resolved by removing the unused `scripting` permission and narrowing the permission surface to activeTab, storage, and all_urls host access</div>
     </section>
   </div>
 </body>
