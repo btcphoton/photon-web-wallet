@@ -50,7 +50,7 @@
         <p class="lead">
           PhotonBolt Wallet is a browser wallet with a dApp-facing provider injected as <code>window.photon</code>.
           It exposes a compact JavaScript API for wallet connection, account discovery, balance reads,
-          transaction signing, transaction broadcast, and message signing.
+          asset import, transaction signing, transaction broadcast, and message signing.
         </p>
         <p class="muted">
           This portal documents the API shape currently implemented in the PhotonBolt extension codebase.
@@ -68,7 +68,7 @@
         </section>
         <section class="card">
           <h3>Simple Public Surface</h3>
-          <p>The current public methods are <code>connect</code>, <code>disconnect</code>, <code>getAccounts</code>, <code>getNetwork</code>, <code>getBalance</code>, <code>signTransaction</code>, <code>sendTransaction</code>, and <code>signMessage</code>.</p>
+          <p>The current public methods are <code>connect</code>, <code>disconnect</code>, <code>getAccounts</code>, <code>getNetwork</code>, <code>getBalance</code>, <code>getAssets</code>, <code>getAssetBalance</code>, <code>importAsset</code>, <code>signTransaction</code>, <code>sendTransaction</code>, and <code>signMessage</code>.</p>
         </section>
       </div>
 
@@ -132,6 +132,11 @@ if (!photon) {
             <td><code>await photon.getBalance()</code></td>
             <td><code>string</code></td>
             <td>Displaying the wallet's BTC balance.</td>
+          </tr>
+          <tr>
+            <td><code>await photon.importAsset({ contractId })</code></td>
+            <td><code>{ asset, network, imported, alreadyImported }</code></td>
+            <td>Adding a regtest RGB asset from the Photon registry directly into the active wallet.</td>
           </tr>
           <tr>
             <td><code>await photon.signTransaction(tx)</code></td>

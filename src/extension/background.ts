@@ -3,6 +3,7 @@ import {
   buildConnectApproval,
   executeSendTransaction,
   getRegtestExtensionWalletKey,
+  importAssetForOrigin,
   getStoredAssetBalanceForOrigin,
   getStoredAssetsForOrigin,
   getLiveBalance,
@@ -95,6 +96,8 @@ async function handleRequest(message: any, sender: chrome.runtime.MessageSender)
       return handleGetAssets(origin)
     case 'getAssetBalance':
       return handleGetAssetBalance(origin, params)
+    case 'importAsset':
+      return handleImportAsset(origin, params)
     case 'signTransaction':
       return handleSignTransaction(origin, params, sender.tab?.id)
     case 'sendTransaction':
@@ -212,6 +215,18 @@ async function handleGetAssetBalance(origin: string, params: Record<string, unkn
       balance: result.balance,
       asset: result.asset,
       network: result.network,
+    },
+  }
+}
+
+async function handleImportAsset(origin: string, params: Record<string, unknown>) {
+  const result = await importAssetForOrigin(origin, params)
+  return {
+    result: {
+      asset: result.asset,
+      network: result.network,
+      imported: result.imported,
+      alreadyImported: result.alreadyImported,
     },
   }
 }

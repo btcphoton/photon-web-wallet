@@ -44,7 +44,7 @@
         <h1>Balances and Transactions</h1>
         <p class="lead">
           PhotonBolt’s provider exposes a narrow, Bitcoin-focused transaction API.
-          Use it to read the active balance, produce signed transaction hex, or request a full send flow with user approval.
+          Use it to read the active balance, import regtest RGB assets, produce signed transaction hex, or request a full send flow with user approval.
         </p>
       </section>
 
@@ -57,6 +57,27 @@
         <pre id="tx-balance"><code>async function loadBalance() {
   const balanceBtc = await window.photon.getBalance();
   document.querySelector("#balance").textContent = `${balanceBtc} BTC`;
+}</code></pre>
+      </div>
+
+      <h2>Import RGB Asset</h2>
+      <p>
+        On regtest, a connected dApp can import a public Photon registry asset directly into the active wallet by contract ID, ticker, or name.
+      </p>
+      <div class="code-block">
+        <div class="code-header">
+          <span>JavaScript</span>
+          <button class="copy-btn" data-copy="#tx-import-asset">Copy</button>
+        </div>
+        <pre id="tx-import-asset"><code>async function importRgbAsset(contractId) {
+  const photon = window.photon;
+  if (!photon) throw new Error("PhotonBolt Wallet missing");
+
+  await photon.connect();
+
+  const result = await photon.importAsset({ contractId });
+  console.log("Imported asset", result.asset);
+  console.log("Already imported?", result.alreadyImported);
 }</code></pre>
       </div>
 

@@ -169,6 +169,23 @@
             return result.balance;
         }
 
+        async importAsset(params = {}) {
+            const contractId = typeof params.contractId === 'string' ? params.contractId.trim() : '';
+            const assetId = typeof params.assetId === 'string' ? params.assetId.trim() : '';
+            const ticker = typeof params.ticker === 'string' ? params.ticker.trim() : '';
+            const name = typeof params.name === 'string' ? params.name.trim() : '';
+            if (!contractId && !assetId && !ticker && !name) {
+                throw new Error('contractId, assetId, ticker, or name is required');
+            }
+            const result = await this._sendRequest('importAsset', {
+                contractId,
+                assetId,
+                ticker,
+                name,
+            });
+            return result;
+        }
+
         // Sign a Bitcoin transaction
         async signTransaction(txData) {
             if (!txData || !txData.to || !txData.amount) {

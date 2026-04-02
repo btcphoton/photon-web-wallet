@@ -19,6 +19,7 @@ import {
   type WalletAsset,
 } from '../utils/dapp-bridge'
 import { getNetworkAssetsKey, getStorageData, setStorageData } from '../utils/storage'
+import { PHOTON_REGTEST_API_BASE } from '../utils/backend-config'
 
 bitcoin.initEccLib(ecc)
 
@@ -291,6 +292,101 @@ export const getStoredAssetBalanceForOrigin = async (
     balance: String(matchedAsset.amount ?? '0'),
     asset: matchedAsset,
     network,
+  }
+}
+
+const buildAssetIdFromTicker = (ticker: string): string => {
+  return ticker.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+}
+
+const pickImportedAssetColor = (ticker: string): string => {
+  return ticker.trim().toUpperCase() === 'PHO' ? '#38bdf8' : '#f8fafc'
+}
+
+export const importAssetForOrigin = async (
+  origin: string,
+  params: Record<string, unknown>,
+): Promise<{ asset: WalletAsset; network: Network; imported: boolean; alreadyImported: boolean }> => {
+  if (!(await isConnectedOrigin(origin))) {
+    throw new Error('Not connected. Please call connect() first.')
+  }
+
+  const context = await loadWalletContext()
+  if (context.network !== 'regtest') {
+    throw new Error('importAsset is currently supported only on regtest.')
+  }
+
+  const rawIdentifier =
+    (typeof params.contractId === 'string' && params.contractId.trim()) ||
+    (typeof params.assetId === 'string' && params.assetId.trim()) ||
+    (typeof params.ticker === 'string' && params.ticker.trim()) ||
+    (typeof params.name === 'string' && params.name.trim()) ||
+    ''
+
+  if (!rawIdentifier) {
+    throw new Error('contractId, assetId, ticker, or name is required.')
+  }
+
+  const response = await fetch(`${PHOTON_REGTEST_API_BASE}/rgb/registry`)
+  const payload = await response.json()
+  if (!response.ok || !payload.ok || !Array.isArray(payload.assets)) {
+    throw new Error(payload?.error || 'Failed to load the Photon RGB registry.')
+  }
+
+  const normalizedIdentifier = rawIdentifier.toLowerCase()
+  const registryMatch = payload.assets.find((entry: any) => (
+    String(entry.contract_id || '').toLowerCase() === normalizedIdentifier ||
+    String(entry.ticker || '').toLowerCase() === normalizedIdentifier ||
+    String(entry.token_name || '').toLowerCase() === normalizedIdentifier
+  ))
+
+  if (!registryMatch) {
+    throw new Error(`Asset ${rawIdentifier} was not found in the Photon RGB registry.`)
+  }
+
+  const assetsKey = getNetworkAssetsKey(context.network)
+  const contractsKey = `rgbContracts_${context.network}` as const
+  const result = await getStorageData([assetsKey, contractsKey])
+  const storedAssetsRaw = result[assetsKey]
+  const storedContractsRaw = result[contractsKey]
+  const storedAssets = typeof storedAssetsRaw === 'string'
+    ? JSON.parse(storedAssetsRaw) as WalletAsset[]
+    : []
+  const storedContracts = typeof storedContractsRaw === 'string'
+    ? JSON.parse(storedContractsRaw) as Record<string, string>
+    : {}
+
+  const assetId = buildAssetIdFromTicker(String(registryMatch.ticker || 'asset'))
+  const importedAsset: WalletAsset = {
+    id: assetId,
+    name: String(registryMatch.token_name || registryMatch.ticker || assetId),
+    amount: '0',
+    unit: String(registryMatch.ticker || assetId),
+    ticker: String(registryMatch.ticker || assetId),
+    contractId: String(registryMatch.contract_id || ''),
+    assetId: String(registryMatch.contract_id || ''),
+    color: pickImportedAssetColor(String(registryMatch.ticker || '')),
+  }
+
+  const alreadyImported = storedAssets.some((asset) => asset.id === assetId)
+  const updatedAssets = alreadyImported
+    ? storedAssets.map((asset) => asset.id === assetId ? { ...asset, ...importedAsset } : asset)
+    : [...storedAssets, importedAsset]
+  const updatedContracts = {
+    ...storedContracts,
+    [assetId]: String(registryMatch.contract_id || ''),
+  }
+
+  await setStorageData({
+    [assetsKey]: JSON.stringify(updatedAssets),
+    [contractsKey]: JSON.stringify(updatedContracts),
+  })
+
+  return {
+    asset: importedAsset,
+    network: context.network,
+    imported: true,
+    alreadyImported,
   }
 }
 
