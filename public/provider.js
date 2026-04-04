@@ -242,6 +242,57 @@
         }
     }
 
+    // Minimal WebLN compatibility wrapper (EXT-01).
+    // WebLN dApps expect window.webln with enable/getInfo/makeInvoice/sendPayment.
+    class WebLNWrapper {
+        constructor(photon) {
+            this._photon = photon;
+            this.enabled = false;
+        }
+
+        async enable() {
+            const result = await this._photon._sendRequest('webln.enable');
+            this.enabled = true;
+            return result;
+        }
+
+        async getInfo() {
+            return this._photon._sendRequest('webln.getInfo');
+        }
+
+        // For now, makeInvoice is RGB Lightning-backed on regtest and requires assetId+amount.
+        async makeInvoice(params = {}) {
+            return this._photon._sendRequest('webln.makeInvoice', params);
+        }
+
+        async sendPayment(paymentRequest) {
+            if (!paymentRequest || typeof paymentRequest !== 'string') {
+                throw new Error('paymentRequest is required');
+            }
+            return this._photon._sendRequest('webln.sendPayment', { paymentRequest });
+        }
+
+        async decodeInvoice(paymentRequest) {
+            if (!paymentRequest || typeof paymentRequest !== 'string') {
+                throw new Error('paymentRequest is required');
+            }
+            return this._photon._sendRequest('webln.decodeInvoice', { invoice: paymentRequest });
+        }
+
+        // RGB helpers for dApps (non-standard WebLN extensions).
+        async receiveAsset(params = {}) {
+            return this.makeInvoice(params);
+        }
+
+        async sendAsset(params = {}) {
+            const invoice = typeof params.invoice === 'string' ? params.invoice : '';
+            if (!invoice) {
+                throw new Error('invoice is required');
+            }
+            return this._photon._sendRequest('webln.sendPayment', { paymentRequest: invoice });
+        }
+    }
+
     // Create and expose the provider
     const photonBoltProvider = new PhotonProvider();
 
@@ -261,9 +312,19 @@
         });
     }
 
+    // WebLN compat interface.
+    if (!window.webln) {
+        Object.defineProperty(window, 'webln', {
+            value: new WebLNWrapper(photonBoltProvider),
+            writable: false,
+            configurable: false
+        });
+    }
+
     // Announce to the page that PhotonBolt is available
     window.dispatchEvent(new Event('photonbolt#initialized'));
     window.dispatchEvent(new Event('photon#initialized'));
+    window.dispatchEvent(new Event('webln:ready'));
 
     console.log('PhotonBolt Wallet provider injected successfully');
 })();

@@ -16,6 +16,7 @@ import {
   type ApprovalResult,
 } from './executors'
 import { decodeRegtestLightningInvoice, payRegtestLightningInvoice } from '../utils/rgb-wallet'
+import { createRegtestLightningInvoice } from '../utils/rgb-wallet'
 
 interface PendingApproval {
   resolve: (result: ApprovalResult) => void
@@ -106,10 +107,128 @@ async function handleRequest(message: any, sender: chrome.runtime.MessageSender)
       return handleSendBtcFunding(origin, params, sender.tab?.id)
     case 'payRgbInvoice':
       return handlePayRgbInvoice(origin, params, sender.tab?.id)
+    case 'webln.enable':
+      return handleWeblnEnable(origin, sender.tab?.id)
+    case 'webln.getInfo':
+      return handleWeblnGetInfo(origin)
+    case 'webln.makeInvoice':
+      return handleWeblnMakeInvoice(origin, params)
+    case 'webln.sendPayment':
+      return handleWeblnSendPayment(origin, params, sender.tab?.id)
+    case 'webln.decodeInvoice':
+      return handleWeblnDecodeInvoice(origin, params)
     case 'signMessage':
       return handleSignMessage(origin, params, sender.tab?.id)
     default:
       return { error: `Unknown method: ${method}` }
+  }
+}
+
+async function handleWeblnEnable(origin: string, tabId?: number) {
+  // WebLN enable is equivalent to connect for PhotonWallet.
+  return handleConnect(origin, tabId)
+}
+
+async function handleWeblnGetInfo(origin: string) {
+  if (!(await isConnectedOrigin(origin))) {
+    throw new Error('Not connected. Please call webln.enable() first.')
+  }
+  const context = await loadWalletContext()
+  return {
+    node: {
+      alias: 'Photon Bolt Wallet',
+      pubkey: null,
+      network: context.network,
+    },
+    methods: ['enable', 'getInfo', 'makeInvoice', 'sendPayment', 'decodeInvoice', 'sendAsset', 'receiveAsset'],
+  }
+}
+
+async function handleWeblnDecodeInvoice(origin: string, params: Record<string, unknown>) {
+  if (!(await isConnectedOrigin(origin))) {
+    throw new Error('Not connected. Please call webln.enable() first.')
+  }
+  const invoice = typeof params.invoice === 'string' ? params.invoice.trim() : ''
+  if (!invoice) {
+    throw new Error('invoice is required')
+  }
+  const walletKey = await getRegtestExtensionWalletKey()
+  const decoded = await decodeRegtestLightningInvoice({ invoice, walletKey })
+  return { decoded: decoded.decoded }
+}
+
+async function handleWeblnMakeInvoice(origin: string, params: Record<string, unknown>) {
+  if (!(await isConnectedOrigin(origin))) {
+    throw new Error('Not connected. Please call webln.enable() first.')
+  }
+
+  // EXT-01: For now, WebLN invoices are backed by the RGB Lightning invoice endpoint on regtest.
+  // We require assetId + amount (RGB units) until BTC LN invoice support is added.
+  const assetId = typeof params.assetId === 'string' ? params.assetId.trim() : ''
+  const amount = Number(params.amount ?? 0)
+  const expiry = params.expirySec === undefined ? undefined : Number(params.expirySec)
+  const amtMsat = params.amtMsat === undefined ? undefined : Number(params.amtMsat)
+
+  if (!assetId) {
+    throw new Error('assetId is required for makeInvoice (RGB Lightning)')
+  }
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new Error('amount must be > 0')
+  }
+
+  const walletKey = await getRegtestExtensionWalletKey()
+
+  const result = await createRegtestLightningInvoice({
+    assetId,
+    amount,
+    expirySec: Number.isFinite(expiry as number) ? (expiry as number) : undefined,
+    amtMsat: Number.isFinite(amtMsat as number) ? (amtMsat as number) : undefined,
+    walletKey,
+  })
+
+  return {
+    paymentRequest: result.invoice,
+    invoice: result.invoice,
+    decoded: result.decoded,
+  }
+}
+
+async function handleWeblnSendPayment(origin: string, params: Record<string, unknown>, tabId?: number) {
+  if (!(await isConnectedOrigin(origin))) {
+    throw new Error('Not connected. Please call webln.enable() first.')
+  }
+
+  const invoice = typeof params.paymentRequest === 'string'
+    ? params.paymentRequest.trim()
+    : (typeof params.invoice === 'string' ? params.invoice.trim() : '')
+
+  if (!invoice) {
+    throw new Error('paymentRequest (invoice) is required')
+  }
+
+  const approval = await requestApproval({
+    type: 'payRgbInvoice',
+    origin,
+    tabId,
+    data: {
+      title: 'Approve Lightning Payment',
+      message: 'This dApp is requesting a Lightning payment.',
+      invoice,
+    },
+  })
+  if (!approval.approved) {
+    throw new Error('Payment rejected by user')
+  }
+
+  const walletKey = await getRegtestExtensionWalletKey()
+  const result = await payRegtestLightningInvoice({ invoice, walletKey })
+
+  return {
+    preimage: null,
+    paymentHash: result.payment.payment_hash || null,
+    status: result.payment.status,
+    assetId: result.assetId,
+    balance: result.balance,
   }
 }
 
