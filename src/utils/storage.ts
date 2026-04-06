@@ -24,6 +24,9 @@ export interface StorageData {
     btcAddress?: string
     selectedNetwork?: string
     backendProfileId?: string
+    regtestRgbBackendMode?: string
+    rgbitsPrismApiBase?: string
+    rgbitsPrismAuthToken?: string
     // Canister IDs
     mainnetCanisterId?: string
     testnetCanisterId?: string

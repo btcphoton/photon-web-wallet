@@ -19,7 +19,7 @@ import {
   type WalletAsset,
 } from '../utils/dapp-bridge'
 import { getNetworkAssetsKey, getStorageData, setStorageData } from '../utils/storage'
-import { PHOTON_REGTEST_API_BASE } from '../utils/backend-config'
+import { fetchRegtestRgbRegistry } from '../utils/rgb-wallet'
 
 bitcoin.initEccLib(ecc)
 
@@ -341,14 +341,10 @@ export const importAssetForOrigin = async (
     throw new Error('contractId, assetId, ticker, or name is required.')
   }
 
-  const response = await fetch(`${PHOTON_REGTEST_API_BASE}/rgb/registry`)
-  const payload = await response.json()
-  if (!response.ok || !payload.ok || !Array.isArray(payload.assets)) {
-    throw new Error(payload?.error || 'Failed to load the Photon RGB registry.')
-  }
+  const registryAssets = await fetchRegtestRgbRegistry()
 
   const normalizedIdentifier = rawIdentifier.toLowerCase()
-  const registryMatch = payload.assets.find((entry: any) => (
+  const registryMatch = registryAssets.find((entry: any) => (
     String(entry.contract_id || '').toLowerCase() === normalizedIdentifier ||
     String(entry.ticker || '').toLowerCase() === normalizedIdentifier ||
     String(entry.token_name || '').toLowerCase() === normalizedIdentifier

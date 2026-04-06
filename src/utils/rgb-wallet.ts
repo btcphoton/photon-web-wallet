@@ -223,15 +223,61 @@ export interface RgbChannelDashboardResponse {
     channels: RgbChannelDashboardChannel[]
 }
 
-async function getRegtestRgbApiBase(): Promise<string> {
-    const { PHOTON_REGTEST_API_BASE } = await import('./backend-config')
-    return PHOTON_REGTEST_API_BASE
+type RegtestRgbFeature =
+    | 'health'
+    | 'onchain invoice'
+    | 'invoice secret registration'
+    | 'balance lookup'
+    | 'transfer lookup'
+    | 'invoice decode'
+    | 'onchain send'
+    | 'lightning invoice decode'
+    | 'lightning payment'
+    | 'lightning invoice creation'
+    | 'registry lookup'
+    | 'channel dashboard'
+    | 'issue asset readiness'
+    | 'issue asset'
+    | 'transfer refresh'
+    | 'regtest mining'
+    | 'UTXO funding address'
+    | 'UTXO slot listing'
+    | 'UTXO slot redeem';
+
+async function getRegtestRgbBackend(feature: RegtestRgbFeature): Promise<{
+    apiBase: string
+    mode: 'faucet' | 'prism'
+    headers: Record<string, string>
+}> {
+    const { getRegtestRgbBackendConfig } = await import('./backend-config')
+    const config = await getRegtestRgbBackendConfig()
+    const headers: Record<string, string> = {}
+
+    if (config.mode === 'prism') {
+        if (config.authToken) {
+            headers.Authorization = `Bearer ${config.authToken}`
+        }
+
+        if (feature !== 'health') {
+            throw new Error(
+                `RGBits Prism mode is selected, but ${feature} is not wired into the Chrome wallet yet. ` +
+                'Switch the regtest RGB backend back to Faucet API in Network Settings to use this flow.'
+            )
+        }
+    }
+
+    return {
+        apiBase: config.apiBase,
+        mode: config.mode,
+        headers,
+    }
 }
 
 export async function checkLocalRgbNode(): Promise<boolean> {
     try {
-        const apiBase = await getRegtestRgbApiBase()
-        const response = await fetch(`${apiBase}/rgb/health`)
+        const { apiBase, mode, headers } = await getRegtestRgbBackend('health')
+        const healthPath = mode === 'prism' ? '/health' : '/rgb/health'
+        const response = await fetch(`${apiBase}${healthPath}`, { headers })
         return response.ok
     } catch {
         return false
@@ -251,9 +297,10 @@ export async function createRegtestRgbInvoice(params: {
         openAmount: params.openAmount,
     }
 
-    const apiBase = await getRegtestRgbApiBase()
+    const { apiBase, headers: baseHeaders } = await getRegtestRgbBackend('onchain invoice')
     const headers: Record<string, string> = {
         'Content-Type': 'application/json',
+        ...baseHeaders,
     }
 
     if (params.walletKey) {
@@ -288,9 +335,10 @@ export async function registerRgbInvoiceSecret(params: {
     recipientId: string
     blindingSecret: string
 }): Promise<RgbInvoiceSecretRegistrationResponse> {
-    const apiBase = await getRegtestRgbApiBase()
+    const { apiBase, headers: baseHeaders } = await getRegtestRgbBackend('invoice secret registration')
     const headers: Record<string, string> = {
         'Content-Type': 'application/json',
+        ...baseHeaders,
     }
 
     if (params.walletKey) {
@@ -327,9 +375,10 @@ export async function fetchRegtestRgbBalance(params: {
     assetId: string
     walletKey?: string
 }): Promise<RgbWalletBalanceResponse> {
-    const apiBase = await getRegtestRgbApiBase()
+    const { apiBase, headers: baseHeaders } = await getRegtestRgbBackend('balance lookup')
     const headers: Record<string, string> = {
         'Content-Type': 'application/json',
+        ...baseHeaders,
     }
 
     if (params.walletKey) {
@@ -361,9 +410,10 @@ export async function fetchRegtestRgbTransfers(params: {
     assetId: string
     walletKey?: string
 }): Promise<RgbWalletTransfersResponse> {
-    const apiBase = await getRegtestRgbApiBase()
+    const { apiBase, headers: baseHeaders } = await getRegtestRgbBackend('transfer lookup')
     const headers: Record<string, string> = {
         'Content-Type': 'application/json',
+        ...baseHeaders,
     }
 
     if (params.walletKey) {
@@ -394,11 +444,12 @@ export async function fetchRegtestRgbTransfers(params: {
 export async function decodeRegtestRgbInvoice(params: {
     invoice: string
 }): Promise<RgbWalletDecodeInvoiceResponse> {
-    const apiBase = await getRegtestRgbApiBase()
+    const { apiBase, headers } = await getRegtestRgbBackend('invoice decode')
     const response = await fetch(`${apiBase}/rgb/decode-invoice`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
+            ...headers,
         },
         body: JSON.stringify({
             invoice: params.invoice,
@@ -424,9 +475,10 @@ export async function sendRegtestRgbInvoice(params: {
     minConfirmations?: number
     walletKey?: string
 }): Promise<RgbWalletSendResponse> {
-    const apiBase = await getRegtestRgbApiBase()
+    const { apiBase, headers: baseHeaders } = await getRegtestRgbBackend('onchain send')
     const headers: Record<string, string> = {
         'Content-Type': 'application/json',
+        ...baseHeaders,
     }
 
     if (params.walletKey) {
@@ -460,9 +512,10 @@ export async function decodeRegtestLightningInvoice(params: {
     invoice: string
     walletKey?: string
 }): Promise<RgbWalletDecodeLightningInvoiceResponse> {
-    const apiBase = await getRegtestRgbApiBase()
+    const { apiBase, headers: baseHeaders } = await getRegtestRgbBackend('lightning invoice decode')
     const headers: Record<string, string> = {
         'Content-Type': 'application/json',
+        ...baseHeaders,
     }
 
     if (params.walletKey) {
@@ -494,9 +547,10 @@ export async function payRegtestLightningInvoice(params: {
     invoice: string
     walletKey?: string
 }): Promise<RgbWalletLightningPayResponse> {
-    const apiBase = await getRegtestRgbApiBase()
+    const { apiBase, headers: baseHeaders } = await getRegtestRgbBackend('lightning payment')
     const headers: Record<string, string> = {
         'Content-Type': 'application/json',
+        ...baseHeaders,
     }
 
     if (params.walletKey) {
@@ -531,9 +585,10 @@ export async function createRegtestLightningInvoice(params: {
     amtMsat?: number
     walletKey?: string
 }): Promise<RgbWalletLightningInvoiceResponse> {
-    const apiBase = await getRegtestRgbApiBase()
+    const { apiBase, headers: baseHeaders } = await getRegtestRgbBackend('lightning invoice creation')
     const headers: Record<string, string> = {
         'Content-Type': 'application/json',
+        ...baseHeaders,
     }
 
     if (params.walletKey) {
@@ -565,8 +620,8 @@ export async function createRegtestLightningInvoice(params: {
 }
 
 export async function fetchRegtestRgbRegistry(): Promise<RgbRegistryAsset[]> {
-    const apiBase = await getRegtestRgbApiBase()
-    const response = await fetch(`${apiBase}/rgb/registry`)
+    const { apiBase, headers } = await getRegtestRgbBackend('registry lookup')
+    const response = await fetch(`${apiBase}/rgb/registry`, { headers })
 
     if (!response.ok) {
         const errorText = await response.text()
@@ -582,8 +637,8 @@ export async function fetchRegtestRgbRegistry(): Promise<RgbRegistryAsset[]> {
 }
 
 export async function fetchRegtestChannelDashboard(): Promise<RgbChannelDashboardResponse> {
-    const apiBase = await getRegtestRgbApiBase()
-    const response = await fetch(`${apiBase}/rgb/channel-dashboard`)
+    const { apiBase, headers } = await getRegtestRgbBackend('channel dashboard')
+    const response = await fetch(`${apiBase}/rgb/channel-dashboard`, { headers })
 
     if (!response.ok) {
         const errorText = await response.text()
@@ -603,8 +658,8 @@ export async function fetchRegtestIssueAssetReadiness(params: {
     channelFundingSats?: number | null
     channelFundingTiming?: 'during_issuance' | 'after_issuance'
 }): Promise<RgbIssueAssetReadinessResponse> {
-    const apiBase = await getRegtestRgbApiBase()
-    const headers: Record<string, string> = {}
+    const { apiBase, headers: baseHeaders } = await getRegtestRgbBackend('issue asset readiness')
+    const headers: Record<string, string> = { ...baseHeaders }
     if (params.walletKey) {
         headers['x-photon-wallet-key'] = params.walletKey
     }
@@ -647,9 +702,10 @@ export async function issueRegtestRgbAsset(params: {
     channelFundingSats?: number | null
     channelFundingTiming?: 'during_issuance' | 'after_issuance'
 }): Promise<RgbIssueAssetResponse> {
-    const apiBase = await getRegtestRgbApiBase()
+    const { apiBase, headers: baseHeaders } = await getRegtestRgbBackend('issue asset')
     const headers: Record<string, string> = {
         'Content-Type': 'application/json',
+        ...baseHeaders,
     }
 
     if (params.walletKey) {
@@ -692,9 +748,10 @@ export async function refreshRegtestRgbTransfers(params: {
     assetId: string
     walletKey?: string
 }): Promise<void> {
-    const apiBase = await getRegtestRgbApiBase()
+    const { apiBase, headers: baseHeaders } = await getRegtestRgbBackend('transfer refresh')
     const headers: Record<string, string> = {
         'Content-Type': 'application/json',
+        ...baseHeaders,
     }
 
     if (params.walletKey) {
@@ -716,11 +773,12 @@ export async function refreshRegtestRgbTransfers(params: {
 }
 
 export async function mineRegtestBlocks(blocks: number = 1): Promise<void> {
-    const apiBase = await getRegtestRgbApiBase()
+    const { apiBase, headers } = await getRegtestRgbBackend('regtest mining')
     const response = await fetch(`${apiBase}/regtest/mine`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
+            ...headers,
         },
         body: JSON.stringify({
             blocks: Math.max(1, Math.trunc(blocks || 1)),
@@ -766,10 +824,10 @@ export interface UtxoSlot {
 }
 
 export async function fetchUtxoFundingAddress(params: { walletKey: string }): Promise<UtxoFundingAddressResponse> {
-    const apiBase = await getRegtestRgbApiBase()
+    const { apiBase, headers } = await getRegtestRgbBackend('UTXO funding address')
     const response = await fetch(`${apiBase}/utxo/funding-address`, {
         method: 'GET',
-        headers: { 'x-photon-wallet-key': params.walletKey },
+        headers: { ...headers, 'x-photon-wallet-key': params.walletKey },
     })
     if (!response.ok) {
         const errorText = await response.text()
@@ -781,10 +839,10 @@ export async function fetchUtxoFundingAddress(params: { walletKey: string }): Pr
 }
 
 export async function fetchUtxoSlots(params: { walletKey: string }): Promise<UtxoSlot[]> {
-    const apiBase = await getRegtestRgbApiBase()
+    const { apiBase, headers } = await getRegtestRgbBackend('UTXO slot listing')
     const response = await fetch(`${apiBase}/utxo/slots`, {
         method: 'GET',
-        headers: { 'x-photon-wallet-key': params.walletKey },
+        headers: { ...headers, 'x-photon-wallet-key': params.walletKey },
     })
     if (!response.ok) {
         const errorText = await response.text()
@@ -800,11 +858,12 @@ export async function redeemUtxoSlot(params: {
     slotId: string
     mainBtcAddress?: string
 }): Promise<{ txid: string; sentSats: number; returnAddress: string }> {
-    const apiBase = await getRegtestRgbApiBase()
+    const { apiBase, headers } = await getRegtestRgbBackend('UTXO slot redeem')
     const response = await fetch(`${apiBase}/utxo/redeem`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
+            ...headers,
             'x-photon-wallet-key': params.walletKey,
         },
         body: JSON.stringify({

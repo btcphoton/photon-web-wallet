@@ -11,7 +11,7 @@ import { convertLBTCtoBTC } from './utils/ckbtc-withdrawal'
 import { getErrorLogs, clearErrorLogs, type ErrorLog } from './utils/error-logger'
 import { getStorageData, setStorageData, removeStorageData, getNetworkAddressKey, getNetworkAssetsKey, getNetworkContractsKey, testnet3DefaultAssets, mainnetDefaultAssets, type StorageData } from './utils/storage'
 import type { Asset } from './utils/storage'
-import { BACKEND_PROFILES, DEFAULT_BACKEND_PROFILE_ID, PUBLIC_RGB_PROXY_DEFAULT, getBackendProfileById, getDefaultElectrumServer, getDefaultRgbProxy, type BackendProfileId } from './utils/backend-config'
+import { BACKEND_PROFILES, DEFAULT_BACKEND_PROFILE_ID, DEFAULT_REGTEST_RGB_BACKEND_MODE, PUBLIC_RGB_PROXY_DEFAULT, RGBITS_PRISM_API_BASE, getBackendProfileById, getDefaultElectrumServer, getDefaultRgbProxy, type BackendProfileId, type RegtestRgbBackendMode } from './utils/backend-config'
 import { QRCodeSVG } from 'qrcode.react'
 import { createRgbInvoice } from './utils/rgb-invoice'
 import { createRegtestLightningInvoice, createRegtestRgbInvoice, decodeRegtestLightningInvoice, decodeRegtestRgbInvoice, fetchRegtestChannelDashboard, fetchRegtestIssueAssetReadiness, fetchRegtestRgbBalance, fetchRegtestRgbRegistry, fetchRegtestRgbTransfers, issueRegtestRgbAsset, mineRegtestBlocks, payRegtestLightningInvoice, refreshRegtestRgbTransfers, registerRgbInvoiceSecret, sendRegtestRgbInvoice, fetchUtxoFundingAddress, fetchUtxoSlots, redeemUtxoSlot, type RgbIssueAssetReadinessResponse, type RgbIssueAssetResponse, type UtxoSlot, type UtxoFundingAddressResponse } from './utils/rgb-wallet'
@@ -303,6 +303,9 @@ function App() {
 
   // Network settings states with defaults
   const [backendProfileId, setBackendProfileId] = useState<BackendProfileId>(DEFAULT_BACKEND_PROFILE_ID)
+  const [regtestRgbBackendMode, setRegtestRgbBackendMode] = useState<RegtestRgbBackendMode>(DEFAULT_REGTEST_RGB_BACKEND_MODE)
+  const [rgbitsPrismApiBase, setRgbitsPrismApiBase] = useState<string>(RGBITS_PRISM_API_BASE)
+  const [rgbitsPrismAuthToken, setRgbitsPrismAuthToken] = useState<string>('')
   const [electrumServer, setElectrumServer] = useState<string>('ssl://electrum.iriswallet.com:50013')
   const [rgbProxy, setRgbProxy] = useState<string>(PUBLIC_RGB_PROXY_DEFAULT)
   const [networkSettingsSaved, setNetworkSettingsSaved] = useState<boolean>(false)
@@ -3333,9 +3336,12 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
   useEffect(() => {
     const loadNetworkSettings = async () => {
       if (view === 'network-settings') {
-        const result = await getStorageData(['backendProfileId', 'electrumServer', 'rgbProxy'])
+        const result = await getStorageData(['backendProfileId', 'electrumServer', 'rgbProxy', 'regtestRgbBackendMode', 'rgbitsPrismApiBase', 'rgbitsPrismAuthToken'])
         const activeProfileId = (result.backendProfileId as BackendProfileId) || DEFAULT_BACKEND_PROFILE_ID
         setBackendProfileId(activeProfileId)
+        setRegtestRgbBackendMode(result.regtestRgbBackendMode === 'prism' ? 'prism' : DEFAULT_REGTEST_RGB_BACKEND_MODE)
+        setRgbitsPrismApiBase(result.rgbitsPrismApiBase || RGBITS_PRISM_API_BASE)
+        setRgbitsPrismAuthToken(result.rgbitsPrismAuthToken || '')
         // Use saved values, or keep the defaults if not saved
         setElectrumServer(result.electrumServer || getDefaultElectrumServer(selectedNetwork, activeProfileId))
         setRgbProxy(result.rgbProxy || getDefaultRgbProxy(selectedNetwork, activeProfileId))
@@ -3390,12 +3396,20 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
       return
     }
 
+    if (regtestRgbBackendMode === 'prism' && !rgbitsPrismApiBase.trim()) {
+      setError('RGBits Prism API Base is required when Prism mode is enabled')
+      return
+    }
+
     try {
       // Save to storage
       await setStorageData({
         backendProfileId,
         electrumServer,
-        rgbProxy
+        rgbProxy,
+        regtestRgbBackendMode,
+        rgbitsPrismApiBase: rgbitsPrismApiBase.trim(),
+        rgbitsPrismAuthToken: rgbitsPrismAuthToken.trim(),
       })
 
       setNetworkSettingsSaved(true)
@@ -3419,6 +3433,9 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
   // Reset network settings
   const handleResetNetworkSettings = () => {
     applyBackendProfileDefaults(DEFAULT_BACKEND_PROFILE_ID)
+    setRegtestRgbBackendMode(DEFAULT_REGTEST_RGB_BACKEND_MODE)
+    setRgbitsPrismApiBase(RGBITS_PRISM_API_BASE)
+    setRgbitsPrismAuthToken('')
   }
 
   // Load server-managed RGB UTXO slots
@@ -5985,7 +6002,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
           <div className="settings-content">
             <div className="settings-section">
               <h3 className="settings-section-title">Network Configuration</h3>
-              <p className="settings-info">Configure the backend profile, Electrum Server, and RGB Proxy for network connectivity.</p>
+              <p className="settings-info">Configure the backend profile, regtest RGB backend, Electrum Server, and RGB Proxy for network connectivity.</p>
             </div>
 
             <div className="input-group">
@@ -6005,6 +6022,57 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                 {getBackendProfileById(backendProfileId).description}
               </span>
             </div>
+
+            {selectedNetwork === 'regtest' && (
+              <>
+                <div className="input-group">
+                  <label className="input-label">Regtest RGB Backend</label>
+                  <label className="rgb-toggle-label">
+                    <input
+                      type="checkbox"
+                      className="rgb-toggle-input"
+                      checked={regtestRgbBackendMode === 'prism'}
+                      onChange={(e) => setRegtestRgbBackendMode(e.target.checked ? 'prism' : 'faucet')}
+                    />
+                    <span className="rgb-toggle-switch"></span>
+                    <span className="rgb-toggle-text">
+                      {regtestRgbBackendMode === 'prism' ? 'RGBits Prism' : 'Faucet API'}
+                    </span>
+                  </label>
+                  <span className="settings-hint">
+                    Faucet API is the current full-featured regtest path. Prism mode is persisted separately so you can switch back and forth without re-entering endpoints.
+                  </span>
+                </div>
+
+                {regtestRgbBackendMode === 'prism' && (
+                  <>
+                    <div className="input-group">
+                      <label className="input-label">RGBits Prism API Base</label>
+                      <input
+                        type="text"
+                        className="settings-input"
+                        placeholder="https://prism.photonbolt.xyz"
+                        value={rgbitsPrismApiBase}
+                        onChange={(e) => setRgbitsPrismApiBase(e.target.value)}
+                      />
+                      <span className="settings-hint">Base URL for the RGBits Prism API.</span>
+                    </div>
+
+                    <div className="input-group">
+                      <label className="input-label">RGBits Prism Bearer Token</label>
+                      <input
+                        type="password"
+                        className="settings-input"
+                        placeholder="Optional unless your Prism deployment requires auth"
+                        value={rgbitsPrismAuthToken}
+                        onChange={(e) => setRgbitsPrismAuthToken(e.target.value)}
+                      />
+                      <span className="settings-hint">Stored locally and attached as `Authorization: Bearer ...` when Prism mode is used.</span>
+                    </div>
+                  </>
+                )}
+              </>
+            )}
 
             <div className="input-group">
               <label className="input-label">Electrum Server</label>

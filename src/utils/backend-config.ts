@@ -2,6 +2,7 @@ import { getStorageData } from './storage';
 
 export type WalletNetwork = 'mainnet' | 'testnet3' | 'testnet4' | 'regtest';
 export type BackendProfileId = 'legacy-public' | 'photon-dev-regtest';
+export type RegtestRgbBackendMode = 'faucet' | 'prism';
 
 export interface BackendProfileDefinition {
     id: BackendProfileId;
@@ -49,6 +50,11 @@ export const PHOTON_REGTEST_API_BASE = envString(
     import.meta.env.VITE_PHOTON_REGTEST_API_BASE,
     'https://faucet.photonbolt.xyz/api'
 );
+export const RGBITS_PRISM_API_BASE = envString(
+    import.meta.env.VITE_RGBITS_PRISM_API_BASE,
+    'https://prism.photonbolt.xyz'
+);
+export const DEFAULT_REGTEST_RGB_BACKEND_MODE: RegtestRgbBackendMode = 'faucet';
 
 export const getDefaultElectrumServer = (
     network: WalletNetwork,
@@ -86,6 +92,28 @@ export const getActiveBackendProfileId = async (): Promise<BackendProfileId> => 
         return profileId;
     }
     return DEFAULT_BACKEND_PROFILE_ID;
+};
+
+export const getActiveRegtestRgbBackendMode = async (): Promise<RegtestRgbBackendMode> => {
+    const result = await getStorageData(['regtestRgbBackendMode']);
+    return result.regtestRgbBackendMode === 'prism' ? 'prism' : DEFAULT_REGTEST_RGB_BACKEND_MODE;
+};
+
+export const getRegtestRgbBackendConfig = async (): Promise<{
+    mode: RegtestRgbBackendMode;
+    apiBase: string;
+    authToken: string;
+}> => {
+    const result = await getStorageData(['regtestRgbBackendMode', 'rgbitsPrismApiBase', 'rgbitsPrismAuthToken']);
+    const mode = result.regtestRgbBackendMode === 'prism' ? 'prism' : DEFAULT_REGTEST_RGB_BACKEND_MODE;
+    const configuredPrismBase = typeof result.rgbitsPrismApiBase === 'string' ? result.rgbitsPrismApiBase.trim() : '';
+    const authToken = typeof result.rgbitsPrismAuthToken === 'string' ? result.rgbitsPrismAuthToken.trim() : '';
+
+    return {
+        mode,
+        apiBase: mode === 'prism' ? (configuredPrismBase || RGBITS_PRISM_API_BASE) : PHOTON_REGTEST_API_BASE,
+        authToken,
+    };
 };
 
 export const resolveBitcoinApiBase = async (
