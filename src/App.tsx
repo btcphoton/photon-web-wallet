@@ -1397,9 +1397,17 @@ function App() {
               setView('dashboard')
               setIsLoading(false)
 
+              // Show last-good cached balance immediately while the live scan runs
+              const cachedBalance = await getStorageData(['user_bitcoin_balance'])
+              const cachedBal = typeof cachedBalance.user_bitcoin_balance === 'string' ? cachedBalance.user_bitcoin_balance : null
+              if (cachedBal && cachedBal !== '0.00000000') {
+                setBtcBalance(cachedBal)
+              }
+
               // Fetch balance after auto-login
               if (result.mnemonic && networkAddress) {
-                fetchBalance(result.mnemonic, network)
+                const storedAddressIndex = result.addressIndex !== undefined ? Number(result.addressIndex) : 0
+                fetchBalance(result.mnemonic, network, storedAddressIndex)
               }
 
               // Load assets for current network
@@ -1476,9 +1484,10 @@ function App() {
         setView('dashboard')
         console.log('Unlock successful, going to dashboard')
 
-        // Fetch balance after unlock
+        // Fetch balance after unlock — pass stored index to avoid React state staleness race
         if (result.mnemonic && networkAddress) {
-          fetchBalance(result.mnemonic, network)
+          const storedAddressIndex = result.addressIndex !== undefined ? Number(result.addressIndex) : 0
+          fetchBalance(result.mnemonic, network, storedAddressIndex)
         }
 
         // Load assets for current network
@@ -2021,7 +2030,7 @@ function App() {
     return null;
   }
 
-  const fetchBalance = async (currentMnemonic: string, networkId: Network) => {
+  const fetchBalance = async (currentMnemonic: string, networkId: Network, overrideAddressIndex?: number) => {
     if (!currentMnemonic) return
     setLoadingBalance(true)
     try {
@@ -2029,7 +2038,9 @@ function App() {
 
       // Get stored index and check canister (placeholder)
       const canisterIndex = await fetchIndexFromCanister(networkId);
-      const effectiveIndex = Math.max(addressIndex, changeIndex, canisterIndex || 0);
+      // Use overrideAddressIndex when provided (avoids React state staleness race on startup)
+      const resolvedAddressIndex = overrideAddressIndex !== undefined ? overrideAddressIndex : addressIndex;
+      const effectiveIndex = Math.max(resolvedAddressIndex, changeIndex, canisterIndex || 0);
 
       // Perform Discovery Scan with Gap Limit 20
       const { totalBalance: vanillaBalance, maxIndex, fundedAddresses: discoveredAddresses, allDiscoveredAddresses: discoveredHistoryAddresses, hadUtxoFetchError } = await performDiscoveryScan(
