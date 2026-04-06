@@ -4225,6 +4225,12 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
             </div>
           )}
 
+          {/* Menu overlay — must be inside wallet-wrapper so it shares the same stacking
+              context as .dropdown-menu (z-100). wallet-wrapper gets a persistent stacking
+              context from the animation fill-mode transform, so a fixed overlay placed
+              outside at z-50 would sit above the entire wrapper and intercept all clicks. */}
+          {showMenu && <div className="menu-overlay" onClick={() => setShowMenu(false)}></div>}
+
           <div className="wallet-scroll-container photon-dashboard-scroll" ref={scrollContainerRef}>
             <section className="photon-balance-panel">
               <div className="photon-balance-topline">
@@ -6647,9 +6653,6 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
           </div>
         )
       }
-
-      {/* Click outside to close menu */}
-      {showMenu && <div className="menu-overlay" onClick={() => setShowMenu(false)}></div>}
 
       {/* Notice Modal */}
       {
