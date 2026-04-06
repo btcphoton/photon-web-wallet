@@ -6041,7 +6041,11 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                       type="checkbox"
                       className="rgb-toggle-input"
                       checked={regtestRgbBackendMode === 'prism'}
-                      onChange={(e) => setRegtestRgbBackendMode(e.target.checked ? 'prism' : 'faucet')}
+                      onChange={async (e) => {
+                        const mode = e.target.checked ? 'prism' : 'faucet'
+                        setRegtestRgbBackendMode(mode)
+                        await setStorageData({ regtestRgbBackendMode: mode })
+                      }}
                     />
                     <span className="rgb-toggle-switch"></span>
                     <span className="rgb-toggle-text">
