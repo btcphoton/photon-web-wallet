@@ -250,20 +250,20 @@ async function getRegtestRgbBackend(feature: RegtestRgbFeature): Promise<{
     headers: Record<string, string>
 }> {
     const { getRegtestRgbBackendConfig } = await import('./backend-config')
+    const { getStorageData } = await import('./storage')
     const config = await getRegtestRgbBackendConfig()
     const headers: Record<string, string> = {}
 
     if (config.mode === 'prism') {
-        if (config.authToken) {
-            headers.Authorization = `Bearer ${config.authToken}`
+        const stored = await getStorageData(['mnemonic', 'selectedNetwork'])
+        const mnemonic = stored.mnemonic
+        if (!mnemonic) {
+            throw new Error('Wallet is locked. Unlock the wallet to use Prism mode.')
         }
-
-        if (feature !== 'health') {
-            throw new Error(
-                `RGBits Prism mode is selected, but ${feature} is not wired into the Chrome wallet yet. ` +
-                'Switch the regtest RGB backend back to Faucet API in Network Settings to use this flow.'
-            )
-        }
+        const network = ((stored.selectedNetwork as string) || 'regtest') as import('./backend-config').WalletNetwork
+        const { getValidAccessToken } = await import('./prism-auth')
+        const accessToken = await getValidAccessToken(mnemonic, network, config.apiBase)
+        headers.Authorization = `Bearer ${accessToken}`
     }
 
     return {
