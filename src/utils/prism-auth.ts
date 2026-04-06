@@ -13,6 +13,7 @@ import * as bip39 from 'bip39';
 import * as bitcoin from 'bitcoinjs-lib';
 import BIP32Factory from 'bip32';
 import * as ecc from 'tiny-secp256k1';
+import { sha256 } from '@noble/hashes/sha256';
 import { getStorageData, setStorageData } from './storage';
 import type { WalletNetwork } from './backend-config';
 
@@ -115,7 +116,7 @@ async function getChallenge(pubkeyHex: string, apiBase: string): Promise<string>
  */
 function signNonce(nonceHex: string, privKeyBytes: Uint8Array): string {
     const nonceBytes = Buffer.from(nonceHex, 'hex');
-    const digest = bitcoin.crypto.sha256(nonceBytes);
+    const digest = sha256(nonceBytes);
     const sig = ecc.sign(digest, privKeyBytes);
     return Buffer.from(sig).toString('hex');
 }

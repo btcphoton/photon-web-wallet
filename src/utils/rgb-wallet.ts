@@ -244,7 +244,7 @@ type RegtestRgbFeature =
     | 'UTXO slot listing'
     | 'UTXO slot redeem';
 
-async function getRegtestRgbBackend(feature: RegtestRgbFeature): Promise<{
+async function getRegtestRgbBackend(_feature: RegtestRgbFeature): Promise<{
     apiBase: string
     mode: 'faucet' | 'prism'
     headers: Record<string, string>
