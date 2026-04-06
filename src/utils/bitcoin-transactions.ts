@@ -133,8 +133,8 @@ export const fetchUTXOsFromBlockchain = async (
         }));
     } catch (error) {
         await logError(`Network error fetching UTXOs`, 'Blockchain API', error, network);
-        console.warn(`[fetchUTXOsFromBlockchain] Network error for ${address}, returning empty:`, error);
-        return [];
+        console.error(`[fetchUTXOsFromBlockchain] FAILED for ${address}:`, error);
+        throw error;
     }
 };
 
@@ -397,7 +397,8 @@ export const performDiscoveryScan = async (
     utxos: UTXO[],
     maxIndex: number,
     fundedAddresses: { address: string, balance: number, account: 'vanilla' | 'colored', index: number, chain: 0 | 1 }[],
-    allDiscoveredAddresses: string[]
+    allDiscoveredAddresses: string[],
+    hadUtxoFetchError: boolean,
 }> => {
     console.log(`[DiscoveryScan] Starting iterative scan for ${network} with Gap Limit 20...`);
 
@@ -415,6 +416,7 @@ export const performDiscoveryScan = async (
 
     let currentIndex = 0;
     let consecutiveEmpty = 0;
+    let hadUtxoFetchError = false;
 
     while (consecutiveEmpty < GAP_LIMIT || currentIndex <= storedIndex) {
         console.log(`[DiscoveryScan] Scanning index ${currentIndex}...`);
@@ -452,19 +454,26 @@ export const performDiscoveryScan = async (
 
             // If any history found, fetch UTXOs for all 4 addresses at this index
             const utxoPromises = results.map(async r => {
-                const utxos = await fetchUTXOsFromBlockchain(r.addr, network);
                 const coinType = network === 'mainnet' ? 0 : 1;
                 const accountIndex = r.account === 'vanilla' ? 0 : 1;
                 const derivationPath = `m/86'/${coinType}'/${accountIndex}'/${r.chain}/${currentIndex}`;
 
-                return utxos.map(u => ({
-                    ...u,
-                    address: r.addr,
-                    derivationPath: derivationPath,
-                    account: r.account,
-                    chain: r.chain,
-                    index: currentIndex
-                }));
+                try {
+                    const utxos = await fetchUTXOsFromBlockchain(r.addr, network);
+                    console.log(`[DiscoveryScan] UTXOs for ${r.addr} (${r.account} chain${r.chain}): ${utxos.length} UTXOs, ${utxos.reduce((s, u) => s + u.value, 0)} sats`);
+                    return utxos.map(u => ({
+                        ...u,
+                        address: r.addr,
+                        derivationPath: derivationPath,
+                        account: r.account,
+                        chain: r.chain,
+                        index: currentIndex
+                    }));
+                } catch (err) {
+                    console.error(`[DiscoveryScan] UTXO fetch failed for ${r.addr}:`, err);
+                    hadUtxoFetchError = true;
+                    return [];
+                }
             });
 
             const utxoResults = await Promise.all(utxoPromises);
@@ -512,6 +521,7 @@ export const performDiscoveryScan = async (
         utxos: allUtxos,
         maxIndex: maxIndexFound,
         fundedAddresses: fundedAddresses,
-        allDiscoveredAddresses: Array.from(allDiscoveredAddresses)
+        allDiscoveredAddresses: Array.from(allDiscoveredAddresses),
+        hadUtxoFetchError,
     };
 };

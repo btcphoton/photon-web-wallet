@@ -2032,7 +2032,7 @@ function App() {
       const effectiveIndex = Math.max(addressIndex, changeIndex, canisterIndex || 0);
 
       // Perform Discovery Scan with Gap Limit 20
-      const { totalBalance: vanillaBalance, maxIndex, fundedAddresses: discoveredAddresses, allDiscoveredAddresses: discoveredHistoryAddresses } = await performDiscoveryScan(
+      const { totalBalance: vanillaBalance, maxIndex, fundedAddresses: discoveredAddresses, allDiscoveredAddresses: discoveredHistoryAddresses, hadUtxoFetchError } = await performDiscoveryScan(
         currentMnemonic,
         networkId,
         effectiveIndex
@@ -2069,16 +2069,25 @@ function App() {
       }
 
       const formattedBalance = (vanillaBalance / 100000000).toFixed(8)
-      setBtcBalance(formattedBalance)
-      console.log(`[Balance] Updated Vanilla Balance: ${formattedBalance} BTC (Max Index: ${maxIndex})`)
+      console.log(`[Balance] Updated Vanilla Balance: ${formattedBalance} BTC (Max Index: ${maxIndex}, fetchError: ${hadUtxoFetchError})`)
 
-      // Update in storage for persistence
-      const balanceKey = `MainBalance_${networkId}` as any
-      await setStorageData({
-        [balanceKey]: formattedBalance,
-        user_bitcoin_balance: formattedBalance,
-        walletBalance: formattedBalance
-      })
+      if (hadUtxoFetchError && vanillaBalance === 0) {
+        // UTXO fetch failed for at least one address with history — don't overwrite stored balance with 0
+        console.warn('[Balance] UTXO fetch error detected — preserving stored balance, not updating state')
+        const stored = await getStorageData(['user_bitcoin_balance'])
+        const storedBal = typeof stored.user_bitcoin_balance === 'string' ? stored.user_bitcoin_balance : null
+        if (storedBal && storedBal !== '0.00000000') {
+          setBtcBalance(storedBal)
+        }
+      } else {
+        setBtcBalance(formattedBalance)
+        const balanceKey = `MainBalance_${networkId}` as any
+        await setStorageData({
+          [balanceKey]: formattedBalance,
+          user_bitcoin_balance: formattedBalance,
+          walletBalance: formattedBalance
+        })
+      }
 
       // Also fetch LBTC balance from canister
       try {
