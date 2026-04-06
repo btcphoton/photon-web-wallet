@@ -75,11 +75,17 @@ async function enrollIfNeeded(
     address: string,
     apiBase: string,
 ): Promise<void> {
-    const res = await fetch(`${apiBase}/auth/enroll`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pubkey: pubkeyHex, bitcoin_address: address }),
-    });
+    const url = `${apiBase}/auth/enroll`;
+    let res: Response;
+    try {
+        res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pubkey: pubkeyHex, bitcoin_address: address }),
+        });
+    } catch (err) {
+        throw new Error(`Prism server unreachable at ${apiBase} — check the API Base URL in Network Settings (${err instanceof Error ? err.message : String(err)})`);
+    }
 
     if (res.status === 409) return; // already enrolled — expected on subsequent calls
 

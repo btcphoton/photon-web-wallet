@@ -1361,8 +1361,10 @@ function App() {
             console.log(`Time since last login: ${elapsedMinutes.toFixed(2)} minutes`)
             console.log(`Auto-lock timer: ${autoLockMinutesValue} minutes`)
 
-            // If still within the auto-lock window, auto-login to dashboard
-            if (elapsedMinutes < autoLockMinutesValue) {
+            // If still within the auto-lock window AND mnemonic is in session storage, auto-login.
+            // If session was cleared (browser restart), mnemonic will be undefined here —
+            // fall through to the unlock screen so the user re-enters their password.
+            if (elapsedMinutes < autoLockMinutesValue && result.mnemonic && result.walletPassword) {
               console.log('Auto-logging in to dashboard')
 
               // Restore wallet state
@@ -6091,10 +6093,9 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                             setPrismAuthError('')
                             try {
                               const { getValidAccessToken } = await import('./utils/prism-auth')
-                              const mnemonicResult = await getStorageData(['mnemonic'])
-                              const mnemonic = mnemonicResult.mnemonic
-                              if (!mnemonic) throw new Error('Wallet is locked — unlock first')
-                              await getValidAccessToken(mnemonic, selectedNetwork, rgbitsPrismApiBase.trim() || RGBITS_PRISM_API_BASE)
+                              if (!mnemonic) throw new Error('Wallet is locked — unlock the wallet first')
+                              const apiBase = rgbitsPrismApiBase.trim() || RGBITS_PRISM_API_BASE
+                              await getValidAccessToken(mnemonic, selectedNetwork, apiBase)
                               setPrismAuthStatus('ok')
                             } catch (err) {
                               setPrismAuthStatus('error')
