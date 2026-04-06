@@ -280,6 +280,7 @@ function App() {
   const [pendingBalance, setPendingBalance] = useState<number>(0) // Pending incoming transactions
   // const [lightningBalance, setLightningBalance] = useState<string>('0.00000000') // Lightning balance - for future asset display
   const [loadingBalance, setLoadingBalance] = useState<boolean>(false)
+  const balanceScanInProgressRef = useRef(false)
   // const [loadingLightningBalance, setLoadingLightningBalance] = useState<boolean>(false) // For future Lightning asset
   const [balanceError, setBalanceError] = useState<string>('')
 
@@ -2032,6 +2033,11 @@ function App() {
 
   const fetchBalance = async (currentMnemonic: string, networkId: Network, overrideAddressIndex?: number) => {
     if (!currentMnemonic) return
+    if (balanceScanInProgressRef.current) {
+      console.log('[Balance] Scan already in progress — skipping duplicate call')
+      return
+    }
+    balanceScanInProgressRef.current = true
     setLoadingBalance(true)
     try {
       console.log(`[Balance] Fetching balance for ${networkId}...`)
@@ -2043,7 +2049,7 @@ function App() {
       const effectiveIndex = Math.max(resolvedAddressIndex, changeIndex, canisterIndex || 0);
 
       // Perform Discovery Scan with Gap Limit 20
-      const { totalBalance: vanillaBalance, maxIndex, fundedAddresses: discoveredAddresses, allDiscoveredAddresses: discoveredHistoryAddresses, hadUtxoFetchError } = await performDiscoveryScan(
+      const { totalBalance: vanillaBalance, maxIndex, fundedAddresses: discoveredAddresses, allDiscoveredAddresses: discoveredHistoryAddresses, hadUtxoFetchError, hadHistoryCheckError } = await performDiscoveryScan(
         currentMnemonic,
         networkId,
         effectiveIndex
@@ -2082,9 +2088,9 @@ function App() {
       const formattedBalance = (vanillaBalance / 100000000).toFixed(8)
       console.log(`[Balance] Updated Vanilla Balance: ${formattedBalance} BTC (Max Index: ${maxIndex}, fetchError: ${hadUtxoFetchError})`)
 
-      if (hadUtxoFetchError && vanillaBalance === 0) {
-        // UTXO fetch failed for at least one address with history — don't overwrite stored balance with 0
-        console.warn('[Balance] UTXO fetch error detected — preserving stored balance, not updating state')
+      if ((hadUtxoFetchError || hadHistoryCheckError) && vanillaBalance === 0) {
+        // API errors during scan — don't trust a 0 result, preserve last-known-good balance
+        console.warn(`[Balance] Scan had errors (utxoFetch=${hadUtxoFetchError}, historyCheck=${hadHistoryCheckError}) — preserving stored balance`)
         const stored = await getStorageData(['user_bitcoin_balance'])
         const storedBal = typeof stored.user_bitcoin_balance === 'string' ? stored.user_bitcoin_balance : null
         if (storedBal && storedBal !== '0.00000000') {
@@ -2113,6 +2119,7 @@ function App() {
       console.error('Failed to fetch balance:', e)
     } finally {
       setLoadingBalance(false)
+      balanceScanInProgressRef.current = false
     }
   }
 

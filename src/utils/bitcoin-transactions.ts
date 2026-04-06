@@ -74,31 +74,34 @@ export interface UTXO {
  * @param network - Bitcoin network
  * @returns True if the address has history, false otherwise
  */
+export type HistoryCheckResult = 'has_history' | 'no_history' | 'error';
+
 export const checkAddressHistory = async (
     address: string,
     network: WalletNetwork = 'mainnet'
-): Promise<boolean> => {
+): Promise<HistoryCheckResult> => {
     const baseUrl = await resolveBitcoinApiBase(network, 'address');
 
     try {
         const response = await fetch(`${baseUrl}/address/${address}`);
 
         if (!response.ok) {
-            if (response.status === 404) return false;
+            if (response.status === 404) return 'no_history';
             const errorText = await response.text();
             await logError(`Failed to check address history: ${response.status}`, 'Blockchain API', errorText, network);
-            throw new Error(`Failed to check address history: ${response.statusText}`);
+            console.warn(`[checkAddressHistory] HTTP ${response.status} for ${address}`);
+            return 'error';
         }
 
         const data = await response.json();
         const fundedCount = data.chain_stats?.funded_txo_count || 0;
         const mempoolCount = data.mempool_stats?.funded_txo_count || 0;
 
-        return (fundedCount + mempoolCount) > 0;
+        return (fundedCount + mempoolCount) > 0 ? 'has_history' : 'no_history';
     } catch (error) {
         await logError(`Network error checking history`, 'Blockchain API', error, network);
-        console.warn(`[checkAddressHistory] Network error for ${address}, treating as no history:`, error);
-        return false;
+        console.warn(`[checkAddressHistory] Network error for ${address}:`, error);
+        return 'error';
     }
 };
 
@@ -399,6 +402,7 @@ export const performDiscoveryScan = async (
     fundedAddresses: { address: string, balance: number, account: 'vanilla' | 'colored', index: number, chain: 0 | 1 }[],
     allDiscoveredAddresses: string[],
     hadUtxoFetchError: boolean,
+    hadHistoryCheckError: boolean,
 }> => {
     console.log(`[DiscoveryScan] Starting iterative scan for ${network} with Gap Limit 20...`);
 
@@ -417,6 +421,7 @@ export const performDiscoveryScan = async (
     let currentIndex = 0;
     let consecutiveEmpty = 0;
     let hadUtxoFetchError = false;
+    let hadHistoryCheckError = false;
 
     while (consecutiveEmpty < GAP_LIMIT || currentIndex <= storedIndex) {
         console.log(`[DiscoveryScan] Scanning index ${currentIndex}...`);
@@ -443,7 +448,10 @@ export const performDiscoveryScan = async (
             allDiscoveredAddresses.add(r.addr);
         });
 
-        const anyHistory = results.some(r => r.hasHistory);
+        const anyHistory = results.some(r => r.hasHistory === 'has_history');
+        const anyCheckError = results.some(r => r.hasHistory === 'error');
+        if (anyCheckError) hadHistoryCheckError = true;
+
         if (currentIndex === 0) {
             console.log(`[DiscoveryScan] Index 0 results:`, results.map(r => ({ addr: r.addr, account: r.account, chain: r.chain, hasHistory: r.hasHistory })));
         }
@@ -523,5 +531,6 @@ export const performDiscoveryScan = async (
         fundedAddresses: fundedAddresses,
         allDiscoveredAddresses: Array.from(allDiscoveredAddresses),
         hadUtxoFetchError,
+        hadHistoryCheckError,
     };
 };
