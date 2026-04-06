@@ -97,7 +97,8 @@ export const checkAddressHistory = async (
         return (fundedCount + mempoolCount) > 0;
     } catch (error) {
         await logError(`Network error checking history`, 'Blockchain API', error, network);
-        throw error;
+        console.warn(`[checkAddressHistory] Network error for ${address}, treating as no history:`, error);
+        return false;
     }
 };
 
@@ -132,7 +133,8 @@ export const fetchUTXOsFromBlockchain = async (
         }));
     } catch (error) {
         await logError(`Network error fetching UTXOs`, 'Blockchain API', error, network);
-        throw error;
+        console.warn(`[fetchUTXOsFromBlockchain] Network error for ${address}, returning empty:`, error);
+        return [];
     }
 };
 
@@ -440,6 +442,9 @@ export const performDiscoveryScan = async (
         });
 
         const anyHistory = results.some(r => r.hasHistory);
+        if (currentIndex === 0) {
+            console.log(`[DiscoveryScan] Index 0 results:`, results.map(r => ({ addr: r.addr, account: r.account, chain: r.chain, hasHistory: r.hasHistory })));
+        }
 
         if (anyHistory) {
             consecutiveEmpty = 0;
