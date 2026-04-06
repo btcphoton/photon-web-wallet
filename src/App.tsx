@@ -305,7 +305,8 @@ function App() {
   const [backendProfileId, setBackendProfileId] = useState<BackendProfileId>(DEFAULT_BACKEND_PROFILE_ID)
   const [regtestRgbBackendMode, setRegtestRgbBackendMode] = useState<RegtestRgbBackendMode>(DEFAULT_REGTEST_RGB_BACKEND_MODE)
   const [rgbitsPrismApiBase, setRgbitsPrismApiBase] = useState<string>(RGBITS_PRISM_API_BASE)
-  const [rgbitsPrismAuthToken, setRgbitsPrismAuthToken] = useState<string>('')
+  const [prismAuthStatus, setPrismAuthStatus] = useState<'idle' | 'pending' | 'ok' | 'error'>('idle')
+  const [prismAuthError, setPrismAuthError] = useState<string>('')
   const [electrumServer, setElectrumServer] = useState<string>('ssl://electrum.iriswallet.com:50013')
   const [rgbProxy, setRgbProxy] = useState<string>(PUBLIC_RGB_PROXY_DEFAULT)
   const [networkSettingsSaved, setNetworkSettingsSaved] = useState<boolean>(false)
@@ -3341,12 +3342,19 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
   useEffect(() => {
     const loadNetworkSettings = async () => {
       if (view === 'network-settings') {
-        const result = await getStorageData(['backendProfileId', 'electrumServer', 'rgbProxy', 'regtestRgbBackendMode', 'rgbitsPrismApiBase', 'rgbitsPrismAuthToken'])
+        const result = await getStorageData(['backendProfileId', 'electrumServer', 'rgbProxy', 'regtestRgbBackendMode', 'rgbitsPrismApiBase', 'prismAccessToken', 'prismTokenExpiry'])
         const activeProfileId = (result.backendProfileId as BackendProfileId) || DEFAULT_BACKEND_PROFILE_ID
         setBackendProfileId(activeProfileId)
         setRegtestRgbBackendMode(result.regtestRgbBackendMode === 'prism' ? 'prism' : DEFAULT_REGTEST_RGB_BACKEND_MODE)
         setRgbitsPrismApiBase(result.rgbitsPrismApiBase || RGBITS_PRISM_API_BASE)
-        setRgbitsPrismAuthToken(result.rgbitsPrismAuthToken || '')
+        // Restore prism auth status from cached token
+        const hasToken = typeof result.prismAccessToken === 'string' && result.prismAccessToken.length > 0
+        const expiry = typeof result.prismTokenExpiry === 'number' ? result.prismTokenExpiry : 0
+        if (hasToken && expiry > Date.now()) {
+          setPrismAuthStatus('ok')
+        } else {
+          setPrismAuthStatus('idle')
+        }
         // Use saved values, or keep the defaults if not saved
         setElectrumServer(result.electrumServer || getDefaultElectrumServer(selectedNetwork, activeProfileId))
         setRgbProxy(result.rgbProxy || getDefaultRgbProxy(selectedNetwork, activeProfileId))
@@ -3414,7 +3422,6 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
         rgbProxy,
         regtestRgbBackendMode,
         rgbitsPrismApiBase: rgbitsPrismApiBase.trim(),
-        rgbitsPrismAuthToken: rgbitsPrismAuthToken.trim(),
       })
 
       setNetworkSettingsSaved(true)
@@ -3440,7 +3447,8 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
     applyBackendProfileDefaults(DEFAULT_BACKEND_PROFILE_ID)
     setRegtestRgbBackendMode(DEFAULT_REGTEST_RGB_BACKEND_MODE)
     setRgbitsPrismApiBase(RGBITS_PRISM_API_BASE)
-    setRgbitsPrismAuthToken('')
+    setPrismAuthStatus('idle')
+    setPrismAuthError('')
   }
 
   // Load server-managed RGB UTXO slots
@@ -6058,15 +6066,49 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                     </div>
 
                     <div className="input-group">
-                      <label className="input-label">RGBits Prism Bearer Token</label>
-                      <input
-                        type="password"
-                        className="settings-input"
-                        placeholder="Optional unless your Prism deployment requires auth"
-                        value={rgbitsPrismAuthToken}
-                        onChange={(e) => setRgbitsPrismAuthToken(e.target.value)}
-                      />
-                      <span className="settings-hint">Stored locally and attached as `Authorization: Bearer ...` when Prism mode is used.</span>
+                      <label className="input-label">Prism Authentication</label>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+                        <span style={{
+                          display: 'inline-flex', alignItems: 'center', gap: '6px',
+                          fontSize: '13px', fontWeight: 500,
+                          color: prismAuthStatus === 'ok' ? '#22c55e' : prismAuthStatus === 'error' ? '#ef4444' : prismAuthStatus === 'pending' ? '#f59e0b' : '#94a3b8'
+                        }}>
+                          <span style={{
+                            width: '8px', height: '8px', borderRadius: '50%', display: 'inline-block',
+                            background: prismAuthStatus === 'ok' ? '#22c55e' : prismAuthStatus === 'error' ? '#ef4444' : prismAuthStatus === 'pending' ? '#f59e0b' : '#475569'
+                          }} />
+                          {prismAuthStatus === 'ok' && 'Authenticated'}
+                          {prismAuthStatus === 'error' && 'Auth failed'}
+                          {prismAuthStatus === 'pending' && 'Authenticating…'}
+                          {prismAuthStatus === 'idle' && 'Not authenticated'}
+                        </span>
+                        <button
+                          className="btn-secondary"
+                          style={{ padding: '4px 12px', fontSize: '12px' }}
+                          disabled={prismAuthStatus === 'pending'}
+                          onClick={async () => {
+                            setPrismAuthStatus('pending')
+                            setPrismAuthError('')
+                            try {
+                              const { getValidAccessToken } = await import('./utils/prism-auth')
+                              const mnemonicResult = await getStorageData(['mnemonic'])
+                              const mnemonic = mnemonicResult.mnemonic
+                              if (!mnemonic) throw new Error('Wallet is locked — unlock first')
+                              await getValidAccessToken(mnemonic, selectedNetwork, rgbitsPrismApiBase.trim() || RGBITS_PRISM_API_BASE)
+                              setPrismAuthStatus('ok')
+                            } catch (err) {
+                              setPrismAuthStatus('error')
+                              setPrismAuthError(err instanceof Error ? err.message : String(err))
+                            }
+                          }}
+                        >
+                          {prismAuthStatus === 'pending' ? 'Testing…' : 'Test Auth'}
+                        </button>
+                      </div>
+                      {prismAuthStatus === 'error' && prismAuthError && (
+                        <span style={{ fontSize: '12px', color: '#ef4444' }}>{prismAuthError}</span>
+                      )}
+                      <span className="settings-hint">Auth is automatic — the wallet derives your identity from the mnemonic and signs the Prism challenge.</span>
                     </div>
                   </>
                 )}
