@@ -400,6 +400,11 @@ function App() {
     return `${addr.slice(0, 8)}...${addr.slice(-4)}`
   }
 
+  const navigateFromMenu = (nextView: View) => {
+    setShowMenu(false)
+    setView(nextView)
+  }
+
   const closeUnlockUtxoModal = () => {
     if (unlockUtxoProcessing) return
     setShowUnlockUtxoModal(false)
@@ -4180,40 +4185,28 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                 <span className="menu-badge">!</span>
                 <span className="menu-arrow">›</span>
               </div>
-              <div className="menu-item" onClick={() => {
-                setShowMenu(false)
-                setView('user-settings')
-              }}>
+              <button className="menu-item" type="button" onClick={() => navigateFromMenu('user-settings')}>
                 <span className="menu-icon">⚙</span>
                 <span>Settings</span>
                 <span className="menu-arrow">›</span>
-              </div>
-              <div className="menu-item" onClick={() => {
-                setShowMenu(false)
-                setView('settings')
-              }}>
+              </button>
+              <button className="menu-item" type="button" onClick={() => navigateFromMenu('settings')}>
                 <span className="menu-icon">🔧</span>
                 <span>Admin</span>
                 <span className="menu-arrow">›</span>
-              </div>
-              <div className="menu-item" onClick={() => {
-                setShowMenu(false)
-                setView('network-settings')
-              }}>
+              </button>
+              <button className="menu-item" type="button" onClick={() => navigateFromMenu('network-settings')}>
                 <span className="menu-icon">🌐</span>
                 <span>Network Settings</span>
                 <span className="menu-arrow">›</span>
-              </div>
+              </button>
               {/* Faucet menu - only visible on TestNet */}
               {(selectedNetwork === 'testnet3' || selectedNetwork === 'testnet4' || selectedNetwork === 'regtest') && (
-                <div className="menu-item" onClick={() => {
-                  setShowMenu(false)
-                  setView('faucet')
-                }}>
+                <button className="menu-item" type="button" onClick={() => navigateFromMenu('faucet')}>
                   <span className="menu-icon">🚰</span>
                   <span>Faucet</span>
                   <span className="menu-arrow">›</span>
-                </div>
+                </button>
               )}
               <div className="menu-item">
                 <span className="menu-icon">ⓘ</span>
