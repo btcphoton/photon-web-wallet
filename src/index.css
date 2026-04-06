@@ -3998,7 +3998,14 @@ textarea:focus {
   gap: 0.85rem;
   padding: 0.5rem 0;
   min-height: 600px;
-  animation: view-slide-in 0.22s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+  /* opacity-only animation — avoids creating a stacking context that traps
+     the native <select> dropdown and prevents it from painting above the page */
+  animation: settings-fade-in 0.22s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+}
+
+@keyframes settings-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
 .settings-content {

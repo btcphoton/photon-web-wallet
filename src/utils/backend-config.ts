@@ -137,11 +137,14 @@ export const resolveBitcoinApiBase = async (
     if (activity === 'fees') {
         if (network === 'testnet3') return 'https://mempool.space/testnet/api/v1/fees/recommended';
         if (network === 'testnet4') return 'https://mempool.space/testnet4/api/v1/fees/recommended';
+        // regtest always uses Photon faucet fees — public mempool has no regtest chain
+        if (network === 'regtest') return `${PHOTON_REGTEST_API_BASE}/v1/fees/recommended`;
         return 'https://mempool.space/api/v1/fees/recommended';
     }
 
     if (network === 'testnet3') return 'https://mempool.space/testnet/api';
     if (network === 'testnet4') return 'https://mempool.space/testnet4/api';
-    if (network === 'regtest') return 'https://blockstream.info/testnet/api';
+    // regtest always uses the Photon faucet Esplora — public APIs have no regtest chain
+    if (network === 'regtest') return PHOTON_REGTEST_API_BASE;
     return 'https://mempool.space/api';
 };
