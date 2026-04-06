@@ -26,7 +26,13 @@ export interface StorageData {
     backendProfileId?: string
     regtestRgbBackendMode?: string
     rgbitsPrismApiBase?: string
+    /** @deprecated Use prismAccessToken/prismRefreshToken — will be removed in MIG-002 */
     rgbitsPrismAuthToken?: string
+    // Prism auth tokens (MIG-001) — managed automatically by prism-auth.ts
+    prismAccessToken?: string
+    prismRefreshToken?: string
+    prismTokenExpiry?: number
+    prismEnrolledPubkey?: string
     // Canister IDs
     mainnetCanisterId?: string
     testnetCanisterId?: string
