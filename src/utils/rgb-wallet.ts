@@ -46,7 +46,10 @@ export interface RgbWalletTransfer {
         type: string
         value: number | string
     } | null
-    metadata?: Record<string, unknown> | null
+    payment_hash?: string | null
+    route?: string | null
+    node_account_ref?: string | null
+    lightning_invoice?: string | null
 }
 
 export interface DecodedRgbInvoice {
@@ -242,7 +245,10 @@ type RegtestRgbFeature =
     | 'regtest mining'
     | 'UTXO funding address'
     | 'UTXO slot listing'
-    | 'UTXO slot redeem';
+    | 'UTXO slot redeem'
+    | 'Issue auth token'
+    | 'List auth tokens'
+    | 'Revoke auth token';
 
 async function getRegtestRgbBackend(_feature: RegtestRgbFeature): Promise<{
     apiBase: string
@@ -273,6 +279,100 @@ async function getRegtestRgbBackend(_feature: RegtestRgbFeature): Promise<{
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Bearer token storage + auth header helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+const BEARER_TOKEN_STORAGE_KEY = 'photon_bearer_token'
+
+async function getStoredBearerToken(): Promise<string | null> {
+    try {
+        const result = await chrome.storage.local.get(BEARER_TOKEN_STORAGE_KEY)
+        const token = result[BEARER_TOKEN_STORAGE_KEY]
+        return typeof token === 'string' && token.length === 64 ? token : null
+    } catch {
+        return null
+    }
+}
+
+async function storeBearerToken(token: string): Promise<void> {
+    try {
+        await chrome.storage.local.set({ [BEARER_TOKEN_STORAGE_KEY]: token })
+    } catch {}
+}
+
+async function clearBearerToken(): Promise<void> {
+    try {
+        await chrome.storage.local.remove(BEARER_TOKEN_STORAGE_KEY)
+    } catch {}
+}
+
+/**
+ * Returns the correct auth headers for a request:
+ *   - Uses a stored bearer token if available
+ *   - Issues a new token (via x-photon-wallet-key) and stores it if not
+ *   - Falls back to x-photon-wallet-key if token issuance fails
+ */
+async function getAuthHeaders(
+    walletKey: string,
+    apiBase: string
+): Promise<Record<string, string>> {
+    if (!walletKey) return {}
+
+    const stored = await getStoredBearerToken()
+    if (stored) {
+        return { Authorization: `Bearer ${stored}` }
+    }
+
+    // No stored token — issue one
+    try {
+        const resp = await fetch(`${apiBase}/api/wallet/auth/token`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-photon-wallet-key': walletKey,
+            },
+            body: JSON.stringify({ label: 'extension' }),
+        })
+        if (resp.ok) {
+            const data = await resp.json()
+            if (data.ok && typeof data.token === 'string') {
+                await storeBearerToken(data.token)
+                return { Authorization: `Bearer ${data.token}` }
+            }
+        }
+    } catch {}
+
+    // Fallback — token issuance failed, use wallet key directly
+    return { 'x-photon-wallet-key': walletKey }
+}
+
+/**
+ * fetch wrapper that injects auth headers and retries once on 401
+ * by rotating the bearer token.
+ */
+async function fetchWithAuth(
+    url: string,
+    init: RequestInit,
+    walletKey: string,
+    apiBase: string
+): Promise<Response> {
+    const doFetch = async () => {
+        const authHeaders = await getAuthHeaders(walletKey, apiBase)
+        return fetch(url, {
+            ...init,
+            headers: { ...(init.headers as Record<string, string> ?? {}), ...authHeaders },
+        })
+    }
+
+    const res = await doFetch()
+    if (res.status === 401) {
+        await clearBearerToken()
+        return doFetch()
+    }
+    return res
+}
+
 export async function checkLocalRgbNode(): Promise<boolean> {
     try {
         const { apiBase, mode, headers } = await getRegtestRgbBackend('health')
@@ -298,20 +398,11 @@ export async function createRegtestRgbInvoice(params: {
     }
 
     const { apiBase, headers: baseHeaders } = await getRegtestRgbBackend('onchain invoice')
-    const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        ...baseHeaders,
-    }
-
-    if (params.walletKey) {
-        headers['x-photon-wallet-key'] = params.walletKey
-    }
-
-    const response = await fetch(`${apiBase}/rgb/invoice`, {
+    const response = await fetchWithAuth(`${apiBase}/rgb/invoice`, {
         method: 'POST',
-        headers,
+        headers: { 'Content-Type': 'application/json', ...baseHeaders },
         body: JSON.stringify(payload),
-    })
+    }, params.walletKey || '', apiBase)
 
     if (!response.ok) {
         const errorText = await response.text()
@@ -336,18 +427,9 @@ export async function registerRgbInvoiceSecret(params: {
     blindingSecret: string
 }): Promise<RgbInvoiceSecretRegistrationResponse> {
     const { apiBase, headers: baseHeaders } = await getRegtestRgbBackend('invoice secret registration')
-    const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        ...baseHeaders,
-    }
-
-    if (params.walletKey) {
-        headers['x-photon-wallet-key'] = params.walletKey
-    }
-
-    const response = await fetch(`${apiBase}/rgb/invoice/register`, {
+    const response = await fetchWithAuth(`${apiBase}/rgb/invoice/register`, {
         method: 'POST',
-        headers,
+        headers: { 'Content-Type': 'application/json', ...baseHeaders },
         body: JSON.stringify({
             network: params.network || 'regtest',
             assetId: params.assetId,
@@ -356,7 +438,7 @@ export async function registerRgbInvoiceSecret(params: {
             recipientId: params.recipientId,
             blindingSecret: params.blindingSecret,
         }),
-    })
+    }, params.walletKey || '', apiBase)
 
     if (!response.ok) {
         const errorText = await response.text()
@@ -376,22 +458,11 @@ export async function fetchRegtestRgbBalance(params: {
     walletKey?: string
 }): Promise<RgbWalletBalanceResponse> {
     const { apiBase, headers: baseHeaders } = await getRegtestRgbBackend('balance lookup')
-    const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        ...baseHeaders,
-    }
-
-    if (params.walletKey) {
-        headers['x-photon-wallet-key'] = params.walletKey
-    }
-
-    const response = await fetch(`${apiBase}/rgb/balance`, {
+    const response = await fetchWithAuth(`${apiBase}/rgb/balance`, {
         method: 'POST',
-        headers,
-        body: JSON.stringify({
-            assetId: params.assetId,
-        }),
-    })
+        headers: { 'Content-Type': 'application/json', ...baseHeaders },
+        body: JSON.stringify({ assetId: params.assetId }),
+    }, params.walletKey || '', apiBase)
 
     if (!response.ok) {
         const errorText = await response.text()
@@ -411,22 +482,11 @@ export async function fetchRegtestRgbTransfers(params: {
     walletKey?: string
 }): Promise<RgbWalletTransfersResponse> {
     const { apiBase, headers: baseHeaders } = await getRegtestRgbBackend('transfer lookup')
-    const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        ...baseHeaders,
-    }
-
-    if (params.walletKey) {
-        headers['x-photon-wallet-key'] = params.walletKey
-    }
-
-    const response = await fetch(`${apiBase}/rgb/transfers`, {
+    const response = await fetchWithAuth(`${apiBase}/rgb/transfers`, {
         method: 'POST',
-        headers,
-        body: JSON.stringify({
-            assetId: params.assetId,
-        }),
-    })
+        headers: { 'Content-Type': 'application/json', ...baseHeaders },
+        body: JSON.stringify({ assetId: params.assetId }),
+    }, params.walletKey || '', apiBase)
 
     if (!response.ok) {
         const errorText = await response.text()
@@ -476,24 +536,15 @@ export async function sendRegtestRgbInvoice(params: {
     walletKey?: string
 }): Promise<RgbWalletSendResponse> {
     const { apiBase, headers: baseHeaders } = await getRegtestRgbBackend('onchain send')
-    const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        ...baseHeaders,
-    }
-
-    if (params.walletKey) {
-        headers['x-photon-wallet-key'] = params.walletKey
-    }
-
-    const response = await fetch(`${apiBase}/rgb/send`, {
+    const response = await fetchWithAuth(`${apiBase}/rgb/send`, {
         method: 'POST',
-        headers,
+        headers: { 'Content-Type': 'application/json', ...baseHeaders },
         body: JSON.stringify({
             invoice: params.invoice,
             feeRate: params.feeRate ?? 5,
             minConfirmations: params.minConfirmations ?? 1,
         }),
-    })
+    }, params.walletKey || '', apiBase)
 
     if (!response.ok) {
         const errorText = await response.text()
@@ -513,22 +564,11 @@ export async function decodeRegtestLightningInvoice(params: {
     walletKey?: string
 }): Promise<RgbWalletDecodeLightningInvoiceResponse> {
     const { apiBase, headers: baseHeaders } = await getRegtestRgbBackend('lightning invoice decode')
-    const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        ...baseHeaders,
-    }
-
-    if (params.walletKey) {
-        headers['x-photon-wallet-key'] = params.walletKey
-    }
-
-    const response = await fetch(`${apiBase}/rgb/decode-lightning-invoice`, {
+    const response = await fetchWithAuth(`${apiBase}/rgb/decode-lightning-invoice`, {
         method: 'POST',
-        headers,
-        body: JSON.stringify({
-            invoice: params.invoice,
-        }),
-    })
+        headers: { 'Content-Type': 'application/json', ...baseHeaders },
+        body: JSON.stringify({ invoice: params.invoice }),
+    }, params.walletKey || '', apiBase)
 
     if (!response.ok) {
         const errorText = await response.text()
@@ -548,22 +588,11 @@ export async function payRegtestLightningInvoice(params: {
     walletKey?: string
 }): Promise<RgbWalletLightningPayResponse> {
     const { apiBase, headers: baseHeaders } = await getRegtestRgbBackend('lightning payment')
-    const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        ...baseHeaders,
-    }
-
-    if (params.walletKey) {
-        headers['x-photon-wallet-key'] = params.walletKey
-    }
-
-    const response = await fetch(`${apiBase}/rgb/pay-lightning`, {
+    const response = await fetchWithAuth(`${apiBase}/rgb/pay-lightning`, {
         method: 'POST',
-        headers,
-        body: JSON.stringify({
-            invoice: params.invoice,
-        }),
-    })
+        headers: { 'Content-Type': 'application/json', ...baseHeaders },
+        body: JSON.stringify({ invoice: params.invoice }),
+    }, params.walletKey || '', apiBase)
 
     if (!response.ok) {
         const errorText = await response.text()
@@ -586,25 +615,16 @@ export async function createRegtestLightningInvoice(params: {
     walletKey?: string
 }): Promise<RgbWalletLightningInvoiceResponse> {
     const { apiBase, headers: baseHeaders } = await getRegtestRgbBackend('lightning invoice creation')
-    const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        ...baseHeaders,
-    }
-
-    if (params.walletKey) {
-        headers['x-photon-wallet-key'] = params.walletKey
-    }
-
-    const response = await fetch(`${apiBase}/rgb/ln-invoice`, {
+    const response = await fetchWithAuth(`${apiBase}/rgb/ln-invoice`, {
         method: 'POST',
-        headers,
+        headers: { 'Content-Type': 'application/json', ...baseHeaders },
         body: JSON.stringify({
             assetId: params.assetId,
             amount: params.amount,
             expirySec: params.expirySec ?? 420,
             amtMsat: params.amtMsat ?? 3000000,
         }),
-    })
+    }, params.walletKey || '', apiBase)
 
     if (!response.ok) {
         const errorText = await response.text()
@@ -659,10 +679,6 @@ export async function fetchRegtestIssueAssetReadiness(params: {
     channelFundingTiming?: 'during_issuance' | 'after_issuance'
 }): Promise<RgbIssueAssetReadinessResponse> {
     const { apiBase, headers: baseHeaders } = await getRegtestRgbBackend('issue asset readiness')
-    const headers: Record<string, string> = { ...baseHeaders }
-    if (params.walletKey) {
-        headers['x-photon-wallet-key'] = params.walletKey
-    }
     const query = new URLSearchParams()
     if (params.channelFundingSats && params.channelFundingSats > 0) {
         query.set('channelFundingSats', String(params.channelFundingSats))
@@ -670,11 +686,11 @@ export async function fetchRegtestIssueAssetReadiness(params: {
     if (params.channelFundingTiming) {
         query.set('channelFundingTiming', params.channelFundingTiming)
     }
-
-    const response = await fetch(`${apiBase}/rgb/issue-asset-readiness${query.toString() ? `?${query.toString()}` : ''}`, {
-        method: 'GET',
-        headers,
-    })
+    const response = await fetchWithAuth(
+        `${apiBase}/rgb/issue-asset-readiness${query.toString() ? `?${query.toString()}` : ''}`,
+        { method: 'GET', headers: { ...baseHeaders } },
+        params.walletKey || '', apiBase
+    )
 
     if (!response.ok) {
         const errorText = await response.text()
@@ -703,18 +719,9 @@ export async function issueRegtestRgbAsset(params: {
     channelFundingTiming?: 'during_issuance' | 'after_issuance'
 }): Promise<RgbIssueAssetResponse> {
     const { apiBase, headers: baseHeaders } = await getRegtestRgbBackend('issue asset')
-    const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        ...baseHeaders,
-    }
-
-    if (params.walletKey) {
-        headers['x-photon-wallet-key'] = params.walletKey
-    }
-
-    const response = await fetch(`${apiBase}/rgb/issue-asset`, {
+    const response = await fetchWithAuth(`${apiBase}/rgb/issue-asset`, {
         method: 'POST',
-        headers,
+        headers: { 'Content-Type': 'application/json', ...baseHeaders },
         body: JSON.stringify({
             schema: 'NIA',
             name: params.name,
@@ -729,7 +736,7 @@ export async function issueRegtestRgbAsset(params: {
             channelFundingTiming: params.channelFundingTiming ?? 'after_issuance',
             network: 'regtest',
         }),
-    })
+    }, params.walletKey || '', apiBase)
 
     if (!response.ok) {
         const errorText = await response.text()
@@ -749,22 +756,11 @@ export async function refreshRegtestRgbTransfers(params: {
     walletKey?: string
 }): Promise<void> {
     const { apiBase, headers: baseHeaders } = await getRegtestRgbBackend('transfer refresh')
-    const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        ...baseHeaders,
-    }
-
-    if (params.walletKey) {
-        headers['x-photon-wallet-key'] = params.walletKey
-    }
-
-    const response = await fetch(`${apiBase}/rgb/refresh`, {
+    const response = await fetchWithAuth(`${apiBase}/rgb/refresh`, {
         method: 'POST',
-        headers,
-        body: JSON.stringify({
-            assetId: params.assetId,
-        }),
-    })
+        headers: { 'Content-Type': 'application/json', ...baseHeaders },
+        body: JSON.stringify({ assetId: params.assetId }),
+    }, params.walletKey || '', apiBase)
 
     if (!response.ok) {
         const errorText = await response.text()
@@ -825,10 +821,10 @@ export interface UtxoSlot {
 
 export async function fetchUtxoFundingAddress(params: { walletKey: string }): Promise<UtxoFundingAddressResponse> {
     const { apiBase, headers } = await getRegtestRgbBackend('UTXO funding address')
-    const response = await fetch(`${apiBase}/utxo/funding-address`, {
+    const response = await fetchWithAuth(`${apiBase}/utxo/funding-address`, {
         method: 'GET',
-        headers: { ...headers, 'x-photon-wallet-key': params.walletKey },
-    })
+        headers: { ...headers },
+    }, params.walletKey, apiBase)
     if (!response.ok) {
         const errorText = await response.text()
         throw new Error(errorText || `Failed to fetch funding address (${response.status})`)
@@ -840,10 +836,10 @@ export async function fetchUtxoFundingAddress(params: { walletKey: string }): Pr
 
 export async function fetchUtxoSlots(params: { walletKey: string }): Promise<UtxoSlot[]> {
     const { apiBase, headers } = await getRegtestRgbBackend('UTXO slot listing')
-    const response = await fetch(`${apiBase}/utxo/slots`, {
+    const response = await fetchWithAuth(`${apiBase}/utxo/slots`, {
         method: 'GET',
-        headers: { ...headers, 'x-photon-wallet-key': params.walletKey },
-    })
+        headers: { ...headers },
+    }, params.walletKey, apiBase)
     if (!response.ok) {
         const errorText = await response.text()
         throw new Error(errorText || `Failed to fetch UTXO slots (${response.status})`)
@@ -859,18 +855,14 @@ export async function redeemUtxoSlot(params: {
     mainBtcAddress?: string
 }): Promise<{ txid: string; sentSats: number; returnAddress: string }> {
     const { apiBase, headers } = await getRegtestRgbBackend('UTXO slot redeem')
-    const response = await fetch(`${apiBase}/utxo/redeem`, {
+    const response = await fetchWithAuth(`${apiBase}/utxo/redeem`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            ...headers,
-            'x-photon-wallet-key': params.walletKey,
-        },
+        headers: { 'Content-Type': 'application/json', ...headers },
         body: JSON.stringify({
             slotId: params.slotId,
             mainBtcAddress: params.mainBtcAddress,
         }),
-    })
+    }, params.walletKey, apiBase)
     if (!response.ok) {
         const errorText = await response.text()
         throw new Error(errorText || `Redeem failed (${response.status})`)
@@ -878,4 +870,95 @@ export async function redeemUtxoSlot(params: {
     const data = await response.json()
     if (!data.ok) throw new Error(data.error || 'Redeem failed')
     return { txid: data.txid, sentSats: data.sentSats, returnAddress: data.returnAddress }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Wallet Auth Token helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface WalletAuthToken {
+    id: string
+    label: string | null
+    scope: string[]
+    tokenType: 'api_key' | 'session' | 'dev'
+    expiresAt: string | null
+    createdIp: string | null
+    createdAt: string
+    lastUsedAt: string | null
+}
+
+export interface IssueAuthTokenResponse extends WalletAuthToken {
+    token: string   // raw token — shown ONCE, must be stored by the client
+}
+
+/**
+ * Issue a new api_key token for `walletKey`.
+ * Returns the raw token — it will NOT be returned again by any subsequent call.
+ */
+export async function issueWalletAuthToken(params: {
+    walletKey: string
+    label?: string
+    scope?: string[]
+    expiresInDays?: number
+}): Promise<IssueAuthTokenResponse> {
+    const { apiBase, headers } = await getRegtestRgbBackend('Issue auth token')
+    const response = await fetch(`${apiBase}/wallet/auth/token`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            ...headers,
+            'x-photon-wallet-key': params.walletKey,
+        },
+        body: JSON.stringify({
+            label: params.label,
+            scope: params.scope ?? [],
+            expiresInDays: params.expiresInDays,
+        }),
+    })
+    if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(errorText || `Token issue failed (${response.status})`)
+    }
+    const data = await response.json()
+    if (!data.ok) throw new Error(data.error || 'Token issue failed')
+    return data as IssueAuthTokenResponse
+}
+
+/**
+ * List all active tokens for `walletKey` (does not return raw tokens).
+ */
+export async function listWalletAuthTokens(params: {
+    walletKey: string
+}): Promise<WalletAuthToken[]> {
+    const { apiBase, headers } = await getRegtestRgbBackend('List auth tokens')
+    const response = await fetchWithAuth(`${apiBase}/wallet/auth/tokens`, {
+        headers: { ...headers },
+    }, params.walletKey, apiBase)
+    if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(errorText || `List tokens failed (${response.status})`)
+    }
+    const data = await response.json()
+    if (!data.ok) throw new Error(data.error || 'List tokens failed')
+    return data.tokens as WalletAuthToken[]
+}
+
+/**
+ * Revoke a specific token by ID. Must belong to `walletKey`.
+ */
+export async function revokeWalletAuthToken(params: {
+    walletKey: string
+    tokenId: string
+}): Promise<void> {
+    const { apiBase, headers } = await getRegtestRgbBackend('Revoke auth token')
+    const response = await fetchWithAuth(`${apiBase}/wallet/auth/token/${params.tokenId}`, {
+        method: 'DELETE',
+        headers: { ...headers },
+    }, params.walletKey, apiBase)
+    if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(errorText || `Revoke token failed (${response.status})`)
+    }
+    const data = await response.json()
+    if (!data.ok) throw new Error(data.error || 'Revoke token failed')
 }

@@ -1757,7 +1757,7 @@ function App() {
                   // WaitingCounterparty = open invoice nobody has sent to yet — not a real activity
                   if (transfer.status === 'WaitingCounterparty') return false
                   if (transfer.kind === 'Send' || transfer.kind?.startsWith('Receive')) return true
-                  return transfer.kind?.startsWith('Lightning') || transfer.metadata?.route === 'lightning' || transfer.txid === null
+                  return transfer.kind?.startsWith('Lightning') || transfer.route === 'lightning' || transfer.txid === null
                 })
                 .map((transfer) => {
                   const assignmentValue = Number(
@@ -1769,24 +1769,19 @@ function App() {
                     parseTimestampToEpochSeconds(transfer.settled_at) ??
                     parseTimestampToEpochSeconds(transfer.updated_at) ??
                     parseTimestampToEpochSeconds(transfer.created_at) ??
-                    parseTimestampToEpochSeconds(transfer.metadata?.updated_at) ??
-                    parseTimestampToEpochSeconds(transfer.metadata?.created_at) ??
                     0
                   const isReceive =
                     transfer.direction === 'incoming' ||
                     transfer.kind?.startsWith('Receive') ||
                     transfer.kind === 'LightningReceive'
-                  const isInternalSameNode = transfer.metadata?.route === 'internal_same_node'
+                  const isInternalSameNode = transfer.route === 'internal_same_node'
                   const isLightning =
                     !isInternalSameNode && (
                     transfer.kind?.startsWith('Lightning') ||
-                    transfer.metadata?.route === 'lightning' ||
+                    transfer.route === 'lightning' ||
                     transfer.txid === null
                     )
-                  const paymentHash =
-                    transfer.metadata && typeof transfer.metadata.payment_hash === 'string'
-                      ? transfer.metadata.payment_hash
-                      : null
+                  const paymentHash = transfer.payment_hash ?? null
 
                   return {
                     type: isReceive ? 'Receive' : 'Send',
