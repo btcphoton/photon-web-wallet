@@ -14,7 +14,7 @@ import type { Asset } from './utils/storage'
 import { BACKEND_PROFILES, DEFAULT_BACKEND_PROFILE_ID, DEFAULT_REGTEST_RGB_BACKEND_MODE, PUBLIC_RGB_PROXY_DEFAULT, RGBITS_PRISM_API_BASE, getBackendProfileById, getDefaultElectrumServer, getDefaultRgbProxy, type BackendProfileId, type RegtestRgbBackendMode } from './utils/backend-config'
 import { QRCodeSVG } from 'qrcode.react'
 import { createRgbInvoice } from './utils/rgb-invoice'
-import { createRegtestLightningInvoice, createRegtestRgbInvoice, decodeRegtestLightningInvoice, decodeRegtestRgbInvoice, fetchRegtestChannelDashboard, fetchRegtestIssueAssetReadiness, fetchRegtestRgbBalance, fetchRegtestRgbRegistry, fetchRegtestRgbTransfers, issueRegtestRgbAsset, mineRegtestBlocks, payRegtestLightningInvoice, refreshRegtestRgbTransfers, registerRgbInvoiceSecret, sendRegtestRgbInvoice, fetchUtxoFundingAddress, fetchUtxoSlots, redeemUtxoSlot, type RgbIssueAssetReadinessResponse, type RgbIssueAssetResponse, type UtxoSlot, type UtxoFundingAddressResponse } from './utils/rgb-wallet'
+import { createRegtestLightningInvoice, createRegtestRgbInvoice, decodeRegtestLightningInvoice, decodeRegtestRgbInvoice, fetchRegtestChannelDashboard, fetchRegtestIssueAssetReadiness, fetchRegtestRgbBalance, fetchRegtestRgbRegistry, fetchRegtestRgbTransfers, issueRegtestRgbAsset, uploadRegtestRgbAssetMedia, mineRegtestBlocks, payRegtestLightningInvoice, refreshRegtestRgbTransfers, registerRgbInvoiceSecret, sendRegtestRgbInvoice, fetchUtxoFundingAddress, fetchUtxoSlots, redeemUtxoSlot, type RgbIssueAssetReadinessResponse, type RgbIssueAssetResponse, type UtxoSlot, type UtxoFundingAddressResponse } from './utils/rgb-wallet'
 import { LightningAnimation } from './components/LightningAnimation'
 import { StepIndicator } from './components/StepIndicator'
 import { ErrorBanner } from './components/ErrorBanner'
@@ -269,6 +269,12 @@ function App() {
   const [issueAssetLiquidityPercentage, setIssueAssetLiquidityPercentage] = useState<string>('10')
   const [issueAssetChannelFundingSats, setIssueAssetChannelFundingSats] = useState<string>('50000')
   const [issueAssetChannelFundingTiming, setIssueAssetChannelFundingTiming] = useState<'during_issuance' | 'after_issuance'>('after_issuance')
+  const [issueAssetSchema, setIssueAssetSchema] = useState<'NIA' | 'CFA' | 'UDA'>('NIA')
+  const [issueAssetMediaFile, setIssueAssetMediaFile] = useState<File | null>(null)
+  const [issueAssetMediaDigest, setIssueAssetMediaDigest] = useState<string>('')
+  const [issueAssetMediaUploading, setIssueAssetMediaUploading] = useState<boolean>(false)
+  const [issueAssetAttachments, setIssueAssetAttachments] = useState<{ file: File; digest: string }[]>([])
+  const [issueAssetAttachmentUploading, setIssueAssetAttachmentUploading] = useState<boolean>(false)
   const [issueAssetError, setIssueAssetError] = useState<string>('')
   const [issueAssetSuccess, setIssueAssetSuccess] = useState<RgbIssueAssetResponse | null>(null)
   const [issueAssetSubmitting, setIssueAssetSubmitting] = useState<boolean>(false)
@@ -904,7 +910,48 @@ function App() {
   const openIssueAssetView = () => {
     setIssueAssetError('')
     setIssueAssetSuccess(null)
+    setIssueAssetSchema('NIA')
+    setIssueAssetMediaFile(null)
+    setIssueAssetMediaDigest('')
+    setIssueAssetMediaUploading(false)
+    setIssueAssetAttachments([])
+    setIssueAssetAttachmentUploading(false)
     setView('issue-asset')
+  }
+
+  const handleIssueAssetMediaSelect = async (file: File) => {
+    setIssueAssetMediaFile(file)
+    setIssueAssetMediaDigest('')
+    setIssueAssetError('')
+    setIssueAssetMediaUploading(true)
+    try {
+      const walletKey = await getRegtestWalletKey()
+      const { digest } = await uploadRegtestRgbAssetMedia({ file, walletKey })
+      setIssueAssetMediaDigest(digest)
+    } catch (error: any) {
+      setIssueAssetError(error.message || 'Media upload failed.')
+      setIssueAssetMediaFile(null)
+    } finally {
+      setIssueAssetMediaUploading(false)
+    }
+  }
+
+  const handleIssueAssetAttachmentAdd = async (file: File) => {
+    setIssueAssetError('')
+    setIssueAssetAttachmentUploading(true)
+    try {
+      const walletKey = await getRegtestWalletKey()
+      const { digest } = await uploadRegtestRgbAssetMedia({ file, walletKey })
+      setIssueAssetAttachments((prev) => [...prev, { file, digest }])
+    } catch (error: any) {
+      setIssueAssetError(error.message || 'Attachment upload failed.')
+    } finally {
+      setIssueAssetAttachmentUploading(false)
+    }
+  }
+
+  const handleIssueAssetAttachmentRemove = (index: number) => {
+    setIssueAssetAttachments((prev) => prev.filter((_, i) => i !== index))
   }
 
   const getIssueAssetLifecyclePresentation = (status?: string | null) => {
@@ -966,16 +1013,26 @@ function App() {
       setIssueAssetError('Asset name is required.')
       return
     }
-    if (!/^[A-Z0-9]{3,8}$/.test(normalizedTicker)) {
+    if (issueAssetSchema !== 'UDA' && !/^[A-Z0-9]{3,8}$/.test(normalizedTicker)) {
       setIssueAssetError('Ticker must be 3-8 uppercase letters or numbers.')
       return
     }
-    if (!Number.isInteger(precisionValue) || precisionValue < 0 || precisionValue > 18) {
-      setIssueAssetError('Precision must be an integer between 0 and 18.')
+    if (issueAssetSchema === 'UDA' && normalizedTicker && !/^[A-Z0-9]{3,8}$/.test(normalizedTicker)) {
+      setIssueAssetError('Ticker must be 3-8 uppercase letters or numbers (or leave blank).')
       return
     }
-    if (!Number.isInteger(totalSupplyValue) || totalSupplyValue <= 0) {
-      setIssueAssetError('Total supply must be a positive integer.')
+    if (issueAssetSchema !== 'UDA') {
+      if (!Number.isInteger(precisionValue) || precisionValue < 0 || precisionValue > 18) {
+        setIssueAssetError('Precision must be an integer between 0 and 18.')
+        return
+      }
+      if (!Number.isInteger(totalSupplyValue) || totalSupplyValue <= 0) {
+        setIssueAssetError('Total supply must be a positive integer.')
+        return
+      }
+    }
+    if (issueAssetSchema === 'CFA' && !issueAssetMediaDigest) {
+      setIssueAssetError('A media file is required for CFA assets. Please upload a file first.')
       return
     }
     if (issueAssetBootstrapLightning) {
@@ -1001,11 +1058,14 @@ function App() {
       const walletKey = await getRegtestWalletKey()
       const result = await issueRegtestRgbAsset({
         walletKey,
+        schema: issueAssetSchema,
         name: normalizedName,
-        ticker: normalizedTicker,
-        precision: precisionValue,
-        totalSupply: totalSupplyValue,
+        ticker: normalizedTicker || undefined,
+        precision: issueAssetSchema === 'UDA' ? 0 : precisionValue,
+        totalSupply: issueAssetSchema === 'UDA' ? 1 : totalSupplyValue,
         description: issueAssetDescription.trim(),
+        ...((issueAssetSchema === 'CFA' || issueAssetSchema === 'UDA') && issueAssetMediaDigest ? { fileDigest: issueAssetMediaDigest } : {}),
+        ...(issueAssetSchema === 'UDA' && issueAssetAttachments.length > 0 ? { attachmentDigests: issueAssetAttachments.map((a) => a.digest) } : {}),
         publicRegistry: issueAssetPublicRegistry,
         bootstrapLightning: issueAssetBootstrapLightning,
         liquidityPercentage: liquidityPercentageValue,
@@ -1013,12 +1073,13 @@ function App() {
         channelFundingTiming: issueAssetChannelFundingTiming,
       })
 
+      const assetTicker = result.asset.ticker || ''
       await persistAssetForCurrentNetwork({
-        id: buildAssetIdFromTicker(result.asset.ticker),
+        id: assetTicker ? buildAssetIdFromTicker(assetTicker) : result.asset.contract_id,
         name: result.asset.token_name,
         amount: String(result.asset.total_supply),
-        unit: result.asset.ticker,
-        color: result.asset.ticker.toUpperCase() === 'PHO' ? '#38bdf8' : '#f8fafc',
+        unit: assetTicker || result.asset.token_name,
+        color: assetTicker.toUpperCase() === 'PHO' ? '#38bdf8' : '#f8fafc',
       }, result.asset.contract_id)
 
       setIssueAssetSuccess(result)
@@ -1027,6 +1088,10 @@ function App() {
       setIssueAssetPrecision('0')
       setIssueAssetSupply('')
       setIssueAssetDescription('')
+      setIssueAssetSchema('NIA')
+      setIssueAssetMediaFile(null)
+      setIssueAssetMediaDigest('')
+      setIssueAssetAttachments([])
       setIssueAssetBootstrapLightning(false)
       setIssueAssetLiquidityPercentage('10')
       setIssueAssetChannelFundingSats('50000')
@@ -5318,6 +5383,30 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
           </div>
 
           <div className="add-assets-content issue-asset-content">
+            <div className="issue-asset-schema-toggle">
+              <button
+                type="button"
+                className={`issue-asset-schema-btn${issueAssetSchema === 'NIA' ? ' active' : ''}`}
+                onClick={() => { setIssueAssetSchema('NIA'); setIssueAssetMediaFile(null); setIssueAssetMediaDigest(''); setIssueAssetAttachments([]) }}
+              >
+                NIA — Fungible
+              </button>
+              <button
+                type="button"
+                className={`issue-asset-schema-btn${issueAssetSchema === 'CFA' ? ' active' : ''}`}
+                onClick={() => { setIssueAssetSchema('CFA'); setIssueAssetMediaFile(null); setIssueAssetMediaDigest(''); setIssueAssetAttachments([]) }}
+              >
+                CFA — Collectible
+              </button>
+              <button
+                type="button"
+                className={`issue-asset-schema-btn${issueAssetSchema === 'UDA' ? ' active' : ''}`}
+                onClick={() => { setIssueAssetSchema('UDA'); setIssueAssetMediaFile(null); setIssueAssetMediaDigest(''); setIssueAssetAttachments([]) }}
+              >
+                UDA — NFT
+              </button>
+            </div>
+
             <div className="issue-asset-grid">
               <label className="issue-asset-field">
                 <span className="issue-asset-label">Asset name</span>
@@ -5331,41 +5420,53 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               </label>
 
               <label className="issue-asset-field">
-                <span className="issue-asset-label">Ticker</span>
+                <span className="issue-asset-label">
+                  Ticker {issueAssetSchema === 'UDA' && <span className="issue-asset-optional">(optional)</span>}
+                </span>
                 <input
                   type="text"
                   className="token-input"
-                  placeholder="PHO"
+                  placeholder={issueAssetSchema === 'UDA' ? 'Optional' : 'PHO'}
                   value={issueAssetTicker}
                   onChange={(e) => setIssueAssetTicker(e.target.value.toUpperCase())}
                   maxLength={8}
                 />
               </label>
 
-              <label className="issue-asset-field">
-                <span className="issue-asset-label">Precision</span>
-                <input
-                  type="number"
-                  className="token-input"
-                  min={0}
-                  max={18}
-                  value={issueAssetPrecision}
-                  onChange={(e) => setIssueAssetPrecision(e.target.value)}
-                />
-              </label>
+              {issueAssetSchema !== 'UDA' && (
+                <label className="issue-asset-field">
+                  <span className="issue-asset-label">Precision</span>
+                  <input
+                    type="number"
+                    className="token-input"
+                    min={0}
+                    max={18}
+                    value={issueAssetPrecision}
+                    onChange={(e) => setIssueAssetPrecision(e.target.value)}
+                  />
+                </label>
+              )}
 
-              <label className="issue-asset-field">
-                <span className="issue-asset-label">Total supply</span>
-                <input
-                  type="number"
-                  className="token-input"
-                  min={1}
-                  step={1}
-                  placeholder="1000000"
-                  value={issueAssetSupply}
-                  onChange={(e) => setIssueAssetSupply(e.target.value)}
-                />
-              </label>
+              {issueAssetSchema !== 'UDA' && (
+                <label className="issue-asset-field">
+                  <span className="issue-asset-label">Total supply</span>
+                  <input
+                    type="number"
+                    className="token-input"
+                    min={1}
+                    step={1}
+                    placeholder="1000000"
+                    value={issueAssetSupply}
+                    onChange={(e) => setIssueAssetSupply(e.target.value)}
+                  />
+                </label>
+              )}
+              {issueAssetSchema === 'UDA' && (
+                <div className="issue-asset-field">
+                  <span className="issue-asset-label">Supply</span>
+                  <p className="issue-asset-helper" style={{ marginTop: '0.25rem' }}>Fixed at 1 (unique token)</p>
+                </div>
+              )}
             </div>
 
             <label className="issue-asset-field">
@@ -5378,6 +5479,72 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                 rows={3}
               />
             </label>
+
+            {(issueAssetSchema === 'CFA' || issueAssetSchema === 'UDA') && (
+              <div className="issue-asset-media-section">
+                <span className="issue-asset-label">
+                  Media file {issueAssetSchema === 'CFA' && <span className="issue-asset-required">*</span>}
+                  {issueAssetSchema === 'UDA' && <span className="issue-asset-optional"> (optional)</span>}
+                </span>
+                <p className="issue-asset-helper">Upload an image or file that represents this asset (max 5 MB).</p>
+                <label className="issue-asset-media-picker">
+                  <input
+                    type="file"
+                    accept="image/*,video/*,audio/*,application/pdf"
+                    style={{ display: 'none' }}
+                    disabled={issueAssetMediaUploading || issueAssetSubmitting}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file) handleIssueAssetMediaSelect(file)
+                    }}
+                  />
+                  <span className="issue-asset-media-btn">
+                    {issueAssetMediaUploading ? 'Uploading…' : issueAssetMediaFile ? 'Change file' : 'Choose file'}
+                  </span>
+                </label>
+                {issueAssetMediaFile && !issueAssetMediaUploading && (
+                  <p className="issue-asset-media-name">{issueAssetMediaFile.name}</p>
+                )}
+                {issueAssetMediaDigest && (
+                  <p className="issue-asset-media-digest">
+                    Digest: <code>{issueAssetMediaDigest.slice(0, 16)}…</code>
+                  </p>
+                )}
+              </div>
+            )}
+
+            {issueAssetSchema === 'UDA' && (
+              <div className="issue-asset-media-section">
+                <span className="issue-asset-label">Attachments <span className="issue-asset-optional">(optional)</span></span>
+                <p className="issue-asset-helper">Additional files attached to the NFT (max 5 MB each).</p>
+                {issueAssetAttachments.map((att, idx) => (
+                  <div key={idx} className="issue-asset-attachment-row">
+                    <span className="issue-asset-media-name">{att.file.name}</span>
+                    <button
+                      type="button"
+                      className="issue-asset-attachment-remove"
+                      onClick={() => handleIssueAssetAttachmentRemove(idx)}
+                      disabled={issueAssetSubmitting}
+                    >✕</button>
+                  </div>
+                ))}
+                <label className="issue-asset-media-picker">
+                  <input
+                    type="file"
+                    accept="image/*,video/*,audio/*,application/pdf"
+                    style={{ display: 'none' }}
+                    disabled={issueAssetAttachmentUploading || issueAssetSubmitting}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file) { handleIssueAssetAttachmentAdd(file); e.target.value = '' }
+                    }}
+                  />
+                  <span className="issue-asset-media-btn">
+                    {issueAssetAttachmentUploading ? 'Uploading…' : '+ Add attachment'}
+                  </span>
+                </label>
+              </div>
+            )}
 
             <div className="issue-asset-callout issue-asset-callout-secondary">
               <label className="issue-asset-checkbox">

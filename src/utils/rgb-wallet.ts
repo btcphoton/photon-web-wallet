@@ -248,7 +248,8 @@ type RegtestRgbFeature =
     | 'UTXO slot redeem'
     | 'Issue auth token'
     | 'List auth tokens'
-    | 'Revoke auth token';
+    | 'Revoke auth token'
+    | 'upload asset media';
 
 async function getRegtestRgbBackend(_feature: RegtestRgbFeature): Promise<{
     apiBase: string
@@ -705,13 +706,39 @@ export async function fetchRegtestIssueAssetReadiness(params: {
     return data as RgbIssueAssetReadinessResponse
 }
 
+export async function uploadRegtestRgbAssetMedia(params: {
+    file: File
+    walletKey?: string
+}): Promise<{ digest: string }> {
+    const { apiBase } = await getRegtestRgbBackend('upload asset media')
+    const formData = new FormData()
+    formData.append('file', params.file)
+    // Do NOT set Content-Type — the browser sets it with the multipart boundary automatically.
+    const response = await fetchWithAuth(`${apiBase}/rgb/upload-asset-media`, {
+        method: 'POST',
+        body: formData,
+    }, params.walletKey || '', apiBase)
+    if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(errorText || `Asset media upload failed with status ${response.status}`)
+    }
+    const data = await response.json()
+    if (!data.ok || typeof data.digest !== 'string') {
+        throw new Error(data.error || 'Asset media upload did not return a digest')
+    }
+    return { digest: data.digest }
+}
+
 export async function issueRegtestRgbAsset(params: {
     walletKey?: string
+    schema?: 'NIA' | 'CFA' | 'UDA'
     name: string
-    ticker: string
-    precision: number
-    totalSupply: number
+    ticker?: string
+    precision?: number
+    totalSupply?: number
     description?: string
+    fileDigest?: string
+    attachmentDigests?: string[]
     publicRegistry?: boolean
     bootstrapLightning?: boolean
     liquidityPercentage?: number | null
@@ -723,12 +750,14 @@ export async function issueRegtestRgbAsset(params: {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...baseHeaders },
         body: JSON.stringify({
-            schema: 'NIA',
+            schema: params.schema ?? 'NIA',
             name: params.name,
-            ticker: params.ticker,
-            precision: params.precision,
-            totalSupply: params.totalSupply,
+            ticker: params.ticker ?? '',
+            precision: params.precision ?? 0,
+            totalSupply: params.totalSupply ?? 1,
             description: params.description,
+            ...(params.fileDigest ? { fileDigest: params.fileDigest } : {}),
+            ...(params.attachmentDigests?.length ? { attachmentDigests: params.attachmentDigests } : {}),
             publicRegistry: params.publicRegistry ?? true,
             bootstrapLightning: params.bootstrapLightning ?? false,
             liquidityPercentage: params.liquidityPercentage ?? null,

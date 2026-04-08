@@ -5303,3 +5303,112 @@ textarea:focus {
   background: linear-gradient(135deg, #ff9f26, #f07f00);
   transform: translateY(-1px);
 }
+
+/* ── CFA schema toggle ── */
+.issue-asset-schema-toggle {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.issue-asset-schema-btn {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  border-radius: 10px;
+  border: 1.5px solid rgba(247, 147, 26, 0.3);
+  background: transparent;
+  color: #f7931a;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.issue-asset-schema-btn.active {
+  background: rgba(247, 147, 26, 0.12);
+  border-color: #f7931a;
+}
+
+.issue-asset-schema-btn:hover:not(.active) {
+  background: rgba(247, 147, 26, 0.06);
+}
+
+/* ── CFA media picker ── */
+.issue-asset-media-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.25rem;
+}
+
+.issue-asset-required {
+  color: #ef4444;
+  margin-left: 0.1rem;
+}
+
+.issue-asset-media-picker {
+  cursor: pointer;
+  display: inline-block;
+}
+
+.issue-asset-media-btn {
+  display: inline-block;
+  padding: 0.45rem 1rem;
+  border-radius: 8px;
+  border: 1.5px solid rgba(247, 147, 26, 0.4);
+  background: transparent;
+  color: #f7931a;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.issue-asset-media-picker:hover .issue-asset-media-btn {
+  background: rgba(247, 147, 26, 0.08);
+}
+
+.issue-asset-media-name {
+  margin: 0;
+  font-size: 0.78rem;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.issue-asset-media-digest {
+  margin: 0;
+  font-size: 0.75rem;
+  color: #16a34a;
+}
+
+.issue-asset-media-digest code {
+  font-family: monospace;
+}
+
+/* ── UDA attachment row ── */
+.issue-asset-attachment-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.issue-asset-attachment-remove {
+  background: transparent;
+  border: none;
+  color: #ef4444;
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 0 0.25rem;
+  line-height: 1;
+}
+
+.issue-asset-optional {
+  color: #94a3b8;
+  font-size: 0.75rem;
+  margin-left: 0.2rem;
+  font-weight: 400;
+}
