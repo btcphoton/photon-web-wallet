@@ -6567,10 +6567,15 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
             <div className="send-content send-entry-content">
 	              <div className="send-input-group send-surface-card">
 	                <label className="send-label">Receiver</label>
+                  {sendRgbAssetId && !sendRoute && (
+                    <div className="send-rgb-hint">
+                      ⚡ To send <strong>{sendRgbAssetLabel}</strong>, the receiver must generate a <strong>Lightning invoice</strong> (from their Instant Receive tab) and share it with you.
+                    </div>
+                  )}
 	                <input
                   type="text"
                   className="send-input"
-                  placeholder="lnbcrt1..., rgb:..., or Bitcoin address"
+                  placeholder={sendRgbAssetId ? `Paste ${sendRgbAssetLabel} Lightning invoice (lnbcrt1...) or RGB invoice (rgb:...)` : 'lnbcrt1..., rgb:..., or Bitcoin address'}
                   value={sendReceiverAddress}
 	                  onChange={(e) => { void handleInvoicePaste(e.target.value) }}
 	                />
@@ -6588,7 +6593,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
             <div className="flow-footer-bar">
               <button
                 className="send-next-btn"
-                disabled={!sendReceiverAddress}
+                disabled={!sendReceiverAddress || (Boolean(sendRgbAssetId) && sendRoute === 'bitcoin')}
                 onClick={handleSendEntryNext}
               >
                 Next
@@ -7767,7 +7772,15 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
             <button className="asset-detail-btn receive" onClick={() => setView('receive-rgb')}>
               <span>↓</span> Receive
             </button>
-            <button className="asset-detail-btn send" onClick={() => setView('send')}>
+            <button className="asset-detail-btn send" onClick={() => {
+              setSendRgbAssetId(detailAsset.id)
+              setSendRgbAssetLabel(detailAsset.unit || detailAsset.name)
+              setSendReceiverAddress('')
+              setSendRoute(null)
+              setSendRouteHint('')
+              setSendError('')
+              setView('send')
+            }}>
               <span>↗</span> Send
             </button>
           </div>
