@@ -19,6 +19,39 @@ import type { WalletNetwork } from './backend-config';
 
 bitcoin.initEccLib(ecc);
 
+type PrismAuthStage = 'refresh' | 'enroll' | 'challenge' | 'verify';
+
+class PrismAuthStageError extends Error {
+    stage: PrismAuthStage;
+
+    constructor(stage: PrismAuthStage, message: string) {
+        super(message);
+        this.name = 'PrismAuthStageError';
+        this.stage = stage;
+    }
+}
+
+function asStageError(stage: PrismAuthStage, error: unknown): PrismAuthStageError {
+    if (error instanceof PrismAuthStageError) {
+        return error;
+    }
+
+    const message = error instanceof Error ? error.message : String(error);
+    return new PrismAuthStageError(stage, message);
+}
+
+function formatStageLabel(stage: PrismAuthStage): string {
+    if (stage === 'refresh') return 'refresh';
+    if (stage === 'enroll') return 'enroll';
+    if (stage === 'challenge') return 'challenge';
+    return 'verify';
+}
+
+function buildStageMessage(stage: PrismAuthStage, error: unknown): Error {
+    const stageError = asStageError(stage, error);
+    return new Error(`Prism auth ${formatStageLabel(stageError.stage)} step failed: ${stageError.message}`);
+}
+
 // Derivation path: BIP86 Taproot, same coin-type logic as the rest of the wallet
 function prismDerivationPath(network: WalletNetwork): string {
     const coinType = network === 'mainnet' ? 0 : 1;
@@ -240,16 +273,33 @@ export async function getValidAccessToken(
                 prismTokenExpiry: newExpiry,
             });
             return refreshed.access_token;
-        } catch {
+        } catch (error) {
+            console.warn(buildStageMessage('refresh', error).message);
             // Refresh token expired or revoked — fall through to full re-auth
         }
     }
 
     // Step 3: full challenge-response authentication
-    await enrollIfNeeded(keypair.pubkeyHex, keypair.address, apiBase);
-    const nonce = await getChallenge(keypair.pubkeyHex, apiBase);
+    try {
+        await enrollIfNeeded(keypair.pubkeyHex, keypair.address, apiBase);
+    } catch (error) {
+        throw buildStageMessage('enroll', error);
+    }
+
+    let nonce: string;
+    try {
+        nonce = await getChallenge(keypair.pubkeyHex, apiBase);
+    } catch (error) {
+        throw buildStageMessage('challenge', error);
+    }
+
     const signature = signNonce(nonce, keypair.privKeyBytes);
-    const tokens = await verifyWithPrism(keypair.pubkeyHex, nonce, signature, apiBase);
+    let tokens: TokenResponse;
+    try {
+        tokens = await verifyWithPrism(keypair.pubkeyHex, nonce, signature, apiBase);
+    } catch (error) {
+        throw buildStageMessage('verify', error);
+    }
 
     const newExpiry = now + tokens.expires_in * 1000;
     await setStorageData({
