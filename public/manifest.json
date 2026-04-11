@@ -4,8 +4,7 @@
   "version": "1.0.0",
   "description": "One-stop RGB suite: issuance, storage, invoicing & UTXO management. Offload heavy lightning to decentralized blockchain storage.",
   "permissions": [
-    "storage",
-    "activeTab"
+    "storage"
   ],
   "host_permissions": [
     "<all_urls>"
