@@ -898,10 +898,19 @@ function App() {
       if (issueAssetError === 'Failed to load issuance readiness.') {
         setIssueAssetError('')
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading RGB asset issuance readiness:', error)
       setIssueAssetReadiness(null)
-      setIssueAssetError('Failed to load issuance readiness.')
+      const msg = error?.message || String(error)
+      if (msg.toLowerCase().includes('locked')) {
+        setIssueAssetError('Wallet is locked — unlock your wallet before issuing assets.')
+      } else if (msg.toLowerCase().includes('auth') || msg.toLowerCase().includes('token') || msg.toLowerCase().includes('401') || msg.toLowerCase().includes('403')) {
+        setIssueAssetError('Prism authentication failed — go to Network Settings and use "Test Auth" to re-authenticate.')
+      } else if (msg.toLowerCase().includes('fetch') || msg.toLowerCase().includes('network') || msg.toLowerCase().includes('failed to fetch')) {
+        setIssueAssetError('Cannot reach Prism server — check your Network Settings and internet connection.')
+      } else {
+        setIssueAssetError(`Failed to load issuance readiness: ${msg}`)
+      }
     } finally {
       setIssueAssetLoadingReadiness(false)
     }
