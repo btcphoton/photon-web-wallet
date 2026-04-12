@@ -1082,6 +1082,16 @@ function App() {
         color: assetTicker.toUpperCase() === 'PHO' ? '#38bdf8' : '#f8fafc',
       }, result.asset.contract_id)
 
+      // Mine a block and refresh transfers so the issued supply settles
+      // into the wallet's spendable balance before we display it.
+      try {
+        await mineRegtestBlocks(1)
+        await refreshRegtestRgbTransfers({ assetId: result.asset.contract_id, walletKey })
+        await loadAssetsForNetwork(selectedNetwork, mnemonic ?? undefined)
+      } catch (settleError) {
+        console.error('Post-issuance balance settle error:', settleError)
+      }
+
       setIssueAssetSuccess(result)
       setIssueAssetName('')
       setIssueAssetTicker('')
