@@ -971,11 +971,12 @@ function App() {
           tone: 'ready' as const,
           summary: 'The primary RGB Lightning channel is active and usable.',
         }
+      case 'channel_opening':
       case 'waiting_primary_channel':
         return {
-          label: 'Waiting For Channel Open',
+          label: 'Channel Opening',
           tone: 'progress' as const,
-          summary: 'Funding is satisfied and the backend is waiting for the primary channel to open.',
+          summary: 'The RGB Lightning channel is being opened. It will become usable once it has enough confirmations.',
         }
       case 'waiting_btc_channel_funding':
         return {
@@ -983,12 +984,20 @@ function App() {
           tone: 'pending' as const,
           summary: 'The asset is issued and listed, but the Bitcoin side of the primary channel still needs funding.',
         }
+      case 'open_failed':
       case 'bootstrap_failed':
         return {
-          label: 'Bootstrap Needs Attention',
+          label: 'Bootstrap Failed',
           tone: 'error' as const,
-          summary: 'The asset was issued, but the primary channel bootstrap setup failed and needs review.',
+          summary: 'The asset was issued, but the Lightning channel could not be opened. Check the error below and retry from the Channels screen.',
         }
+      case 'config_error':
+        return {
+          label: 'Server Config Error',
+          tone: 'error' as const,
+          summary: 'The server is missing bootstrap peer configuration. Contact the node operator.',
+        }
+      case 'not_applicable':
       case 'issued_registry_only':
       default:
         return {
@@ -5696,13 +5705,11 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                   <div className="issue-readiness-pill">
                     <span>Channel funding</span>
                     <strong>
-                      {issueAssetReadiness.channelFundingTiming === 'during_issuance'
-                        ? issueAssetReadiness.channelFundingReady
-                          ? 'Ready now'
-                          : `${issueAssetReadiness.channelFundingShortfallSats.toLocaleString()} sats short`
-                        : issueAssetReadiness.requestedChannelFundingSats > 0
-                          ? 'Deferred until later'
-                          : 'Not requested'}
+                      {!issueAssetBootstrapLightning
+                        ? 'Not requested'
+                        : issueAssetReadiness.channelFundingReady
+                          ? 'Ready'
+                          : `${issueAssetReadiness.channelFundingShortfallSats.toLocaleString()} sats short`}
                     </strong>
                   </div>
                 </div>
@@ -5714,7 +5721,19 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                 <div className="issue-asset-callout">
                   <p className="issue-asset-callout-title">Fund this address before issuing</p>
                   <p className="issue-asset-helper">
-                    Send at least {issueAssetReadiness.requiredFundingSats.toLocaleString()} sats to this address, then wait for confirmation.
+                    {issueAssetBootstrapLightning ? (
+                      <>
+                        Send at least{' '}
+                        <strong>
+                          {(issueAssetReadiness.minimumFundingSats + issueAssetReadiness.requestedChannelFundingSats).toLocaleString()}
+                        </strong>{' '}
+                        sats to cover RGB UTXO creation ({issueAssetReadiness.minimumFundingSats.toLocaleString()} sat) plus the Lightning channel ({issueAssetReadiness.requestedChannelFundingSats.toLocaleString()} sat).
+                      </>
+                    ) : (
+                      <>
+                        Send at least <strong>{issueAssetReadiness.minimumFundingSats.toLocaleString()}</strong> sats for RGB UTXO creation, then wait for confirmation.
+                      </>
+                    )}
                   </p>
                   <code className="issue-asset-address">{issueAssetReadiness.utxoFundingAddress}</code>
                 </div>
@@ -5821,9 +5840,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               issueAssetSubmitting ||
               selectedNetwork !== 'regtest' ||
               !issueAssetReadiness?.isReady ||
-              (issueAssetBootstrapLightning &&
-                issueAssetChannelFundingTiming === 'during_issuance' &&
-                !issueAssetReadiness?.channelFundingReady) ||
+              (issueAssetBootstrapLightning && !issueAssetReadiness?.channelFundingReady) ||
               !issueAssetName.trim() ||
               !issueAssetTicker.trim() ||
               !issueAssetSupply.trim()
