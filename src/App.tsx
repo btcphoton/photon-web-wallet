@@ -5842,7 +5842,9 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               issueAssetSubmitting ||
               selectedNetwork !== 'regtest' ||
               !issueAssetReadiness?.isReady ||
-              (issueAssetBootstrapLightning && !issueAssetReadiness?.channelFundingReady) ||
+              (issueAssetBootstrapLightning &&
+                issueAssetChannelFundingTiming === 'during_issuance' &&
+                !issueAssetReadiness?.channelFundingReady) ||
               !issueAssetName.trim() ||
               !issueAssetTicker.trim() ||
               !issueAssetSupply.trim()
