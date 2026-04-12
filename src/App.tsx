@@ -5719,23 +5719,23 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                 <p className="issue-asset-helper">Loading issuance funding status from the backend.</p>
               )}
 
-              {issueAssetReadiness?.utxoFundingAddress && (
+              {issueAssetReadiness?.utxoFundingAddress && !issueAssetReadiness.issuanceFundingReady && (
                 <div className="issue-asset-callout">
-                  <p className="issue-asset-callout-title">Fund this address before issuing</p>
+                  <p className="issue-asset-callout-title">Fund this address to enable issuance</p>
                   <p className="issue-asset-helper">
-                    {issueAssetBootstrapLightning ? (
-                      <>
-                        Send at least{' '}
-                        <strong>
-                          {(issueAssetReadiness.minimumFundingSats + issueAssetReadiness.requestedChannelFundingSats).toLocaleString()}
-                        </strong>{' '}
-                        sats to cover RGB UTXO creation ({issueAssetReadiness.minimumFundingSats.toLocaleString()} sat) plus the Lightning channel ({issueAssetReadiness.requestedChannelFundingSats.toLocaleString()} sat).
-                      </>
-                    ) : (
-                      <>
-                        Send at least <strong>{issueAssetReadiness.minimumFundingSats.toLocaleString()}</strong> sats for RGB UTXO creation, then wait for confirmation.
-                      </>
-                    )}
+                    Send at least <strong>{issueAssetReadiness.minimumFundingSats.toLocaleString()}</strong> sats for RGB UTXO creation, then wait for confirmation.
+                  </p>
+                  <code className="issue-asset-address">{issueAssetReadiness.utxoFundingAddress}</code>
+                </div>
+              )}
+
+              {issueAssetReadiness?.utxoFundingAddress && issueAssetBootstrapLightning && !issueAssetReadiness.channelFundingReady && (
+                <div className="issue-asset-callout">
+                  <p className="issue-asset-callout-title">Extra BTC needed for Lightning channel</p>
+                  <p className="issue-asset-helper">
+                    The Lightning channel requires <strong>{issueAssetReadiness.requestedChannelFundingSats.toLocaleString()}</strong> sats of uncolored BTC on the node.
+                    You are <strong>{issueAssetReadiness.channelFundingShortfallSats.toLocaleString()}</strong> sats short.
+                    Send additional BTC to this address — this is separate from the RGB UTXO funding.
                   </p>
                   <code className="issue-asset-address">{issueAssetReadiness.utxoFundingAddress}</code>
                 </div>
