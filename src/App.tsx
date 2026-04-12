@@ -1100,10 +1100,12 @@ function App() {
         color: assetTicker.toUpperCase() === 'PHO' ? '#38bdf8' : '#f8fafc',
       }, result.asset.contract_id)
 
-      // Mine a block and refresh transfers so the issued supply settles
-      // into the wallet's spendable balance before we display it.
+      // Mine blocks to settle the issuance. If a Lightning channel was
+      // bootstrapped, mine 6 blocks so the channel funding tx gets enough
+      // confirmations to move out of Opening state and release the RLN lock.
+      const blocksToMine = result.bootstrapPlan?.enabled && result.bootstrapPlan?.channelId ? 6 : 1
       try {
-        await mineRegtestBlocks(1)
+        await mineRegtestBlocks(blocksToMine)
         await refreshRegtestRgbTransfers({ assetId: result.asset.contract_id, walletKey })
         await loadAssetsForNetwork(selectedNetwork, mnemonic ?? undefined)
       } catch (settleError) {
