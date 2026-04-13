@@ -351,6 +351,7 @@ function App() {
   const [utxoActionTxId, setUtxoActionTxId] = useState<string>('')
   const [utxoActionSuccessLabel, setUtxoActionSuccessLabel] = useState<string>('Transaction complete')
   const [sendProcessing, setSendProcessing] = useState<boolean>(false)
+  const [sendEntryProcessing, setSendEntryProcessing] = useState<boolean>(false)
   const [sendError, setSendError] = useState<string>('')
 
 
@@ -2907,120 +2908,125 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
       return
     }
 
+    setSendEntryProcessing(true)
     setSendError('')
     setSendTxId('')
 
-    if (isLightningInvoice(trimmedInput)) {
-      if (selectedNetwork !== 'regtest') {
-        setSendError('Lightning RGB pay is currently enabled for regtest only')
-        return
-      }
-
-      try {
-        const walletKey = await getRegtestWalletKey()
-        const decoded = await decodeRegtestLightningInvoice({
-          invoice: trimmedInput,
-          walletKey,
-        })
-        const assetId = decoded.decoded.asset_id || ''
-        const amountValue = Number(decoded.decoded.asset_amount || 0)
-        if (!assetId || !Number.isFinite(amountValue) || amountValue <= 0) {
-          throw new Error('Lightning RGB invoice amount is missing or invalid')
-        }
-
-        const assetMeta = await resolveAssetDisplayMeta(assetId, selectedNetwork)
-        const validation = await validateRegtestSendCapacity({
-          assetId,
-          amount: amountValue,
-          assetLabel: assetMeta.unit || assetMeta.label,
-          mode: 'lightning',
-        })
-
-        if (!validation.ok) {
-          setSendError(validation.message)
+    try {
+      if (isLightningInvoice(trimmedInput)) {
+        if (selectedNetwork !== 'regtest') {
+          setSendError('Lightning RGB pay is currently enabled for regtest only')
           return
         }
 
-        setSendMode('lightning')
-        setSendRoute('lightning')
-        setSendRgbAssetId(assetId)
-        setSendRgbAssetLabel(assetMeta.unit || assetMeta.label)
-        setSendAmount(String(amountValue))
-        setSendLightningMsats(Number(decoded.decoded.amt_msat || 0))
-        setSendNetworkFee('0.00 PHO')
-        setMaxSendableAmount(String(validation.capacity.maxSendable))
-        setSendOffchainOutbound(String(validation.capacity.offchainOutbound))
-        setSendOffchainInbound(String(validation.capacity.offchainInbound))
-        setSendTotalSpendingPower(String(validation.capacity.totalSpendingPower))
-        setSendUserBalance(String(validation.capacity.totalSpendingPower))
-        setView('send-amount')
-      } catch (error: any) {
-        console.error('Error decoding Lightning invoice:', error)
-        setSendError(error.message || 'Failed to decode Lightning invoice')
-      }
-      return
-    }
+        try {
+          const walletKey = await getRegtestWalletKey()
+          const decoded = await decodeRegtestLightningInvoice({
+            invoice: trimmedInput,
+            walletKey,
+          })
+          const assetId = decoded.decoded.asset_id || ''
+          const amountValue = Number(decoded.decoded.asset_amount || 0)
+          if (!assetId || !Number.isFinite(amountValue) || amountValue <= 0) {
+            throw new Error('Lightning RGB invoice amount is missing or invalid')
+          }
 
-    if (isBlindSealReference(trimmedInput)) {
-      setSendRoute('rgb-onchain')
-      setSendError('Paste the full RGB invoice, not only the blinded seal.')
-      return
-    }
+          const assetMeta = await resolveAssetDisplayMeta(assetId, selectedNetwork)
+          const validation = await validateRegtestSendCapacity({
+            assetId,
+            amount: amountValue,
+            assetLabel: assetMeta.unit || assetMeta.label,
+            mode: 'lightning',
+          })
 
-    if (trimmedInput.toLowerCase().startsWith('rgb:')) {
-      if (selectedNetwork !== 'regtest') {
-        setSendError('RGB send is currently enabled for regtest only')
+          if (!validation.ok) {
+            setSendError(validation.message)
+            return
+          }
+
+          setSendMode('lightning')
+          setSendRoute('lightning')
+          setSendRgbAssetId(assetId)
+          setSendRgbAssetLabel(assetMeta.unit || assetMeta.label)
+          setSendAmount(String(amountValue))
+          setSendLightningMsats(Number(decoded.decoded.amt_msat || 0))
+          setSendNetworkFee('0.00 PHO')
+          setMaxSendableAmount(String(validation.capacity.maxSendable))
+          setSendOffchainOutbound(String(validation.capacity.offchainOutbound))
+          setSendOffchainInbound(String(validation.capacity.offchainInbound))
+          setSendTotalSpendingPower(String(validation.capacity.totalSpendingPower))
+          setSendUserBalance(String(validation.capacity.totalSpendingPower))
+          setView('send-amount')
+        } catch (error: any) {
+          console.error('Error decoding Lightning invoice:', error)
+          setSendError(error.message || 'Failed to decode Lightning invoice')
+        }
         return
       }
 
-      try {
-        const decoded = await decodeRegtestRgbInvoice({ invoice: trimmedInput })
-        const amountValue = Number(decoded.decoded.assignment?.value || 0)
-        if (!Number.isFinite(amountValue) || amountValue <= 0) {
-          throw new Error('RGB invoice amount is missing or invalid')
-        }
-
-        const assetMeta = await resolveAssetDisplayMeta(decoded.decoded.asset_id, selectedNetwork)
-        const validation = await validateRegtestSendCapacity({
-          assetId: decoded.decoded.asset_id,
-          amount: amountValue,
-          assetLabel: assetMeta.unit || assetMeta.label,
-          mode: 'rgb',
-        })
-
-        if (!validation.ok) {
-          setSendError(validation.message)
-          return
-        }
-
-        setSendMode('rgb')
+      if (isBlindSealReference(trimmedInput)) {
         setSendRoute('rgb-onchain')
-        setSendRgbAssetId(decoded.decoded.asset_id)
-        setSendRgbAssetLabel(assetMeta.unit || assetMeta.label)
-        setSendAmount(String(amountValue))
-        setSendOffchainOutbound(String(validation.capacity.offchainOutbound))
-        setSendOffchainInbound(String(validation.capacity.offchainInbound))
-        setSendTotalSpendingPower(String(validation.capacity.totalSpendingPower))
-        setSendUserBalance(String(validation.capacity.totalSpendingPower))
-        setMaxSendableAmount(String(validation.capacity.maxSendable))
-        setSendNetworkFee('TBD')
-        setView('send-amount')
-      } catch (error: any) {
-        console.error('Error decoding RGB invoice:', error)
-        setSendError(error.message || 'Failed to decode RGB invoice')
+        setSendError('Paste the full RGB invoice, not only the blinded seal.')
+        return
       }
-      return
-    }
 
-    setSendMode('btc')
-    setSendRoute('bitcoin')
-    setSendRgbAssetId('')
-    setSendRgbAssetLabel('RGB Asset')
-    setSendAmount('')
-    setSendUseMax(false)
-    setSendLightningMsats(0)
-    setSendNetworkFee('0')
-    setView('send-amount')
+      if (trimmedInput.toLowerCase().startsWith('rgb:')) {
+        if (selectedNetwork !== 'regtest') {
+          setSendError('RGB send is currently enabled for regtest only')
+          return
+        }
+
+        try {
+          const decoded = await decodeRegtestRgbInvoice({ invoice: trimmedInput })
+          const amountValue = Number(decoded.decoded.assignment?.value || 0)
+          if (!Number.isFinite(amountValue) || amountValue <= 0) {
+            throw new Error('RGB invoice amount is missing or invalid. Use a fixed-amount invoice (not open amount).')
+          }
+
+          const assetMeta = await resolveAssetDisplayMeta(decoded.decoded.asset_id, selectedNetwork)
+          const validation = await validateRegtestSendCapacity({
+            assetId: decoded.decoded.asset_id,
+            amount: amountValue,
+            assetLabel: assetMeta.unit || assetMeta.label,
+            mode: 'rgb',
+          })
+
+          if (!validation.ok) {
+            setSendError(validation.message)
+            return
+          }
+
+          setSendMode('rgb')
+          setSendRoute('rgb-onchain')
+          setSendRgbAssetId(decoded.decoded.asset_id)
+          setSendRgbAssetLabel(assetMeta.unit || assetMeta.label)
+          setSendAmount(String(amountValue))
+          setSendOffchainOutbound(String(validation.capacity.offchainOutbound))
+          setSendOffchainInbound(String(validation.capacity.offchainInbound))
+          setSendTotalSpendingPower(String(validation.capacity.totalSpendingPower))
+          setSendUserBalance(String(validation.capacity.totalSpendingPower))
+          setMaxSendableAmount(String(validation.capacity.maxSendable))
+          setSendNetworkFee('TBD')
+          setView('send-amount')
+        } catch (error: any) {
+          console.error('Error decoding RGB invoice:', error)
+          setSendError(error.message || 'Failed to decode RGB invoice')
+        }
+        return
+      }
+
+      setSendMode('btc')
+      setSendRoute('bitcoin')
+      setSendRgbAssetId('')
+      setSendRgbAssetLabel('RGB Asset')
+      setSendAmount('')
+      setSendUseMax(false)
+      setSendLightningMsats(0)
+      setSendNetworkFee('0')
+      setView('send-amount')
+    } finally {
+      setSendEntryProcessing(false)
+    }
   }
 
   const handleSendNext = async () => {
@@ -6609,7 +6615,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
 	                <label className="send-label">Receiver</label>
                   {sendRgbAssetId && !sendRoute && (
                     <div className="send-rgb-hint">
-                      ⚡ To send <strong>{sendRgbAssetLabel}</strong>, the receiver must generate a <strong>Lightning invoice</strong> (from their Instant Receive tab) and share it with you.
+                      To send <strong>{sendRgbAssetLabel}</strong>, paste an <strong>RGB invoice</strong> (<code>rgb:...</code>) from the receiver's Receive tab, or a <strong>Lightning invoice</strong> (<code>lnbcrt1...</code>) from their Instant Receive tab.
                     </div>
                   )}
 	                <input
@@ -6633,10 +6639,10 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
             <div className="flow-footer-bar">
               <button
                 className="send-next-btn"
-                disabled={!sendReceiverAddress || (Boolean(sendRgbAssetId) && sendRoute === 'bitcoin')}
+                disabled={sendEntryProcessing || !sendReceiverAddress || (Boolean(sendRgbAssetId) && sendRoute === 'bitcoin')}
                 onClick={handleSendEntryNext}
               >
-                Next
+                {sendEntryProcessing ? 'Checking...' : 'Next'}
               </button>
             </div>
           </div>
@@ -6864,7 +6870,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                 onClick={handleSendBitcoin}
                 disabled={sendProcessing || sendAmountExceedsLimit}
               >
-                {sendProcessing ? 'Sending...' : sendMode === 'rgb' ? 'Send PHO' : sendMode === 'lightning' ? 'Pay Instantly' : 'Sign & Pay'}
+                {sendProcessing ? 'Sending...' : sendMode === 'rgb' ? `Send ${sendRgbAssetLabel}` : sendMode === 'lightning' ? 'Pay Instantly' : 'Sign & Pay'}
               </button>
             </div>
           </div>
