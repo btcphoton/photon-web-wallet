@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wallet Revamp — Python Backend Integration Plan</title>
+<style>
+  :root {
+    --bg: #0d1117; --surface: #161b22; --border: #21262d;
+    --text: #c9d1d9; --muted: #8b949e; --accent: #58a6ff;
+    --green: #3fb950; --yellow: #d29922; --red: #f85149;
+    --purple: #bc8cff; --orange: #ffa657;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; line-height: 1.6; padding: 40px 24px 80px; }
+  .wrap { max-width: 960px; margin: 0 auto; }
+  h1 { font-size: 2rem; color: #fff; margin-bottom: 6px; }
+  h2 { font-size: 1.35rem; color: var(--accent); margin: 40px 0 14px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  h3 { font-size: 1.05rem; color: var(--orange); margin: 24px 0 10px; }
+  h4 { font-size: .92rem; color: var(--purple); margin: 16px 0 8px; }
+  p { margin-bottom: 12px; color: var(--text); }
+  .subtitle { color: var(--muted); font-size: .95rem; margin-bottom: 32px; }
+  code { background: #1c2128; border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: .85rem; color: #e3b341; }
+  pre { background: #1c2128; border: 1px solid var(--border); border-radius: 8px; padding: 16px; overflow-x: auto; font-family: 'Cascadia Code', monospace; font-size: .82rem; margin: 12px 0; line-height: 1.5; color: #c9d1d9; }
+  pre .c  { color: var(--muted); }
+  pre .k  { color: var(--accent); }
+  pre .s  { color: var(--green); }
+  pre .n  { color: var(--orange); }
+  ul, ol { padding-left: 24px; margin-bottom: 14px; }
+  li { margin-bottom: 6px; }
+  table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: .88rem; }
+  th { background: var(--surface); color: var(--accent); font-weight: 600; padding: 10px 14px; text-align: left; border: 1px solid var(--border); }
+  td { padding: 9px 14px; border: 1px solid var(--border); vertical-align: top; }
+  tr:nth-child(even) td { background: rgba(255,255,255,.02); }
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: .76rem; font-weight: 600; margin: 0 3px; }
+  .badge.remove  { background: rgba(248,81,73,.15);  color: var(--red);    border: 1px solid rgba(248,81,73,.4);  }
+  .badge.keep    { background: rgba(63,185,80,.12);  color: var(--green);  border: 1px solid rgba(63,185,80,.4);  }
+  .badge.new     { background: rgba(88,166,255,.12); color: var(--accent); border: 1px solid rgba(88,166,255,.4); }
+  .badge.modify  { background: rgba(210,153,34,.12); color: var(--yellow); border: 1px solid rgba(210,153,34,.4); }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px 24px; margin: 16px 0; }
+  .api-row { display: grid; grid-template-columns: 140px 1fr 1fr; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: .87rem; }
+  .api-row:last-child { border-bottom: none; }
+  .method { font-family: monospace; font-weight: 700; font-size: .78rem; padding: 2px 8px; border-radius: 4px; }
+  .method.get  { background: rgba(63,185,80,.2);  color: var(--green); }
+  .method.post { background: rgba(88,166,255,.2); color: var(--accent); }
+  .warn-box { background: rgba(210,153,34,.08); border: 1px solid rgba(210,153,34,.3); border-radius: 8px; padding: 14px 18px; margin: 14px 0; color: #d29922; }
+  .info-box { background: rgba(88,166,255,.07); border: 1px solid rgba(88,166,255,.3); border-radius: 8px; padding: 14px 18px; margin: 14px 0; color: #58a6ff; }
+  .ok-box   { background: rgba(63,185,80,.07);  border: 1px solid rgba(63,185,80,.3);  border-radius: 8px; padding: 14px 18px; margin: 14px 0; color: #3fb950; }
+  .section-num { display: inline-block; background: var(--accent); color: #000; border-radius: 50%; width: 24px; height: 24px; text-align: center; line-height: 24px; font-size: .78rem; font-weight: 700; margin-right: 8px; }
+  hr { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>⚡ PhotonBolt Web Wallet — Python Backend Revamp</h1>
+<p class="subtitle">
+  Integration plan for <code>photon-web-wallet</code> → Python RGB backend at
+  <code>https://airdrop.photonbolt.xyz</code> · Branch: <strong>Python-Backend-Airdrop-RGB</strong>
+</p>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<h2><span class="section-num">1</span> Overview &amp; Goals</h2>
+
+<p>
+  The existing wallet is a React/TypeScript Chrome extension that connects to a Node.js faucet
+  backend (<code>faucet.photonbolt.xyz</code>) and ICP canisters. This revamp replaces all RGB
+  and wallet-registration API calls with the new Python FastAPI backend
+  (<code>airdrop.photonbolt.xyz</code>), which uses <code>rgb-lib</code> under the hood and provides
+  a clean, authenticated REST API for every wallet operation.
+</p>
+
+<div class="card">
+  <strong>Backend Base URL:</strong> <code>https://airdrop.photonbolt.xyz</code> (proxied via nginx to <code>127.0.0.1:3531</code>)<br><br>
+  <strong>Auth model:</strong> Every protected route requires four signed headers:<br>
+  <code>X-Photon-Fingerprint</code> · <code>X-Photon-Nonce</code> · <code>X-Photon-Timestamp</code> · <code>X-Photon-Signature</code><br><br>
+  The signature is a secp256k1 ECDSA sig of <code>sha256(METHOD\nPATH\nTIMESTAMP\nNONCE\nsha256(BODY))</code>.
+  The extension already has <code>tiny-secp256k1</code> for exactly this.
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<h2><span class="section-num">2</span> What Changes, What Stays, What Goes</h2>
+
+<table>
+  <thead><tr><th>Feature / View</th><th>Old Source</th><th>Action</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td>Wallet setup (create/restore mnemonic)</td><td>BIP39 in-browser</td><td><span class="badge keep">KEEP</span></td><td>Mnemonic stays client-side; only keys derived by backend</td></tr>
+    <tr><td>Dashboard — Assets tab</td><td>faucet/Prism API</td><td><span class="badge modify">MODIFY</span></td><td>Replace with <code>GET /assets/list</code> + <code>GET /assets/registry</code></td></tr>
+    <tr><td>Dashboard — Activities tab (Bitcoin)</td><td>Esplora mempool.space</td><td><span class="badge keep">KEEP</span></td><td>Bitcoin on-chain history stays via Esplora; no change</td></tr>
+    <tr><td>Receive Bitcoin</td><td>BIP86 derivation in-browser</td><td><span class="badge keep">KEEP</span></td><td>Derive vanilla address locally; no backend needed</td></tr>
+    <tr><td>Receive RGB (invoice generation)</td><td>rgb-invoice.ts → blinded seal</td><td><span class="badge modify">MODIFY</span></td><td>Replace with <code>POST /receive</code> (witness invoice via rgb-lib)</td></tr>
+    <tr><td>Receive Lightning / Convert BTC→Lightning</td><td>ICP canister</td><td><span class="badge remove">REMOVE</span></td><td>Not supported in Python backend; removed from Receive menu</td></tr>
+    <tr><td>Send RGB Asset</td><td>faucet <code>sendRegtestRgbInvoice</code></td><td><span class="badge modify">MODIFY</span></td><td>Replace: <code>POST /transfer</code> → sign PSBT → <code>POST /broadcast</code></td></tr>
+    <tr><td>Send Bitcoin</td><td>bitcoinjs-lib + Esplora broadcast</td><td><span class="badge keep">KEEP</span></td><td>Existing BTC send logic stays; no backend change needed</td></tr>
+    <tr><td>Swap BTC ↔ RGB</td><td>custom swap view</td><td><span class="badge remove">REMOVE</span></td><td>Not implemented in backend; remove swap view entirely</td></tr>
+    <tr><td>Add Assets (registry)</td><td>faucet registry API</td><td><span class="badge modify">MODIFY</span></td><td>Replace with <code>GET /assets/registry</code> — click to import</td></tr>
+    <tr><td>Issue Asset</td><td>faucet issue API</td><td><span class="badge modify">MODIFY</span></td><td>Replace with <code>POST /issue</code> (signed)</td></tr>
+    <tr><td>UTXO Management (create colorable)</td><td>faucet slot system</td><td><span class="badge modify">MODIFY</span></td><td><code>POST /utxos/begin</code> → sign PSBT → <code>POST /utxos/end</code></td></tr>
+    <tr><td>Wallet registration</td><td>faucet register</td><td><span class="badge modify">MODIFY</span></td><td>Replace with <code>POST /register</code> (signed)</td></tr>
+    <tr><td>Auth / signed requests</td><td>prism-auth.ts (OAuth2-style)</td><td><span class="badge modify">MODIFY</span></td><td>Implement <code>buildPhotonHeaders()</code> using secp256k1 — see §4</td></tr>
+    <tr><td>Faucet page link</td><td>faucet.photonbolt.xyz</td><td><span class="badge keep">KEEP</span></td><td>Keep faucet for regtest BTC funding</td></tr>
+    <tr><td>Settings / network selection</td><td>in-app</td><td><span class="badge keep">KEEP</span></td><td>No change</td></tr>
+    <tr><td>Error logging</td><td>in-app</td><td><span class="badge keep">KEEP</span></td><td>No change</td></tr>
+  </tbody>
+</table>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<h2><span class="section-num">3</span> Full API Reference — Python Backend</h2>
+
+<div class="info-box">
+  🔐 Routes marked <strong>AUTH</strong> require the four <code>X-Photon-*</code> signed headers.
+  Routes marked <strong>PUBLIC</strong> need no auth.
+  Dev-only routes (<code>/_dev/*</code>) are <em>not</em> used in production — they are replaced
+  by client-side implementations described in §4.
+</div>
+
+<h3>Authentication &amp; Key Derivation (Dev Routes — replace in production)</h3>
+<table>
+  <thead><tr><th>Method</th><th>Path</th><th>Purpose</th><th>Prod equivalent</th></tr></thead>
+  <tbody>
+    <tr><td><span class="method post">POST</span></td><td><code>/_dev/generate_mnemonic</code></td><td>Generate new BIP39 mnemonic</td><td><code>bip39.generateMnemonic()</code> in-browser</td></tr>
+    <tr><td><span class="method post">POST</span></td><td><code>/_dev/derive_keys</code></td><td>Derive xpubs, fingerprint, auth pubkey from mnemonic</td><td><code>derivePhotonKeys(mnemonic)</code> — see §4.1</td></tr>
+    <tr><td><span class="method post">POST</span></td><td><code>/_dev/sign_request</code></td><td>Build <code>X-Photon-*</code> headers server-side</td><td><code>buildPhotonHeaders()</code> — see §4.2</td></tr>
+    <tr><td><span class="method post">POST</span></td><td><code>/_dev/sign_psbt</code></td><td>Sign unsigned PSBT server-side</td><td><code>signPhotonPsbt()</code> — see §4.3</td></tr>
+  </tbody>
+</table>
+
+<h3>Wallet Lifecycle</h3>
+<table>
+  <thead><tr><th>Method</th><th>Path</th><th>Auth</th><th>Body / Params</th><th>Response</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><span class="method post">POST</span></td>
+      <td><code>/register</code></td>
+      <td>AUTH</td>
+      <td><code>{ fingerprint, xpub_vanilla, xpub_colored, vanilla_keychain, auth_pubkey_hex }</code></td>
+      <td><code>{ fingerprint, funding_address, message }</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Assets</h3>
+<table>
+  <thead><tr><th>Method</th><th>Path</th><th>Auth</th><th>Body / Params</th><th>Response</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><span class="method get">GET</span></td>
+      <td><code>/assets/list</code></td>
+      <td>AUTH</td>
+      <td>—</td>
+      <td><code>{ assets: [{ asset_id, ticker, name, precision, settled, future, spendable }] }</code></td>
+    </tr>
+    <tr>
+      <td><span class="method get">GET</span></td>
+      <td><code>/assets/registry</code></td>
+      <td>PUBLIC</td>
+      <td><code>?force=false</code></td>
+      <td><code>{ assets: [{ asset_id, ticker, name, precision, total_supply }], count }</code></td>
+    </tr>
+    <tr>
+      <td><span class="method get">GET</span></td>
+      <td><code>/balance</code></td>
+      <td>AUTH</td>
+      <td><code>?asset_id=rgb:...</code></td>
+      <td><code>{ asset_id, settled, future, spendable }</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Receive RGB</h3>
+<table>
+  <thead><tr><th>Method</th><th>Path</th><th>Auth</th><th>Body</th><th>Response</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><span class="method post">POST</span></td>
+      <td><code>/receive</code></td>
+      <td>AUTH</td>
+      <td><code>{ asset_id?, amount?, expiration_seconds?, min_confirmations? }</code></td>
+      <td><code>{ invoice, recipient_id, expiration_timestamp, mode }</code></td>
+    </tr>
+  </tbody>
+</table>
+<p>
+  Leave <code>asset_id</code> blank for an open invoice (accepts any RGB asset).
+  The backend always generates a <strong>witness</strong> invoice via <code>rgb-lib.witness_receive()</code>.
+</p>
+
+<h3>Send RGB</h3>
+<table>
+  <thead><tr><th>Step</th><th>Method + Path</th><th>Auth</th><th>Body</th><th>Response</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>1 — Build PSBT</td>
+      <td><span class="method post">POST</span> <code>/transfer</code></td>
+      <td>AUTH</td>
+      <td><code>{ asset_id, invoice, amount, fee_rate, min_confirmations }</code></td>
+      <td><code>{ psbt, batch_transfer_idx, recipient_id, amount }</code></td>
+    </tr>
+    <tr>
+      <td>2 — Sign PSBT</td>
+      <td><em>Client-side</em></td>
+      <td>—</td>
+      <td><code>signPhotonPsbt(psbt, mnemonic)</code></td>
+      <td><code>signed_psbt</code> (base64 PSBT)</td>
+    </tr>
+    <tr>
+      <td>3 — Broadcast</td>
+      <td><span class="method post">POST</span> <code>/broadcast</code></td>
+      <td>AUTH</td>
+      <td><code>{ signed_psbt }</code></td>
+      <td><code>{ txid, batch_transfer_idx }</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Issue RGB Token</h3>
+<table>
+  <thead><tr><th>Method</th><th>Path</th><th>Auth</th><th>Body</th><th>Response</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><span class="method post">POST</span></td>
+      <td><code>/issue</code></td>
+      <td>AUTH</td>
+      <td><code>{ ticker, name, precision, amounts: [number] }</code></td>
+      <td><code>{ asset_id, ticker, name, precision, total_supply }</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>UTXOs (Colorable)</h3>
+<table>
+  <thead><tr><th>Step</th><th>Method + Path</th><th>Auth</th><th>Body</th><th>Response</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>1 — Begin</td>
+      <td><span class="method post">POST</span> <code>/utxos/begin</code></td>
+      <td>AUTH</td>
+      <td><code>{ up_to, num, size?, fee_rate, skip_sync }</code></td>
+      <td><code>{ psbt, num_utxos_to_create }</code> or <code>409 already_available</code></td>
+    </tr>
+    <tr>
+      <td>2 — Sign PSBT</td>
+      <td><em>Client-side</em></td>
+      <td>—</td>
+      <td><code>signPhotonPsbt(psbt, mnemonic)</code></td>
+      <td><code>signed_psbt</code></td>
+    </tr>
+    <tr>
+      <td>3 — End</td>
+      <td><span class="method post">POST</span> <code>/utxos/end</code></td>
+      <td>AUTH</td>
+      <td><code>{ signed_psbt, skip_sync }</code></td>
+      <td><code>{ created: number }</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Transfer History</h3>
+<table>
+  <thead><tr><th>Method</th><th>Path</th><th>Auth</th><th>Response</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><span class="method get">GET</span></td>
+      <td><code>/pending</code></td>
+      <td>AUTH</td>
+      <td><code>{ refreshed, transfers: [{ idx, kind, status, txid, recipient_id, asset_id, amount, created_at, updated_at }] }</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Airdrop (Public — no auth)</h3>
+<table>
+  <thead><tr><th>Method</th><th>Path</th><th>Response</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><span class="method get">GET</span></td>
+      <td><code>/airdrop/status</code></td>
+      <td><code>{ enabled, asset_id, amount, max_supply, total_claimed, issuer_spendable, claims_remaining }</code></td>
+    </tr>
+    <tr>
+      <td><span class="method post">POST</span></td>
+      <td><code>/airdrop/claim</code></td>
+      <td><code>{ ok, txid, amount, asset_id }</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<h2><span class="section-num">4</span> Client-Side Cryptography (replacing /_dev/* routes)</h2>
+
+<div class="info-box">
+  The extension must <strong>never</strong> send the mnemonic or private key to the server.
+  The <code>/_dev/*</code> routes exist only for the test wallet.html and are NOT used in the
+  production extension. All signing happens in the browser.
+</div>
+
+<h3>4.1 — Key Derivation: <code>derivePhotonKeys(mnemonic)</code></h3>
+<p>
+  The backend uses <code>rgb-lib</code>'s BIP32 HD wallet. To replicate the key derivation
+  client-side, use the existing <code>bitcoin-address.ts</code> infrastructure plus
+  <code>bip32</code> + <code>tiny-secp256k1</code>.
+</p>
+<pre>
+<span class="c">// src/utils/photon-keys.ts</span>
+<span class="k">import</span> * as bip39 from <span class="s">'bip39'</span>
+<span class="k">import</span> { BIP32Factory } from <span class="s">'bip32'</span>
+<span class="k">import</span> * as ecc from <span class="s">'tiny-secp256k1'</span>
+<span class="k">import</span> { createHash } from <span class="s">'crypto'</span>          <span class="c">// or use js sha256 lib</span>
+
+<span class="k">const</span> bip32 = BIP32Factory(ecc)
+
+<span class="k">export async function</span> <span class="n">derivePhotonKeys</span>(mnemonic: string) {
+  <span class="k">const</span> seed = await bip39.mnemonicToSeed(mnemonic)
+  <span class="k">const</span> root = bip32.fromSeed(seed)
+
+  <span class="c">// Vanilla (BIP86 taproot) — m/86'/1'/0'  (coin_type=1 for regtest/testnet)</span>
+  <span class="k">const</span> vanillaNode  = root.derivePath(<span class="s">"m/86'/1'/0'"</span>)
+  <span class="c">// Colored (rgb-lib internal) — m/86'/1'/1'</span>
+  <span class="k">const</span> coloredNode  = root.derivePath(<span class="s">"m/86'/1'/1'"</span>)
+  <span class="c">// Auth key — m/86'/1'/0'/0/0  (same as signing key)</span>
+  <span class="k">const</span> authNode     = root.derivePath(<span class="s">"m/86'/1'/0'/0/0"</span>)
+
+  <span class="k">return</span> {
+    fingerprint:     root.fingerprint.toString(<span class="s">'hex'</span>).slice(0, 8),
+    xpub_vanilla:    vanillaNode.neutered().toBase58(),
+    xpub_colored:    coloredNode.neutered().toBase58(),
+    auth_pubkey_hex: Buffer.from(authNode.publicKey).toString(<span class="s">'hex'</span>),
+    <span class="c">// keep private key in memory only — needed for signing</span>
+    _authPrivkey:    authNode.privateKey!,
+  }
+}
+</pre>
+
+<div class="warn-box">
+  ⚠️ <strong>Coin type:</strong> <code>rgb-lib</code> uses coin_type <code>1</code> for both regtest and testnet,
+  and <code>0</code> for mainnet. Verify by calling <code>/_dev/derive_keys</code> with a known mnemonic
+  and comparing fingerprints before shipping.
+</div>
+
+<h3>4.2 — Building Signed Headers: <code>buildPhotonHeaders()</code></h3>
+<pre>
+<span class="c">// src/utils/photon-auth.ts</span>
+<span class="k">import</span> * as ecc from <span class="s">'tiny-secp256k1'</span>
+
+<span class="k">function</span> sha256(data: Uint8Array): Uint8Array {
+  <span class="c">// use WebCrypto SubtleCrypto.digest or a pure-JS sha256 lib</span>
+  <span class="k">return</span> new Uint8Array(await crypto.subtle.digest(<span class="s">'SHA-256'</span>, data))
+}
+
+<span class="k">export async function</span> <span class="n">buildPhotonHeaders</span>(
+  method: string,
+  path: string,
+  body: string,           <span class="c">// JSON-serialised body, or '' for GET</span>
+  fingerprint: string,
+  authPrivkey: Uint8Array,
+): Promise&lt;Record&lt;string, string&gt;&gt; {
+  <span class="k">const</span> nonce     = crypto.getRandomValues(new Uint8Array(16))
+                         .reduce((s, b) =&gt; s + b.toString(16).padStart(2,<span class="s">'0'</span>), <span class="s">''</span>)
+  <span class="k">const</span> timestamp = Math.floor(Date.now() / 1000).toString()
+  <span class="k">const</span> bodyHash  = <span class="k">await</span> sha256Hex(body || <span class="s">''</span>)
+
+  <span class="c">// Canonical message: METHOD\nPATH\nTIMESTAMP\nNONCE\nBODY_HASH</span>
+  <span class="k">const</span> canonical = [method.toUpperCase(), path, timestamp, nonce, bodyHash].join(<span class="s">'\n'</span>)
+  <span class="k">const</span> msgHash   = <span class="k">await</span> sha256Bytes(canonical)
+
+  <span class="k">const</span> sig = ecc.sign(msgHash, authPrivkey)    <span class="c">// 64-byte compact sig</span>
+  <span class="k">const</span> sigHex = Buffer.from(sig).toString(<span class="s">'hex'</span>)
+
+  <span class="k">return</span> {
+    <span class="s">'X-Photon-Fingerprint'</span>: fingerprint,
+    <span class="s">'X-Photon-Nonce'</span>:       nonce,
+    <span class="s">'X-Photon-Timestamp'</span>:   timestamp,
+    <span class="s">'X-Photon-Signature'</span>:   sigHex,
+    <span class="s">'Content-Type'</span>:         <span class="s">'application/json'</span>,
+  }
+}
+
+<span class="c">// Convenience wrapper — mirrors signedFetch from wallet.html</span>
+<span class="k">export async function</span> <span class="n">photonFetch</span>(
+  baseUrl: string,
+  method: string,
+  path: string,
+  body: object | null,
+  keys: { fingerprint: string; _authPrivkey: Uint8Array },
+) {
+  <span class="k">const</span> bodyStr = body ? JSON.stringify(body) : <span class="s">''</span>
+  <span class="k">const</span> headers = <span class="k">await</span> buildPhotonHeaders(method, path, bodyStr, keys.fingerprint, keys._authPrivkey)
+  <span class="k">return</span> fetch(baseUrl + path, {
+    method,
+    headers,
+    body: bodyStr || undefined,
+  })
+}
+</pre>
+
+<h3>4.3 — PSBT Signing: <code>signPhotonPsbt()</code></h3>
+<p>
+  The backend's <code>/transfer</code> and <code>/utxos/begin</code> return an unsigned PSBT (base64).
+  The extension must sign it with the wallet's private keys before calling <code>/broadcast</code>
+  or <code>/utxos/end</code>.
+</p>
+<pre>
+<span class="c">// src/utils/photon-psbt.ts</span>
+<span class="k">import</span> * as bitcoin from <span class="s">'bitcoinjs-lib'</span>
+<span class="k">import</span> { BIP32Factory } from <span class="s">'bip32'</span>
+<span class="k">import</span> * as ecc from <span class="s">'tiny-secp256k1'</span>
+
+bitcoin.initEccLib(ecc)
+<span class="k">const</span> bip32 = BIP32Factory(ecc)
+
+<span class="k">export async function</span> <span class="n">signPhotonPsbt</span>(
+  unsignedPsbtBase64: string,
+  mnemonic: string,
+  network: bitcoin.Network = bitcoin.networks.regtest,
+): Promise&lt;string&gt; {
+  <span class="k">const</span> seed  = await bip39.mnemonicToSeed(mnemonic)
+  <span class="k">const</span> root  = bip32.fromSeed(seed, network)
+  <span class="k">const</span> psbt  = bitcoin.Psbt.fromBase64(unsignedPsbtBase64)
+
+  <span class="c">// Sign each input with both the vanilla and colored key paths</span>
+  <span class="c">// rgb-lib embeds bip32 derivation paths in PSBT inputs — use them</span>
+  psbt.data.inputs.forEach((input, i) =&gt; {
+    (input.bip32Derivation || []).forEach(d =&gt; {
+      <span class="k">const</span> path    = d.path
+      <span class="k">const</span> keyNode = root.derivePath(path)
+      <span class="k">try</span> { psbt.signInput(i, keyNode) } <span class="k">catch</span> (_) { <span class="c">/* skip wrong key */</span> }
+    })
+  })
+
+  psbt.finalizeAllInputs()
+  <span class="k">return</span> psbt.toBase64()
+}
+</pre>
+
+<div class="warn-box">
+  ⚠️ The exact BIP32 paths used by <code>rgb-lib</code> for colored UTXOs differ from vanilla paths.
+  Validate against the <code>/_dev/sign_psbt</code> route on regtest before removing the dev dependency.
+  The dev route can remain as a server-side fallback for regtest only.
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<h2><span class="section-num">5</span> View-Level Changes</h2>
+
+<h3>5.1 — Remove These Views</h3>
+<ul>
+  <li><code>swap</code> — Remove entire Swap BTC view and its navigation entry</li>
+  <li><code>receive-lightning</code> — Remove Lightning receive option from Receive menu</li>
+  <li><code>convert-lightning</code> — Remove Convert BTC→Lightning option from Receive menu</li>
+</ul>
+
+<h3>5.2 — Receive Menu (was 3 options → now 2)</h3>
+<div class="card">
+  <strong>Before:</strong> Receive BTC · Receive RGB Instantly · Convert Bitcoin to Lightning<br><br>
+  <strong>After:</strong><br>
+  <ul>
+    <li>📥 <strong>Receive Bitcoin</strong> — show BIP86 vanilla address + QR (unchanged)</li>
+    <li>🌈 <strong>Receive RGB Instantly</strong> — generate witness invoice via <code>POST /receive</code></li>
+  </ul>
+</div>
+
+<h4>New Receive RGB Flow</h4>
+<ol>
+  <li>User opens Receive → taps "Receive RGB Instantly"</li>
+  <li>Screen shows: optional Asset ID selector (dropdown from <code>knownAssets</code>), optional Amount, Expiry (default 24h)</li>
+  <li>Tap "Generate Invoice" → <code>POST /receive</code> with auth headers</li>
+  <li>Display: RGB invoice string (large, copyable) + QR code + recipient_id</li>
+  <li>Invoice starts polling <code>GET /assets/list</code> every 15s — update balance badge when confirmed</li>
+</ol>
+
+<h3>5.3 — Send RGB Flow (3-step)</h3>
+<ol>
+  <li><strong>Step 1 — Paste Invoice:</strong> User pastes RGB invoice from recipient; auto-parse asset_id + amount from invoice if embedded</li>
+  <li><strong>Step 2 — Confirm:</strong> Show asset, amount, recipient_id, fee estimate (from invoice)</li>
+  <li><strong>Step 3 — Sign &amp; Send:</strong>
+    <ul>
+      <li>Call <code>POST /transfer</code> → get unsigned PSBT</li>
+      <li>Sign PSBT with <code>signPhotonPsbt()</code></li>
+      <li>Call <code>POST /broadcast</code> → get txid</li>
+      <li>Show success screen with txid</li>
+    </ul>
+  </li>
+</ol>
+
+<h3>5.4 — Add Assets (Registry) Flow</h3>
+<ol>
+  <li>User opens "Add Assets" view</li>
+  <li>Fetch <code>GET /assets/registry</code> (public, no auth needed)</li>
+  <li>Display list: each asset row shows Ticker, Name, Asset ID, Total Supply</li>
+  <li>Click "Add" on any asset → save to local <code>knownAssets</code> storage</li>
+  <li>Asset appears in dashboard Assets tab immediately</li>
+  <li>Balance loads via <code>GET /balance?asset_id=...</code> (or included in <code>GET /assets/list</code>)</li>
+</ol>
+
+<h3>5.5 — Dashboard Assets Tab</h3>
+<ul>
+  <li>On load: call <code>GET /assets/list</code> → renders all known assets with settled balance</li>
+  <li>Show <code>⏳ syncing</code> indicator when <code>future &gt; settled</code> (exact same pattern as wallet.html)</li>
+  <li>Auto-poll every 15s when any asset is syncing</li>
+  <li>Each asset row: Ticker, short asset_id, settled balance. Tap row → <code>asset-detail</code> view</li>
+  <li>Asset detail shows full asset_id, settled/future/spendable, send/receive buttons</li>
+</ul>
+
+<h3>5.6 — UTXO Management</h3>
+<ul>
+  <li>Keep existing UTXO view but replace the slot-based server flow</li>
+  <li>New flow: <code>POST /utxos/begin</code> → sign PSBT with <code>signPhotonPsbt()</code> → <code>POST /utxos/end</code></li>
+  <li>409 "already_available" response → show "✓ Enough colorable UTXOs already" — no action needed</li>
+</ul>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<h2><span class="section-num">6</span> New Files to Create</h2>
+
+<table>
+  <thead><tr><th>File</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td><code>src/utils/photon-keys.ts</code></td><td>Key derivation: fingerprint, xpubs, auth pubkey from mnemonic</td></tr>
+    <tr><td><code>src/utils/photon-auth.ts</code></td><td><code>buildPhotonHeaders()</code>, <code>photonFetch()</code> — signed API calls</td></tr>
+    <tr><td><code>src/utils/photon-psbt.ts</code></td><td><code>signPhotonPsbt()</code> — client-side PSBT signing for RGB send + UTXOs</td></tr>
+    <tr><td><code>src/utils/photon-api.ts</code></td><td>High-level typed wrappers for every backend endpoint (register, receive, transfer, broadcast, issue, utxos, assets/list, balance, pending)</td></tr>
+  </tbody>
+</table>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<h2><span class="section-num">7</span> Files to Modify</h2>
+
+<table>
+  <thead><tr><th>File</th><th>Changes</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>src/App.tsx</code></td>
+      <td>
+        <ul>
+          <li>Remove <code>'swap'</code> view and nav button</li>
+          <li>Remove <code>'receive-lightning'</code> and <code>'convert-lightning'</code> views</li>
+          <li>Replace RGB receive logic: old <code>rgb-invoice.ts</code> → <code>POST /receive</code></li>
+          <li>Replace RGB send logic: old <code>sendRegtestRgbInvoice()</code> → transfer 3-step flow</li>
+          <li>Replace asset list loading: old faucet registry → <code>GET /assets/list</code> + <code>GET /assets/registry</code></li>
+          <li>Replace <code>issueRegtestRgbAsset()</code> → <code>POST /issue</code></li>
+          <li>Replace UTXO slot system → <code>POST /utxos/begin/end</code></li>
+          <li>Add <code>photonKeys</code> state: derived keys stored in memory (never persisted beyond session)</li>
+          <li>Add polling for syncing assets (15s interval when <code>future &gt; settled</code>)</li>
+        </ul>
+      </td>
+    </tr>
+    <tr>
+      <td><code>src/utils/backend-config.ts</code></td>
+      <td>Add <code>photon-dev-regtest</code> profile pointing to <code>https://airdrop.photonbolt.xyz</code></td>
+    </tr>
+    <tr>
+      <td><code>src/utils/storage.ts</code></td>
+      <td>Add storage keys for <code>photonRegistered_{network}</code>, <code>photonKnownAssets_{network}</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<h2><span class="section-num">8</span> Files to Delete / Disable</h2>
+
+<table>
+  <thead><tr><th>File</th><th>Reason</th></tr></thead>
+  <tbody>
+    <tr><td><code>src/utils/rgb-wallet.ts</code></td><td>All faucet/Prism RGB API calls replaced by Python backend</td></tr>
+    <tr><td><code>src/utils/rgb-invoice.ts</code></td><td>Client-side blinded seal replaced by <code>POST /receive</code></td></tr>
+    <tr><td><code>src/utils/rgb-fetcher.ts</code></td><td>RGB UTXO classification replaced by backend <code>/assets/list</code></td></tr>
+    <tr><td><code>src/utils/rgb.ts</code></td><td>RGB proxy JSON-RPC replaced by REST backend (no direct proxy calls)</td></tr>
+    <tr><td><code>src/utils/prism-auth.ts</code></td><td>OAuth2-style Prism auth replaced by <code>buildPhotonHeaders()</code></td></tr>
+    <tr><td><code>src/utils/utxoManager.ts</code></td><td>Slot-based UTXO system replaced by <code>/utxos/begin</code>+<code>/end</code></td></tr>
+  </tbody>
+</table>
+
+<div class="warn-box">
+  ⚠️ Don't delete ICP/canister files yet: <code>icp.ts</code>, <code>icrc1.ts</code>, <code>ckbtc-withdrawal.ts</code>.
+  Bitcoin send/receive still works via ICP for mainnet. Only RGB + registration flows change.
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<h2><span class="section-num">9</span> Environment Config</h2>
+
+<pre>
+<span class="c"># .env (add to .env.example)</span>
+VITE_PHOTON_BACKEND_URL=https://airdrop.photonbolt.xyz
+VITE_PHOTON_BACKEND_REGTEST_URL=https://airdrop.photonbolt.xyz
+
+<span class="c"># Keep existing vars:</span>
+VITE_PUBLIC_ELECTRUM_DEFAULT=ssl://electrum.iriswallet.com:50013
+VITE_PHOTON_REGTEST_ELECTRUM=ssl://dev-index.photonbolt.xyz:50002
+</pre>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<h2><span class="section-num">10</span> Implementation Order</h2>
+
+<ol>
+  <li>
+    <strong>Create <code>photon-keys.ts</code></strong> — key derivation, validate fingerprint matches backend
+  </li>
+  <li>
+    <strong>Create <code>photon-auth.ts</code></strong> — <code>buildPhotonHeaders()</code> + <code>photonFetch()</code>
+  </li>
+  <li>
+    <strong>Create <code>photon-psbt.ts</code></strong> — PSBT signing with bip32 paths from PSBT inputs
+  </li>
+  <li>
+    <strong>Create <code>photon-api.ts</code></strong> — typed wrappers: <code>registerWallet()</code>, <code>listAssets()</code>,
+    <code>generateRgbInvoice()</code>, <code>buildTransferPsbt()</code>, <code>broadcastTransfer()</code>,
+    <code>issueAsset()</code>, <code>createUtxosBegin()</code>, <code>createUtxosEnd()</code>, <code>listPending()</code>,
+    <code>getAssetRegistry()</code>
+  </li>
+  <li>
+    <strong>Modify <code>App.tsx</code></strong>:
+    <ul>
+      <li>Remove swap view + nav</li>
+      <li>Remove Lightning receive options</li>
+      <li>Wire <code>receive-rgb</code> view to <code>generateRgbInvoice()</code></li>
+      <li>Wire send-RGB flow to 3-step transfer</li>
+      <li>Wire <code>add-assets</code> to <code>getAssetRegistry()</code> with click-to-add</li>
+      <li>Wire dashboard asset loading to <code>listAssets()</code></li>
+      <li>Add 15s poll for syncing assets</li>
+    </ul>
+  </li>
+  <li>
+    <strong>Update <code>backend-config.ts</code></strong> — add Python backend URL
+  </li>
+  <li>
+    <strong>Test on regtest:</strong> register → fund → create UTXOs → issue → receive → send → check balance
+  </li>
+  <li>
+    <strong>Clean up</strong> — remove dead files (<code>rgb-wallet.ts</code>, <code>rgb.ts</code>, etc.)
+  </li>
+</ol>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<h2><span class="section-num">11</span> Key Differences: Old vs New RGB Flow</h2>
+
+<table>
+  <thead><tr><th>Aspect</th><th>Old (faucet/Prism)</th><th>New (Python backend)</th></tr></thead>
+  <tbody>
+    <tr><td>Invoice type</td><td>Blinded (utxob) — requires colorable UTXO on client</td><td>Witness (wvout) — no client UTXO needed</td></tr>
+    <tr><td>Invoice generation</td><td>Client-side seal blinding in <code>rgb-invoice.ts</code></td><td>Server-side via <code>rgb-lib.witness_receive()</code></td></tr>
+    <tr><td>PSBT signing</td><td>Server-side on faucet node</td><td>Client-side in browser with mnemonic</td></tr>
+    <tr><td>Broadcast</td><td>Faucet broadcasts</td><td>Client sends signed PSBT to <code>/broadcast</code>; backend uses bitcoind fallback</td></tr>
+    <tr><td>Balance tracking</td><td>Polling <code>rgb.balance</code> JSON-RPC on proxy</td><td><code>GET /assets/list</code> with double-refresh; <code>settled</code> vs <code>future</code></td></tr>
+    <tr><td>UTXO management</td><td>Server-managed slot system with funding deposits</td><td>Client signs PSBT, backend creates colorable UTXOs via rgb-lib</td></tr>
+    <tr><td>Asset registry</td><td>Faucet <code>fetchRegtestRgbRegistry()</code></td><td>Public <code>GET /assets/registry</code> — no auth</td></tr>
+    <tr><td>Auth</td><td>OAuth2 challenge-response to Prism (JWT tokens)</td><td>Per-request ECDSA sig in <code>X-Photon-*</code> headers</td></tr>
+    <tr><td>Sync indicator</td><td>Polling pending transfers count</td><td><code>future &gt; settled</code> → show "⏳ syncing"</td></tr>
+  </tbody>
+</table>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<h2><span class="section-num">12</span> UX Notes</h2>
+
+<ul>
+  <li>
+    <strong>No "pending" numbers</strong> — Never show <code>future - settled</code> as a pending count;
+    it accumulates stale unresolved transfers and misleads users.
+    Show only <code>settled</code> as the real balance, with a grey italic "⏳ syncing"
+    indicator when <code>future &gt; settled</code>.
+  </li>
+  <li>
+    <strong>Auto-poll</strong> — Start 15s polling whenever any asset shows "⏳ syncing".
+    Stop polling when all assets are settled.
+  </li>
+  <li>
+    <strong>Mnemonic persistence</strong> — Store mnemonic in <code>chrome.storage.local</code>
+    (same as existing extension pattern). Derive <code>_authPrivkey</code> in memory at unlock;
+    never persist the private key.
+  </li>
+  <li>
+    <strong>Registration is idempotent</strong> — Call <code>POST /register</code> on every unlock;
+    backend returns 200 or 409 (already registered). Either is success.
+  </li>
+  <li>
+    <strong>Asset registry click-to-add</strong> — Fetch the public registry, show asset cards,
+    let user tap "Add" which saves the asset_id to local storage and then loads its balance
+    from the backend.
+  </li>
+  <li>
+    <strong>RGB invoice expiry</strong> — Default 24h (86400s). Show expiry countdown in the
+    invoice display screen. Re-generate if expired.
+  </li>
+  <li>
+    <strong>PSBT signing failure fallback</strong> — If client-side PSBT signing fails, surface a
+    clear error rather than a silent crash. The PSBT paths must match the wallet's HD derivation.
+  </li>
+</ul>
+
+<hr>
+<p style="color:var(--muted);font-size:.82rem;text-align:center">
+  PhotonBolt Wallet Revamp Plan · Branch: <code>Python-Backend-Airdrop-RGB</code> · Generated 2026-04-15
+</p>
+
+</div>
+</body>
+</html>
