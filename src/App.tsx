@@ -1536,13 +1536,16 @@ function App() {
         setError('')
         setUnlockPassword('')
 
-        // Auto-register with Python backend (idempotent, 409 = already registered)
+        // Auto-register with Python backend — only once per network (prevents xpub overwrite)
         if (result.mnemonic) {
           try {
             const keys = await derivePhotonKeys(result.mnemonic)
             setPhotonKeys(keys)
-            await registerWallet(keys)
-            await setStorageData({ [`photonRegistered_${network}` as keyof StorageData]: 'true' })
+            const regCheck = await getStorageData([`photonRegistered_${network}` as keyof StorageData])
+            if (!regCheck[`photonRegistered_${network}` as keyof StorageData]) {
+              await registerWallet(keys)
+              await setStorageData({ [`photonRegistered_${network}` as keyof StorageData]: 'true' })
+            }
           } catch (e) {
             console.warn('[Photon] Backend registration failed (non-fatal):', e)
           }
@@ -1624,12 +1627,15 @@ function App() {
         setError('')
         setUnlockPassword('')
 
-        // Auto-register with Python backend (idempotent, 409 = already registered)
+        // Auto-register with Python backend — only once per network (prevents xpub overwrite)
         try {
           const keys = await derivePhotonKeys(currentMnemonic)
           setPhotonKeys(keys)
-          await registerWallet(keys)
-          await setStorageData({ [`photonRegistered_${network}` as keyof StorageData]: 'true' })
+          const regCheck = await getStorageData([`photonRegistered_${network}` as keyof StorageData])
+          if (!regCheck[`photonRegistered_${network}` as keyof StorageData]) {
+            await registerWallet(keys)
+            await setStorageData({ [`photonRegistered_${network}` as keyof StorageData]: 'true' })
+          }
         } catch (e) {
           console.warn('[Photon] Backend registration failed (non-fatal):', e)
         }
