@@ -56,6 +56,10 @@ export const RGBITS_PRISM_API_BASE = envString(
 );
 export const DEFAULT_REGTEST_RGB_BACKEND_MODE: RegtestRgbBackendMode = 'prism';
 
+export const PHOTON_BACKEND_URL =
+  (import.meta.env.VITE_PHOTON_BACKEND_URL as string | undefined)?.trim() ||
+  'https://airdrop.photonbolt.xyz'
+
 export const getDefaultElectrumServer = (
     network: WalletNetwork,
     profileId: BackendProfileId = DEFAULT_BACKEND_PROFILE_ID

@@ -7,21 +7,27 @@ import { signAndSendVanilla, signAndUnlockUtxo, broadcastTransaction, fetchUTXOs
 import type { UtxoWithRgbStatus } from './utils/rgb'
 import { fetchRgbOccupiedUtxos } from './utils/rgb-fetcher'
 import { getCkBTCBalance } from './utils/icrc1'
-import { convertLBTCtoBTC } from './utils/ckbtc-withdrawal'
+import { convertLBTCtoBTC as _convertLBTCtoBTC } from './utils/ckbtc-withdrawal'
 import { getErrorLogs, clearErrorLogs, type ErrorLog } from './utils/error-logger'
 import { getStorageData, setStorageData, removeStorageData, getNetworkAddressKey, getNetworkAssetsKey, getNetworkContractsKey, testnet3DefaultAssets, mainnetDefaultAssets, type StorageData } from './utils/storage'
 import type { Asset } from './utils/storage'
 import { BACKEND_PROFILES, DEFAULT_BACKEND_PROFILE_ID, DEFAULT_REGTEST_RGB_BACKEND_MODE, PUBLIC_RGB_PROXY_DEFAULT, RGBITS_PRISM_API_BASE, getBackendProfileById, getDefaultElectrumServer, getDefaultRgbProxy, type BackendProfileId, type RegtestRgbBackendMode } from './utils/backend-config'
 import { QRCodeSVG } from 'qrcode.react'
-import { createRgbInvoice } from './utils/rgb-invoice'
-import { createRegtestLightningInvoice, createRegtestRgbInvoice, decodeRegtestLightningInvoice, decodeRegtestRgbInvoice, fetchRegtestChannelDashboard, fetchRegtestIssueAssetReadiness, fetchRegtestRgbBalance, fetchRegtestRgbRegistry, fetchRegtestRgbTransfers, issueRegtestRgbAsset, uploadRegtestRgbAssetMedia, mineRegtestBlocks, payRegtestLightningInvoice, refreshRegtestRgbTransfers, registerRgbInvoiceSecret, sendRegtestRgbInvoice, fetchUtxoFundingAddress, fetchUtxoSlots, redeemUtxoSlot, type RgbIssueAssetReadinessResponse, type RgbIssueAssetResponse, type UtxoSlot, type UtxoFundingAddressResponse } from './utils/rgb-wallet'
+import { createRgbInvoice as _createRgbInvoice } from './utils/rgb-invoice'
+import { createRegtestLightningInvoice as _createRegtestLightningInvoice, createRegtestRgbInvoice as _createRegtestRgbInvoice, decodeRegtestLightningInvoice, decodeRegtestRgbInvoice, fetchRegtestChannelDashboard, fetchRegtestIssueAssetReadiness, fetchRegtestRgbBalance, fetchRegtestRgbRegistry, fetchRegtestRgbTransfers, issueRegtestRgbAsset as _issueRegtestRgbAsset, uploadRegtestRgbAssetMedia, mineRegtestBlocks, payRegtestLightningInvoice, refreshRegtestRgbTransfers, registerRgbInvoiceSecret as _registerRgbInvoiceSecret, sendRegtestRgbInvoice as _sendRegtestRgbInvoice, fetchUtxoFundingAddress as _fetchUtxoFundingAddress, fetchUtxoSlots as _fetchUtxoSlots, redeemUtxoSlot, type RgbIssueAssetReadinessResponse, type RgbIssueAssetResponse, type UtxoSlot, type UtxoFundingAddressResponse } from './utils/rgb-wallet'
 import { LightningAnimation } from './components/LightningAnimation'
 import { StepIndicator } from './components/StepIndicator'
 import { ErrorBanner } from './components/ErrorBanner'
 import { fetchBtcActivities, type BitcoinActivity } from './utils/bitcoin-activities'
+import { generateRgbInvoice, buildTransferPsbt, broadcastTransfer, listAssets, getAssetRegistry, issueAsset, createUtxosBegin, createUtxosEnd, listPending as _listPending, registerWallet, type PhotonAsset, type PhotonRegistryAsset, type PhotonTransfer as _PhotonTransfer } from './utils/photon-api'
+import { derivePhotonKeys, type PhotonKeys } from './utils/photon-keys'
+import { signPhotonPsbt } from './utils/photon-psbt'
+import { PHOTON_BACKEND_URL as _PHOTON_BACKEND_URL } from './utils/backend-config'
 
+// Suppress unused import warnings for photon types used in type positions only
+void (null as unknown as PhotonRegistryAsset)
 
-type View = 'welcome' | 'unlock' | 'lock' | 'forgot' | 'create' | 'verify' | 'password' | 'restore' | 'dashboard' | 'receive' | 'receive-btc' | 'receive-rgb' | 'receive-lightning' | 'convert-lightning' | 'add-assets' | 'issue-asset' | 'settings' | 'user-settings' | 'auto-lock-settings' | 'network-settings' | 'swap' | 'send' | 'send-amount' | 'send-confirm' | 'send-success' | 'utxos' | 'create-rgb-utxo' | 'create-utxo-confirm' | 'unlock-rgb-utxo' | 'unlock-utxo-confirm' | 'utxo-action-success' | 'faucet' | 'error-logs' | 'funding-address' | 'asset-detail'
+type View = 'welcome' | 'unlock' | 'lock' | 'forgot' | 'create' | 'verify' | 'password' | 'restore' | 'dashboard' | 'receive' | 'receive-btc' | 'receive-rgb' | 'add-assets' | 'issue-asset' | 'settings' | 'user-settings' | 'auto-lock-settings' | 'network-settings' | 'send' | 'send-amount' | 'send-confirm' | 'send-success' | 'utxos' | 'create-rgb-utxo' | 'create-utxo-confirm' | 'unlock-rgb-utxo' | 'unlock-utxo-confirm' | 'utxo-action-success' | 'faucet' | 'error-logs' | 'funding-address' | 'asset-detail'
 type Tab = 'assets' | 'activities'
 type Network = 'mainnet' | 'testnet3' | 'testnet4' | 'regtest'
 
@@ -182,6 +188,7 @@ function App() {
   const [view, setView] = useState<View>('welcome')
   const [errorLogs, setErrorLogs] = useState<ErrorLog[]>([])
   const [mnemonic, setMnemonic] = useState<string>('')
+  const [photonKeys, setPhotonKeys] = useState<PhotonKeys | null>(null)
   const [principalId, setPrincipalId] = useState<string>('')
   const [restoreInput, setRestoreInput] = useState<string>('')
   const [error, setError] = useState<string>('')
@@ -191,7 +198,7 @@ function App() {
 
   // Two-address system states
   const [walletAddress, setWalletAddress] = useState<string>('') // Main BTC wallet address
-  const [lightningAddress, setLightningAddress] = useState<string>('') // ckBTC/Lightning address
+  const [_lightningAddress, setLightningAddress] = useState<string>('') // ckBTC/Lightning address
   const [btcAddress, setBtcAddress] = useState<string>('') // Deprecated, keeping for backward compatibility
 
   const [loadingAddress, setLoadingAddress] = useState<boolean>(false)
@@ -239,13 +246,13 @@ function App() {
   const [rgbWalletOnline, setRgbWalletOnline] = useState<boolean>(false)
   const [openAmount, setOpenAmount] = useState<boolean>(false)
   const [rgbCopied, setRgbCopied] = useState<boolean>(false)
-  const [lightningReceiveAsset, setLightningReceiveAsset] = useState<string>('pho')
-  const [lightningReceiveAmount, setLightningReceiveAmount] = useState<string>('1')
-  const [lightningReceiveInvoice, setLightningReceiveInvoice] = useState<string>('')
-  const [lightningReceiveStep, setLightningReceiveStep] = useState<'form' | 'invoice'>('form')
-  const [lightningReceiveGenerating, setLightningReceiveGenerating] = useState<boolean>(false)
-  const [lightningReceiveError, setLightningReceiveError] = useState<string>('')
-  const [lightningReceiveCopied, setLightningReceiveCopied] = useState<boolean>(false)
+  const [_lightningReceiveAsset, _setLightningReceiveAsset] = useState<string>('pho')
+  const [_lightningReceiveAmount, _setLightningReceiveAmount] = useState<string>('1')
+  const [_lightningReceiveInvoice, _setLightningReceiveInvoice] = useState<string>('')
+  const [_lightningReceiveStep, _setLightningReceiveStep] = useState<'form' | 'invoice'>('form')
+  const [_lightningReceiveGenerating, _setLightningReceiveGenerating] = useState<boolean>(false)
+  const [_lightningReceiveError, _setLightningReceiveError] = useState<string>('')
+  const [_lightningReceiveCopied, _setLightningReceiveCopied] = useState<boolean>(false)
 
   // Network-specific assets
   const [assets, setAssets] = useState<Asset[]>([])
@@ -320,14 +327,14 @@ function App() {
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting')
 
   // Swap states
-  const [swapFromAmount, setSwapFromAmount] = useState<string>('')
-  const [swapToAmount, setSwapToAmount] = useState<string>('')
-  const [swapUserBalance, setSwapUserBalance] = useState<string>('0.00000000')
+  const [_swapFromAmount, _setSwapFromAmount] = useState<string>('')
+  const [_swapToAmount, _setSwapToAmount] = useState<string>('')
+  const [_swapUserBalance, _setSwapUserBalance] = useState<string>('0.00000000')
   const [btcPrice, setBtcPrice] = useState<number>(0)
-  const [swapIconRotated, setSwapIconRotated] = useState<boolean>(false)
-  const [swapProcessing, setSwapProcessing] = useState<boolean>(false)
-  const [swapError, setSwapError] = useState<string>('')
-  const [swapSuccess, setSwapSuccess] = useState<string>('')
+  const [_swapIconRotated, _setSwapIconRotated2] = useState<boolean>(false)
+  const [_swapProcessing, _setSwapProcessing] = useState<boolean>(false)
+  const [_swapError, _setSwapError] = useState<string>('')
+  const [_swapSuccess, _setSwapSuccess] = useState<string>('')
   const [sendReceiverAddress, setSendReceiverAddress] = useState<string>('')
   const [sendAmount, setSendAmount] = useState<string>('')
   const [sendMode, setSendMode] = useState<'btc' | 'rgb' | 'lightning'>('btc')
@@ -366,9 +373,9 @@ function App() {
   const [rgbSlots, setRgbSlots] = useState<UtxoSlot[]>([])
   const [loadingRgbSlots, setLoadingRgbSlots] = useState<boolean>(false)
   const [rgbSlotsError, setRgbSlotsError] = useState<string>('')
-  const [fundingAddressData, setFundingAddressData] = useState<UtxoFundingAddressResponse | null>(null)
-  const [loadingFundingAddress, setLoadingFundingAddress] = useState<boolean>(false)
-  const [fundingAddressError, setFundingAddressError] = useState<string>('')
+  const [fundingAddressData, _setFundingAddressData] = useState<UtxoFundingAddressResponse | null>(null)
+  const [loadingFundingAddress, _setLoadingFundingAddress] = useState<boolean>(false)
+  const [fundingAddressError, _setFundingAddressError] = useState<string>('')
   const [redeemingSlotId, setRedeemingSlotId] = useState<string | null>(null)
   const [redeemError, setRedeemError] = useState<string>('')
   const [rgbClassificationError, setRgbClassificationError] = useState<string>('')
@@ -407,6 +414,15 @@ function App() {
   const truncateAddress = (addr: string) => {
     if (!addr || addr.length < 12) return addr
     return `${addr.slice(0, 8)}...${addr.slice(-4)}`
+  }
+
+  const ensurePhotonKeys = async (): Promise<PhotonKeys> => {
+    if (photonKeys) return photonKeys
+    const { mnemonic: storedMnemonic } = await getStorageData(['mnemonic'])
+    if (!storedMnemonic) throw new Error('Wallet locked — unlock first')
+    const keys = await derivePhotonKeys(storedMnemonic)
+    setPhotonKeys(keys)
+    return keys
   }
 
   const navigateFromMenu = (nextView: View) => {
@@ -618,11 +634,6 @@ function App() {
       principalId ||
       'anonymous'
     return `extension-${stableId}-regtest`
-  }
-
-  const getBackendWalletKey = (network: Network) => {
-    const stableId = principalId || walletAddress || coloredAddress || 'anonymous'
-    return `extension-${stableId}-${network}`
   }
 
   const resolveAssetDisplayMeta = async (contractId: string, network: Network) => {
@@ -843,39 +854,6 @@ function App() {
     return updatedAssets
   }
 
-  const persistAssetForCurrentNetwork = async (asset: Asset, contractId?: string | null) => {
-    const assetsKey = getNetworkAssetsKey(selectedNetwork)
-    const contractsKey = getNetworkContractsKey(selectedNetwork)
-    const storageResult = await getStorageData([assetsKey, contractsKey])
-
-    const storedAssetsRaw = storageResult[assetsKey]
-    const storedContractsRaw = storageResult[contractsKey]
-
-    const storedAssets = typeof storedAssetsRaw === 'string'
-      ? JSON.parse(storedAssetsRaw) as Asset[]
-      : []
-    const storedContracts = typeof storedContractsRaw === 'string'
-      ? JSON.parse(storedContractsRaw) as Record<string, string>
-      : {}
-
-    const alreadyImported = storedAssets.some((entry) => entry.id === asset.id)
-    const updatedAssets = alreadyImported
-      ? storedAssets.map((entry) => entry.id === asset.id ? { ...entry, ...asset } : entry)
-      : [...storedAssets, asset]
-
-    const updatedContracts = contractId
-      ? { ...storedContracts, [asset.id]: contractId }
-      : storedContracts
-
-    await setStorageData({
-      [assetsKey]: JSON.stringify(updatedAssets),
-      [contractsKey]: JSON.stringify(updatedContracts),
-    })
-
-    setAssets(updatedAssets)
-    return { alreadyImported, updatedAssets, updatedContracts }
-  }
-
   const loadIssueAssetReadiness = async () => {
     if (selectedNetwork !== 'regtest') {
       setIssueAssetReadiness(null)
@@ -1074,46 +1052,30 @@ function App() {
     setIssueAssetSuccess(null)
 
     try {
-      const walletKey = await getRegtestWalletKey()
-      const result = await issueRegtestRgbAsset({
-        walletKey,
-        schema: issueAssetSchema,
+      const keys = await ensurePhotonKeys()
+      const result = await issueAsset(keys, {
+        ticker: issueAssetTicker.toUpperCase(),
         name: normalizedName,
-        ticker: normalizedTicker || undefined,
-        precision: issueAssetSchema === 'UDA' ? 0 : precisionValue,
-        totalSupply: issueAssetSchema === 'UDA' ? 1 : totalSupplyValue,
-        description: issueAssetDescription.trim(),
-        ...((issueAssetSchema === 'CFA' || issueAssetSchema === 'UDA') && issueAssetMediaDigest ? { fileDigest: issueAssetMediaDigest } : {}),
-        ...(issueAssetSchema === 'UDA' && issueAssetAttachments.length > 0 ? { attachmentDigests: issueAssetAttachments.map((a) => a.digest) } : {}),
-        publicRegistry: issueAssetPublicRegistry,
-        bootstrapLightning: issueAssetBootstrapLightning,
-        liquidityPercentage: liquidityPercentageValue,
-        channelFundingSats: channelFundingSatsValue,
-        channelFundingTiming: issueAssetChannelFundingTiming,
+        precision: parseInt(issueAssetPrecision) || 0,
+        amounts: [parseInt(issueAssetSupply) || 0],
       })
+      setIssueAssetSuccess({
+        ok: true,
+        asset: {
+          assetId: result.asset_id,
+          ticker: result.ticker,
+          name: result.name,
+          precision: result.precision,
+          total_supply: result.total_supply,
+        }
+      } as any)
 
-      const assetTicker = result.asset.ticker || ''
-      await persistAssetForCurrentNetwork({
-        id: assetTicker ? buildAssetIdFromTicker(assetTicker) : result.asset.contract_id,
-        name: result.asset.token_name,
-        amount: String(result.asset.total_supply),
-        unit: assetTicker || result.asset.token_name,
-        color: assetTicker.toUpperCase() === 'PHO' ? '#38bdf8' : '#f8fafc',
-      }, result.asset.contract_id)
-
-      // Mine blocks to settle the issuance. If a Lightning channel was
-      // bootstrapped, mine 6 blocks so the channel funding tx gets enough
-      // confirmations to move out of Opening state and release the RLN lock.
-      const blocksToMine = result.bootstrapPlan?.enabled && result.bootstrapPlan?.channelId ? 6 : 1
       try {
-        await mineRegtestBlocks(blocksToMine)
-        await refreshRegtestRgbTransfers({ assetId: result.asset.contract_id, walletKey })
         await loadAssetsForNetwork(selectedNetwork, mnemonic ?? undefined)
       } catch (settleError) {
         console.error('Post-issuance balance settle error:', settleError)
       }
 
-      setIssueAssetSuccess(result)
       setIssueAssetName('')
       setIssueAssetTicker('')
       setIssueAssetPrecision('0')
@@ -1152,37 +1114,33 @@ function App() {
     try {
       let matchedAsset: ImportableAsset | undefined
 
-      if (selectedNetwork === 'regtest') {
-        // Registry is authoritative for regtest — query it first
-        try {
-          const registryAssets = await fetchRegtestRgbRegistry()
-          const registryMatch = registryAssets.find((entry) =>
-            entry.contract_id.toLowerCase() === normalizedInput ||
-            entry.ticker.toLowerCase() === normalizedInput ||
-            entry.token_name.toLowerCase() === normalizedInput
-          )
-          if (registryMatch) {
-            matchedAsset = {
-              asset: {
-                id: buildAssetIdFromTicker(registryMatch.ticker),
-                name: registryMatch.token_name,
-                amount: '0',
-                unit: registryMatch.ticker,
-                color: registryMatch.ticker.toUpperCase() === 'PHO' ? '#38bdf8' : '#f8fafc',
-              },
-              aliases: [
-                registryMatch.ticker.toLowerCase(),
-                registryMatch.token_name.toLowerCase(),
-                registryMatch.contract_id.toLowerCase(),
-              ],
-              contracts: { regtest: registryMatch.contract_id },
-            }
+      // Query Python backend registry (all networks)
+      try {
+        const registry = await getAssetRegistry()
+        const registryMatch = registry.assets.find((entry: PhotonRegistryAsset) =>
+          entry.asset_id.toLowerCase() === normalizedInput ||
+          entry.ticker.toLowerCase() === normalizedInput ||
+          entry.name.toLowerCase() === normalizedInput
+        )
+        if (registryMatch) {
+          matchedAsset = {
+            asset: {
+              id: registryMatch.asset_id,
+              name: registryMatch.name,
+              amount: '0',
+              unit: registryMatch.ticker,
+              color: registryMatch.ticker.toUpperCase() === 'PHO' ? '#38bdf8' : '#f59e0b',
+            },
+            aliases: [
+              registryMatch.ticker.toLowerCase(),
+              registryMatch.name.toLowerCase(),
+              registryMatch.asset_id.toLowerCase(),
+            ],
+            contracts: { [selectedNetwork]: registryMatch.asset_id } as Partial<Record<Network, string>>,
           }
-        } catch (registryError) {
-          console.error('[Add Assets] Registry API unreachable, falling back to local list:', registryError)
-          matchedAsset = importableAssets.find((entry) => entry.aliases.includes(normalizedInput))
         }
-      } else {
+      } catch (registryError) {
+        console.error('[Add Assets] Registry API unreachable, falling back to local list:', registryError)
         matchedAsset = importableAssets.find((entry) => entry.aliases.includes(normalizedInput))
       }
 
@@ -1578,6 +1536,18 @@ function App() {
         setError('')
         setUnlockPassword('')
 
+        // Auto-register with Python backend (idempotent, 409 = already registered)
+        if (result.mnemonic) {
+          try {
+            const keys = await derivePhotonKeys(result.mnemonic)
+            setPhotonKeys(keys)
+            await registerWallet(keys)
+            await setStorageData({ [`photonRegistered_${network}` as keyof StorageData]: 'true' })
+          } catch (e) {
+            console.warn('[Photon] Backend registration failed (non-fatal):', e)
+          }
+        }
+
         setView('dashboard')
         console.log('Unlock successful, going to dashboard')
 
@@ -1653,6 +1623,16 @@ function App() {
 
         setError('')
         setUnlockPassword('')
+
+        // Auto-register with Python backend (idempotent, 409 = already registered)
+        try {
+          const keys = await derivePhotonKeys(currentMnemonic)
+          setPhotonKeys(keys)
+          await registerWallet(keys)
+          await setStorageData({ [`photonRegistered_${network}` as keyof StorageData]: 'true' })
+        } catch (e) {
+          console.warn('[Photon] Backend registration failed (non-fatal):', e)
+        }
 
         setView('dashboard')
         console.log('Unlock from lock successful')
@@ -1802,6 +1782,30 @@ function App() {
       // Clear assets for other networks
       setAssets([])
       console.log('Cleared assets for', network)
+    }
+
+    // Load assets from Python backend (runs after initial load, merges RGB assets)
+    if (currentMnemonic) {
+      try {
+        const keys = await derivePhotonKeys(currentMnemonic)
+        setPhotonKeys(keys)
+        const { assets: backendAssets } = await listAssets(keys)
+        const mapped = backendAssets.map((a: PhotonAsset) => ({
+          id: a.asset_id,
+          name: a.name,
+          amount: String(a.spendable),
+          unit: a.ticker,
+          color: '#f59e0b',
+          rgbSpendingPower: String(a.spendable),
+        }))
+        // merge with existing non-RGB assets (bitcoin, lightning-btc)
+        setAssets(prev => {
+          const nonRgb = prev.filter((a: Asset) => a.id === 'bitcoin' || a.id === 'lightning-btc')
+          return [...nonRgb, ...mapped]
+        })
+      } catch (e) {
+        console.error('[Dashboard] Failed to load assets from backend:', e)
+      }
     }
   }
 
@@ -2216,7 +2220,6 @@ function App() {
 
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false)
 
-  const selectableRgbAssets = assets.filter((asset) => asset.id !== 'bitcoin' && asset.id !== 'lightning-btc')
 
   const getSpendableVanillaSummary = async () => {
     if (!mnemonic || !walletAddress) {
@@ -2259,16 +2262,7 @@ function App() {
     }
   }
 
-  useEffect(() => {
-    if (view !== 'receive-lightning') {
-      return
-    }
-
-    const selectedAssetStillExists = selectableRgbAssets.some((asset) => asset.id === lightningReceiveAsset)
-    if (!selectedAssetStillExists) {
-      setLightningReceiveAsset(selectableRgbAssets[0]?.id || '')
-    }
-  }, [view, selectableRgbAssets, lightningReceiveAsset])
+  // (receive-lightning view removed — lightning receive asset sync no longer needed)
 
   const handleRefreshBalance = async () => {
     if (!mnemonic || !walletAddress || isRefreshing) return
@@ -2298,6 +2292,16 @@ function App() {
         addressGenerationMethod // Save the address generation method (default: 'bitcoin')
       })
       console.log('Wallet data saved to storage: mnemonic, password, principalId, addressGenerationMethod')
+
+      // Auto-register with Python backend (idempotent, 409 = already registered)
+      try {
+        const keys = await derivePhotonKeys(mnemonic)
+        setPhotonKeys(keys)
+        await registerWallet(keys)
+        await setStorageData({ [`photonRegistered_${selectedNetwork}` as keyof StorageData]: 'true' })
+      } catch (e) {
+        console.warn('[Photon] Backend registration failed (non-fatal):', e)
+      }
 
       // Fetch and save BTC address
       setView('dashboard')
@@ -2403,7 +2407,7 @@ function App() {
   // Inactivity tracking for auto-lock
   useEffect(() => {
     // Only track inactivity when on dashboard or other wallet screens (not on unlock/lock/welcome screens)
-    const trackableViews = ['dashboard', 'receive', 'receive-btc', 'receive-rgb', 'receive-lightning', 'convert-lightning', 'send', 'send-amount', 'send-confirm', 'settings', 'user-settings', 'auto-lock-settings', 'network-settings', 'add-assets', 'swap', 'utxos']
+    const trackableViews = ['dashboard', 'receive', 'receive-btc', 'receive-rgb', 'send', 'send-amount', 'send-confirm', 'settings', 'user-settings', 'auto-lock-settings', 'network-settings', 'add-assets', 'utxos']
 
     if (!trackableViews.includes(view)) {
       // Clean up interval if navigating away from trackable views
@@ -2522,23 +2526,7 @@ function App() {
     }
   }, [view, mnemonic, assets, selectedNetwork])
 
-  // Load user balance when swap view opens
-  useEffect(() => {
-    const loadSwapBalance = async () => {
-      if (view === 'swap') {
-        const result = await getStorageData(['user_bitcoin_balance', 'user_lbtc_balance'])
-        const btcBalance = result.user_bitcoin_balance || '0.00000000'
-        const lbtcBalance = result.user_lbtc_balance || '0.00000000'
-
-        // Set the balance based on swap direction
-        // Default: BTC → LBTC (use BTC balance)
-        // Rotated: LBTC → BTC (use LBTC balance)
-        setSwapUserBalance(swapIconRotated ? lbtcBalance : btcBalance)
-        console.log('Swap balances loaded - BTC:', btcBalance, 'LBTC:', lbtcBalance)
-      }
-    }
-    loadSwapBalance()
-  }, [view, swapIconRotated])
+  // (Swap view removed — swap balance loading no longer needed)
 
   // Check client-side RGB receive readiness when RGB receive view opens
   useEffect(() => {
@@ -2557,17 +2545,7 @@ function App() {
     checkRgbConnection()
   }, [view, selectedNetwork, backendProfileId, mnemonic, coloredAddress])
 
-  // Auto-calculate destination amount (source - 500 satoshi) and update when source changes
-  useEffect(() => {
-    if (swapFromAmount && parseFloat(swapFromAmount) > 0) {
-      const fromBtc = parseFloat(swapFromAmount)
-      const feeInBtc = 500 / 100000000 // 500 satoshi to BTC
-      const toBtc = Math.max(0, fromBtc - feeInBtc)
-      setSwapToAmount(toBtc.toFixed(8))
-    } else {
-      setSwapToAmount('')
-    }
-  }, [swapFromAmount])
+  // (Swap view removed — swap amount effect no longer needed)
 
   // Calculate USD value
 const calculateUsdValue = (btcAmount: string): string => {
@@ -2597,61 +2575,6 @@ const deriveCreateUtxoFeeRate = (
 }
 
 const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
-
-  // Handle percentage button clicks for swap
-  const handleSwapPercentage = (percentage: number) => {
-    const balance = parseFloat(swapUserBalance)
-    const amount = (balance * percentage / 100).toFixed(8)
-    setSwapFromAmount(amount)
-  }
-
-  // Handle swap execution
-  const handleExecuteSwap = async () => {
-    if (!mnemonic || !swapFromAmount || parseFloat(swapFromAmount) === 0) {
-      setSwapError('Please enter a valid amount')
-      return
-    }
-
-    // Clear previous messages
-    setSwapError('')
-    setSwapSuccess('')
-    setSwapProcessing(true)
-
-    try {
-      const amount = parseFloat(swapFromAmount)
-      const canisterNetwork = mapNetworkToCanister(selectedNetwork)
-
-      if (swapIconRotated) {
-        // LBTC → BTC conversion
-        console.log('Converting LBTC to BTC, amount:', amount)
-        const result = await convertLBTCtoBTC(mnemonic, amount, canisterNetwork)
-
-        setSwapSuccess(result.message)
-        setSwapFromAmount('')
-        setSwapToAmount('')
-
-        // Refresh balances after successful conversion
-        setTimeout(async () => {
-          if (btcAddress) {
-            await fetchBalance(mnemonic, selectedNetwork)
-          }
-          // Also reload swap balances
-          const balanceResult = await getStorageData(['user_bitcoin_balance', 'user_lbtc_balance'])
-          const btcBal = balanceResult.user_bitcoin_balance || '0.00000000'
-          const lbtcBal = balanceResult.user_lbtc_balance || '0.00000000'
-          setSwapUserBalance(swapIconRotated ? lbtcBal : btcBal)
-        }, 2000)
-      } else {
-        // BTC → LBTC conversion (not yet implemented)
-        setSwapError('BTC to LBTC conversion is not yet available')
-      }
-    } catch (error: any) {
-      console.error('Swap error:', error)
-      setSwapError(error.message || 'Failed to execute swap')
-    } finally {
-      setSwapProcessing(false)
-    }
-  }
 
   // Calculate maximum sendable amount (balance - fee)
   const handleMaxAmount = async () => {
@@ -3242,17 +3165,18 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
       try {
         const feeRateMap = { slow: 0, avg: 1, fast: 2, custom: 2 }
         const feeIndex = feeRateMap[sendFeeOption as 'slow' | 'avg' | 'fast' | 'custom'] || 2
-        const feeRate = Number(sendEstimatedFees[feeIndex] || 5n)
-        const walletKey = await getRegtestWalletKey()
-        const result = await sendRegtestRgbInvoice({
+        const selectedFeeRate = Number(sendEstimatedFees[feeIndex] || 5n)
+        // 3-step RGB send: transfer → sign → broadcast
+        const keys = await ensurePhotonKeys()
+        const psbtResult = await buildTransferPsbt(keys, {
+          asset_id: sendRgbAssetId || sendRgbAssetLabel,
           invoice: sendReceiverAddress.trim(),
-          feeRate,
-          minConfirmations: 1,
-          walletKey,
+          amount: Math.floor(parseFloat(sendAmount) || 0),
+          fee_rate: selectedFeeRate || 3,
         })
-
-        setSendTxId(result.txid || '')
-        setSendPaymentHash('')
+        const signedPsbt = await signPhotonPsbt(psbtResult.psbt, mnemonic)
+        const broadcastResult = await broadcastTransfer(keys, signedPsbt)
+        setSendTxId(broadcastResult.txid)
         setView('send-success')
 
         setTimeout(async () => {
@@ -3583,28 +3507,12 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
       setLoadingRgbSlots(true)
       setRgbSlotsError('')
       const walletKey = await getRegtestWalletKey()
-      const slots = await fetchUtxoSlots({ walletKey })
+      const slots = await _fetchUtxoSlots({ walletKey })
       setRgbSlots(slots)
     } catch (e: any) {
       setRgbSlotsError(e?.message || 'Failed to load slots')
     } finally {
       setLoadingRgbSlots(false)
-    }
-  }
-
-  // Load the permanent node-generated UTXO funding address
-  const loadFundingAddress = async () => {
-    if (selectedNetwork !== 'regtest') return
-    try {
-      setLoadingFundingAddress(true)
-      setFundingAddressError('')
-      const walletKey = await getRegtestWalletKey()
-      const data = await fetchUtxoFundingAddress({ walletKey })
-      setFundingAddressData(data)
-    } catch (e: any) {
-      setFundingAddressError(e?.message || 'Failed to load funding address')
-    } finally {
-      setLoadingFundingAddress(false)
     }
   }
 
@@ -4679,33 +4587,17 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
             <button className="back-arrow" aria-label="Go back" onClick={() => setView('dashboard')}>←</button>
             <h2 className="receive-title">Receive</h2>
           </div>
-
           <div className="receive-hero">
             <div className="flow-kicker">Funding</div>
             <div className="flow-intro-title">Choose how funds should arrive</div>
-            <div className="flow-intro-copy">Receive on-chain BTC, generate an RGB invoice, or route funds into Lightning.</div>
+            <div className="flow-intro-copy">Receive on-chain BTC or generate an RGB witness invoice.</div>
           </div>
-
           <div className="receive-options">
             <button className="receive-option" onClick={() => setView('receive-rgb')}>
               <span className="receive-option-icon rgb">◈</span>
               <span className="receive-option-copy">
                 <span className="receive-option-text">Receive RGB Asset</span>
-                <span className="receive-option-subtext">Generate an asset invoice for Photon RGB transfers.</span>
-              </span>
-              <span className="receive-option-arrow">›</span>
-            </button>
-            <button className="receive-option" onClick={() => {
-              setView('receive-lightning')
-              setLightningReceiveStep('form')
-              setLightningReceiveInvoice('')
-              setLightningReceiveError('')
-              setLightningReceiveAsset(selectableRgbAssets[0]?.id || '')
-            }}>
-              <span className="receive-option-icon lightning">⚡</span>
-              <span className="receive-option-copy">
-                <span className="receive-option-text">Receive Instantly</span>
-                <span className="receive-option-subtext">Generate a Lightning PHO invoice for off-chain settlement.</span>
+                <span className="receive-option-subtext">Generate a witness invoice for RGB asset transfers.</span>
               </span>
               <span className="receive-option-arrow">›</span>
             </button>
@@ -4714,22 +4606,6 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               <span className="receive-option-copy">
                 <span className="receive-option-text">Receive Bitcoin on-chain</span>
                 <span className="receive-option-subtext">Share your wallet address and QR code.</span>
-              </span>
-              <span className="receive-option-arrow">›</span>
-            </button>
-            <button className="receive-option" onClick={() => setView('convert-lightning')}>
-              <span className="receive-option-icon lightning">⚡</span>
-              <span className="receive-option-copy">
-                <span className="receive-option-text">Convert Bitcoin to Lightning</span>
-                <span className="receive-option-subtext">Use the bridge address for Lightning conversion.</span>
-              </span>
-              <span className="receive-option-arrow">›</span>
-            </button>
-            <button className="receive-option" onClick={() => setView('swap')}>
-              <span className="receive-option-icon swap">⇄</span>
-              <span className="receive-option-copy">
-                <span className="receive-option-text">Swap BTC</span>
-                <span className="receive-option-subtext">Move between wallet funding rails and test flows.</span>
               </span>
               <span className="receive-option-arrow">›</span>
             </button>
@@ -4785,57 +4661,6 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               🚰 Open Photon faucet
             </button>
           )}
-        </div>
-      )}
-
-      {/* Convert Bitcoin to Lightning Screen */}
-      {view === 'convert-lightning' && (
-        <div className="receive-container">
-          <div className="receive-header">
-            <button className="back-arrow" aria-label="Go back" onClick={() => setView('receive')}>←</button>
-            <h2 className="receive-title">Convert Bitcoin to ⚡ Lightning</h2>
-          </div>
-
-          <div className="receive-btc-content">
-            {copied && <div className="copy-toast">✓ Address copied!</div>}
-            <div className="receive-hero compact">
-              <div className="flow-kicker">Bridge</div>
-              <div className="flow-intro-title">Send BTC to the Lightning bridge</div>
-              <div className="flow-intro-copy">Use this address to move test funds into the Lightning conversion flow.</div>
-            </div>
-
-            <div className="qr-container">
-              <QRCodeSVG
-                value={lightningAddress || 'no-address'}
-                size={180}
-                bgColor="#ffffff"
-                fgColor="#000000"
-                level="M"
-                imageSettings={{
-                  src: "/lightning-bitcoin.png",
-                  width: 36,
-                  height: 36,
-                  excavate: true,
-                }}
-              />
-            </div>
-
-            <button className="btn-primary copy-btc-btn" onClick={() => {
-              navigator.clipboard.writeText(lightningAddress)
-              setCopied(true)
-              setTimeout(() => setCopied(false), 2000)
-            }} style={{ marginBottom: '1rem' }}>
-              ⧉ Copy bitcoin address
-            </button>
-
-            <div className="btc-address-box dark">
-              {(() => {
-                const addr = lightningAddress || ''
-                const display = addr.length > 20 ? `${addr.slice(0, 10)}...${addr.slice(-8)}` : addr || 'No address available'
-                return <span className="btc-address-text">{display}</span>
-              })()}
-            </div>
-          </div>
         </div>
       )}
 
@@ -4920,17 +4745,6 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                   )}
                 </div>
 
-                {/* BTC Balance Check — only shown when balance is zero */}
-                {parseFloat(btcBalance) === 0 && (
-                  <div className="rgb-info-box">
-                    <div className="rgb-info-icon">⚠️</div>
-                    <div className="rgb-info-content">
-                      <p className="rgb-info-title">Gas Requirement</p>
-                      <p className="rgb-info-desc">You need a small amount of {selectedNetwork === 'mainnet' ? 'Bitcoin' : 'Testnet BTC'} for RGB transfers. Current balance: {btcBalance} BTC</p>
-                    </div>
-                  </div>
-                )}
-
                 {/* Error Display */}
                 {rgbError && <ErrorBanner message={rgbError} />}
               </div>
@@ -4938,120 +4752,24 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               {/* Generate Invoice Button */}
               <button
                 className="btn-primary create-invoice-btn"
-                disabled={rgbGenerating || parseFloat(btcBalance) === 0}
+                disabled={rgbGenerating}
                 onClick={async () => {
-                  console.log('[RGB Receive] Generate Invoice clicked', {
-                    network: selectedNetwork,
-                    assetKey: rgbAsset || null,
-                    openAmount,
-                    rgbAmount,
-                    btcBalance,
-                  })
                   setRgbGenerating(true)
                   setRgbError('')
-
                   try {
-                    if (!mnemonic || !coloredAddress) {
-                      setRgbWalletOnline(false)
-                      setRgbError('Unlock the wallet and wait for the colored Taproot address before generating an RGB invoice.')
-                      setRgbGenerating(false)
-                      return
+                    const keys = await ensurePhotonKeys()
+                    const opts: { asset_id?: string; amount?: number; expiration_seconds?: number } = {
+                      expiration_seconds: 86400,
                     }
-
-                    if (!rgbAsset) {
-                      setRgbError('Select an RGB asset before generating an invoice.')
-                      setRgbGenerating(false)
-                      return
-                    }
-
-                    const contractsKey = getNetworkContractsKey(selectedNetwork)
-                    const contractSettings = await getStorageData([contractsKey])
-                    const storedContractMapRaw = contractSettings[contractsKey]
-                    const storedContractMap =
-                      typeof storedContractMapRaw === 'string'
-                        ? JSON.parse(storedContractMapRaw) as Record<string, string>
-                        : {}
-
-                    const fallbackImportableAsset = importableAssets.find((candidate) => candidate.asset.id === rgbAsset)
-                    const contractId =
-                      storedContractMap[rgbAsset] ||
-                      fallbackImportableAsset?.contracts?.[selectedNetwork] ||
-                      ''
-
-                    console.log('[RGB Receive] Resolved local asset mapping', {
-                      assetKey: rgbAsset,
-                      contractId: contractId || null,
-                    })
-
-                    if (!contractId) {
-                      setRgbError('Selected asset is not registered with an RGB contract ID in this wallet.')
-                      setRgbGenerating(false)
-                      return
-                    }
-
-                    const invoiceAmount = openAmount ? 0 : Math.floor(parseFloat(rgbAmount) || 0)
-                    if (!openAmount && invoiceAmount <= 0) {
-                      console.warn('[RGB Receive] Invalid amount supplied for fixed-amount invoice')
-                      setRgbError('Enter a valid RGB amount or enable Open Amount.')
-                      setRgbGenerating(false)
-                      return
-                    }
-
-                    const isRegtestRgbInvoice = selectedNetwork === 'regtest'
-
-                    console.log('[RGB Receive] Prepared invoice request', {
-                      mode: isRegtestRgbInvoice ? 'backend-regtest' : 'client-side',
-                      contractId,
-                      invoiceAmount,
-                      openAmount,
-                    })
-
-                    if (isRegtestRgbInvoice) {
-                      const walletKey = await getRegtestWalletKey()
-                      const invoiceResult = await createRegtestRgbInvoice({
-                        assetId: contractId,
-                        amount: invoiceAmount,
-                        openAmount,
-                        walletKey,
-                      })
-
-                      console.log('[RGB Receive] Backend regtest invoice created successfully', {
-                        recipientId: invoiceResult.recipient_id,
-                        batchTransferIndex: invoiceResult.batch_transfer_idx,
-                      })
-
-                      setRgbWalletOnline(true)
-                      setRgbInvoice(invoiceResult.invoice)
-                      setRgbInvoiceBootstrap(Boolean((invoiceResult as any).bootstrapInvoice))
-                      setRgbInvoiceStep('invoice')
-                    } else {
-                      const invoiceResult = await createRgbInvoice(contractId, invoiceAmount)
-                      await registerRgbInvoiceSecret({
-                        walletKey: getBackendWalletKey(selectedNetwork),
-                        network: selectedNetwork,
-                        assetId: contractId,
-                        amount: invoiceAmount,
-                        invoice: invoiceResult.invoice,
-                        recipientId: `bcrt:utxob:${invoiceResult.blindedSeal}`,
-                        blindingSecret: invoiceResult.secret,
-                      })
-
-                      console.log('[RGB Receive] Client-side invoice created successfully', {
-                        txid: invoiceResult.txid,
-                        vout: invoiceResult.vout,
-                        source: invoiceResult.source,
-                      })
-
-                      setRgbWalletOnline(true)
-                      setRgbInvoice(invoiceResult.invoice)
-                      setRgbInvoiceStep('invoice')
-                    }
+                    if (rgbAsset) opts.asset_id = rgbAsset
+                    if (!openAmount && rgbAmount) opts.amount = Math.floor(parseFloat(rgbAmount) || 0)
+                    const result = await generateRgbInvoice(keys, opts)
+                    setRgbInvoice(result.invoice)
+                    setRgbWalletOnline(true)
+                    setRgbInvoiceStep('invoice')
                   } catch (error) {
-                    console.error('[RGB Receive] Error generating RGB invoice:', error)
-                    setRgbWalletOnline(Boolean(mnemonic && coloredAddress))
                     setRgbError(`Failed to generate invoice: ${error instanceof Error ? error.message : 'Unknown error'}`)
                   } finally {
-                    console.log('[RGB Receive] Generate Invoice flow complete')
                     setRgbGenerating(false)
                   }
                 }}
@@ -5150,195 +4868,6 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                 Create New Invoice
               </button>
             </>
-          )}
-        </div>
-      )}
-
-      {/* Receive Lightning RGB Screen */}
-      {view === 'receive-lightning' && (
-        <div className="receive-container receive-rgb-container">
-          <div className="receive-header">
-            <button className="back-arrow" aria-label="Go back" onClick={() => {
-              setView('receive')
-              setLightningReceiveStep('form')
-              setLightningReceiveInvoice('')
-              setLightningReceiveError('')
-            }}>←</button>
-            <h2 className="receive-title">Receive instantly</h2>
-            <div className="receive-header-status">
-              <span className="rgb-status-dot online"></span>
-              <span>Lightning</span>
-            </div>
-          </div>
-
-          {lightningReceiveStep === 'form' ? (
-            <>
-              <div className="receive-rgb-content">
-
-                <div className="rgb-field">
-                  <div className="rgb-label-row">
-                    <label className="rgb-label">Asset</label>
-                  </div>
-                  <div className="rgb-select-wrapper">
-                    <select
-                      className="rgb-select"
-                      value={lightningReceiveAsset}
-                      onChange={(e) => setLightningReceiveAsset(e.target.value)}
-                      disabled={selectableRgbAssets.length === 0}
-                    >
-                      {selectableRgbAssets.map((asset) => (
-                        <option key={asset.id} value={asset.id}>{asset.name}</option>
-                      ))}
-                    </select>
-                    <span className="rgb-select-arrow">▾</span>
-                  </div>
-                  {selectableRgbAssets.length === 0 && (
-                    <p className="rgb-helper-text">Import an RGB asset into this wallet before generating a Lightning invoice.</p>
-                  )}
-                </div>
-
-                <div className="rgb-field">
-                  <div className="rgb-label-row">
-                    <label className="rgb-label">Amount</label>
-                  </div>
-                  <input
-                    type="text"
-                    className="rgb-input"
-                    placeholder="Enter amount"
-                    value={lightningReceiveAmount}
-                    onChange={(e) => setLightningReceiveAmount(e.target.value)}
-                  />
-                  <p className="rgb-helper-text">This creates a fixed-amount Lightning RGB invoice. Current instant-pay path uses a 3,000 sat Lightning bridge amount under the hood.</p>
-                </div>
-
-                <div className="rgb-info-box">
-                  <div className="rgb-info-icon">⚡</div>
-                  <div className="rgb-info-content">
-                    <p className="rgb-info-title">Off-Chain Settlement</p>
-                    <p className="rgb-info-desc">The sender will pay this invoice instantly through the Lightning-enabled RGB node, so there is no new Bitcoin txid for the payment itself.</p>
-                  </div>
-                </div>
-
-                {lightningReceiveError && <ErrorBanner message={lightningReceiveError} />}
-              </div>
-
-              <button
-                className="btn-primary create-invoice-btn"
-                disabled={lightningReceiveGenerating || selectedNetwork !== 'regtest'}
-                onClick={async () => {
-                  setLightningReceiveGenerating(true)
-                  setLightningReceiveError('')
-
-                  try {
-                    if (selectedNetwork !== 'regtest') {
-                      throw new Error('Instant PHO receive is currently enabled for regtest only')
-                    }
-
-                    const selectedAsset = selectableRgbAssets.find((asset) => asset.id === lightningReceiveAsset)
-                    if (!selectedAsset) {
-                      throw new Error(
-                        selectableRgbAssets.length === 0
-                          ? 'Import an RGB asset into this wallet before generating a Lightning invoice.'
-                          : 'Select an RGB asset before generating a Lightning invoice.'
-                      )
-                    }
-
-                    const invoiceAmount = Math.floor(parseFloat(lightningReceiveAmount) || 0)
-                    if (invoiceAmount <= 0) {
-                      throw new Error('Enter a valid asset amount.')
-                    }
-
-                    const contractsKey = getNetworkContractsKey(selectedNetwork)
-                    const contractSettings = await getStorageData([contractsKey])
-                    const storedContractMapRaw = contractSettings[contractsKey]
-                    const storedContractMap =
-                      typeof storedContractMapRaw === 'string'
-                        ? JSON.parse(storedContractMapRaw) as Record<string, string>
-                        : {}
-
-                    const contractId = storedContractMap[lightningReceiveAsset]
-                    if (!contractId) {
-                      throw new Error('Selected asset is not mapped to an RGB contract in this wallet.')
-                    }
-
-                    const walletKey = await getRegtestWalletKey()
-                    const result = await createRegtestLightningInvoice({
-                      assetId: contractId,
-                      amount: invoiceAmount,
-                      walletKey,
-                    })
-
-                    setSendRouteHint(`Lightning invoice created for ${invoiceAmount} ${selectedAsset.unit}`)
-                    setLightningReceiveInvoice(result.invoice)
-                    setLightningReceiveStep('invoice')
-                  } catch (error: any) {
-                    console.error('Error generating Lightning invoice:', error)
-                    setLightningReceiveError(error.message || 'Failed to generate Lightning invoice')
-                  } finally {
-                    setLightningReceiveGenerating(false)
-                  }
-                }}
-              >
-                {lightningReceiveGenerating ? (
-                  <>
-                    <span className="spinner-small"></span>
-                    Generating Lightning Invoice...
-                  </>
-                ) : (
-                  'Generate Instant Invoice'
-                )}
-              </button>
-            </>
-          ) : (
-            <div className="receive-rgb-content">
-              <div className="receive-rgb-invoice">
-                <div className="rgb-invoice-header">
-                  <div className="rgb-invoice-icon" style={{ background: 'linear-gradient(135deg, #f59e0b 0%, #f97316 100%)' }}>⚡</div>
-                  <h3 className="rgb-invoice-asset-name">LIGHTNING PHO</h3>
-                  <p className="rgb-invoice-subtitle">Pay this invoice from Photon Instant Pay to settle off-chain.</p>
-                </div>
-
-                <div className="rgb-invoice-section">
-                  <label className="rgb-invoice-label">Lightning Invoice</label>
-                  <div className="rgb-invoice-box">
-                    <p className="rgb-invoice-text">{lightningReceiveInvoice}</p>
-                  </div>
-                </div>
-
-                <div className="rgb-qr-container">
-                  <QRCodeSVG
-                    value={lightningReceiveInvoice}
-                    size={120}
-                    bgColor="#ffffff"
-                    fgColor="#000000"
-                    level="M"
-                  />
-                </div>
-
-                <button
-                  className="btn-primary rgb-copy-btn"
-                  onClick={async () => {
-                    await navigator.clipboard.writeText(lightningReceiveInvoice)
-                    setLightningReceiveCopied(true)
-                    setTimeout(() => setLightningReceiveCopied(false), 2000)
-                  }}
-                >
-                  <span className="btn-icon">{lightningReceiveCopied ? '✓' : '📋'}</span>
-                  {lightningReceiveCopied ? 'Copied!' : 'Copy Lightning Invoice'}
-                </button>
-
-                <button
-                  className="btn-secondary rgb-copy-btn"
-                  onClick={() => {
-                    setLightningReceiveStep('form')
-                    setLightningReceiveInvoice('')
-                    setLightningReceiveError('')
-                  }}
-                >
-                  Create Another
-                </button>
-              </div>
-            </div>
           )}
         </div>
       )}
@@ -6470,135 +5999,6 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
         </div>
       )}
 
-      {/* Swap Screen */}
-      {view === 'swap' && (
-        <div className="swap-container">
-          <div className="swap-header">
-            <button className="swap-close" aria-label="Close" onClick={() => setView('receive')}>✕</button>
-            <h2 className="swap-title">Swap</h2>
-          </div>
-
-          <div className="swap-content">
-            {/* From Token - conditionally swap based on direction */}
-            <div className="swap-token-section">
-              <div className="swap-token-header">
-                <div className="swap-token-info">
-                  {swapIconRotated ? (
-                    <>
-                      <div className="swap-token-icon swap-token-icon-image">
-                        <img src="/lbtc-logo.png" alt="LBTC" className="swap-token-logo" />
-                      </div>
-                      <span className="swap-token-name">Lightning Bitcoin</span>
-                    </>
-                  ) : (
-                    <>
-                      <div className="swap-token-icon">₿</div>
-                      <span className="swap-token-name">Bitcoin</span>
-                    </>
-                  )}
-                </div>
-              </div>
-              <input
-                type="text"
-                className="swap-amount-input"
-                placeholder="0"
-                value={swapFromAmount}
-                onChange={(e) => setSwapFromAmount(e.target.value)}
-              />
-              <div className="swap-token-footer">
-                <span className="swap-token-usd">{calculateUsdValue(swapFromAmount)}</span>
-                <div className="swap-balance-row">
-                  <div className="swap-balance-info">
-                    <span className="swap-balance-label">Balance:</span>
-                    <span className="swap-balance-value">{swapUserBalance} ₿</span>
-                  </div>
-                  <div className="swap-percent-buttons">
-                    <button className="swap-percent-btn" onClick={() => handleSwapPercentage(25)}>25%</button>
-                    <button className="swap-percent-btn" onClick={() => handleSwapPercentage(50)}>50%</button>
-                    <button className="swap-percent-btn" onClick={() => handleSwapPercentage(75)}>75%</button>
-                    <button className="swap-percent-btn" onClick={() => handleSwapPercentage(100)}>100%</button>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Swap Icon */}
-            <button
-              className={`swap-direction-btn ${swapIconRotated ? 'rotated' : ''}`}
-              onClick={() => setSwapIconRotated(!swapIconRotated)}
-            >
-              <svg stroke="currentColor" fill="none" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true" height="1.5em" width="1.5em" xmlns="http://www.w3.org/2000/svg">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"></path>
-              </svg>
-            </button>
-
-            {/* To Token - conditionally swap based on direction */}
-            <div className="swap-token-section">
-              <div className="swap-token-header">
-                <div className="swap-token-info">
-                  {swapIconRotated ? (
-                    <>
-                      <div className="swap-token-icon">₿</div>
-                      <span className="swap-token-name">Bitcoin</span>
-                    </>
-                  ) : (
-                    <>
-                      <div className="swap-token-icon swap-token-icon-image">
-                        <img src="/lbtc-logo.png" alt="LBTC" className="swap-token-logo" />
-                      </div>
-                      <span className="swap-token-name">Lightning Bitcoin</span>
-                    </>
-                  )}
-                </div>
-              </div>
-              <input
-                type="text"
-                className="swap-amount-input"
-                placeholder="0"
-                value={swapToAmount}
-                onChange={(e) => setSwapToAmount(e.target.value)}
-                readOnly
-              />
-              <div className="swap-token-footer">
-                <span className="swap-token-usd">{calculateUsdValue(swapToAmount)}</span>
-              </div>
-            </div>
-
-            {/* Error/Success Messages */}
-            {swapError && <ErrorBanner message={swapError} />}
-
-            {swapSuccess && (
-              <div style={{
-                padding: '0.75rem',
-                margin: '1rem 0',
-                background: 'rgba(34, 197, 94, 0.1)',
-                border: '1px solid rgba(34, 197, 94, 0.3)',
-                borderRadius: '8px',
-                color: '#22c55e',
-                fontSize: '0.875rem'
-              }}>
-                {swapSuccess}
-              </div>
-            )}
-
-            {/* Swap Button */}
-            <button
-              className="swap-execute-btn"
-              disabled={parseFloat(swapUserBalance) === 0 || swapProcessing}
-              onClick={handleExecuteSwap}
-            >
-              {swapProcessing
-                ? 'Processing...'
-                : parseFloat(swapUserBalance) === 0
-                  ? 'NOT ENOUGH BTC'
-                  : 'Convert to Lightning ₿'}
-            </button>
-          </div>
-        </div>
-      )
-      }
-
-
       {/* Send Screen */}
       {
         view === 'send' && (
@@ -7039,9 +6439,21 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               <button className="back-arrow" aria-label="Go back" onClick={() => setView('dashboard')}>←</button>
               <h2 className="utxo-header-title">RGB UTXOs</h2>
               <button
-                onClick={() => {
-                  setView('funding-address')
-                  loadFundingAddress()
+                onClick={async () => {
+                  try {
+                    const keys = await ensurePhotonKeys()
+                    const beginResult = await createUtxosBegin(keys, { fee_rate: 5 })
+                    if (beginResult.num_utxos_to_create === 0) {
+                      alert('✓ Enough colorable UTXOs already available')
+                      return
+                    }
+                    const signedPsbt = await signPhotonPsbt(beginResult.psbt, mnemonic)
+                    const endResult = await createUtxosEnd(keys, signedPsbt)
+                    setUtxoActionTxId(`Created ${endResult.created} UTXOs`)
+                    setView('utxo-action-success')
+                  } catch (e: any) {
+                    alert(`UTXO creation failed: ${e?.message || 'Unknown error'}`)
+                  }
                 }}
                 className="utxo-header-action"
               >

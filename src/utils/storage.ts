@@ -116,6 +116,15 @@ export interface StorageData {
     error_logs?: any[]
     // Persisted RGB blinded seal secrets and UTXO bindings
     rgbSealSecrets?: string
+    // Photon Python backend
+    photonRegistered_mainnet?: string    // 'true' if registered
+    photonRegistered_testnet3?: string
+    photonRegistered_testnet4?: string
+    photonRegistered_regtest?: string
+    photonKnownAssets_mainnet?: string   // JSON array of PhotonAsset
+    photonKnownAssets_testnet3?: string
+    photonKnownAssets_testnet4?: string
+    photonKnownAssets_regtest?: string
 }
 
 const SENSITIVE_ACCOUNT_KEYS = new Set<keyof StorageData>(['mnemonic', 'walletPassword'])
