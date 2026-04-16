@@ -16,7 +16,7 @@ dist-ssr
 !.env.example
 public/photonlabs.txt
 .audit-report.txt
-
+.claude
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
