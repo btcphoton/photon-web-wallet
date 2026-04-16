@@ -1790,6 +1790,7 @@ function App() {
         const keys = await derivePhotonKeys(currentMnemonic)
         setPhotonKeys(keys)
         const { assets: backendAssets } = await listAssets(keys)
+        const backendIdSet = new Set(backendAssets.map((a: PhotonAsset) => a.asset_id))
         const mapped = backendAssets.map((a: PhotonAsset) => ({
           id: a.asset_id,
           name: a.name,
@@ -1798,10 +1799,14 @@ function App() {
           color: '#f59e0b',
           rgbSpendingPower: String(a.spendable),
         }))
-        // merge with existing non-RGB assets (bitcoin, lightning-btc)
+        // Merge: keep non-RGB assets + backend RGB assets + any locally-imported
+        // RGB assets not yet on the backend (balance 0 — user imported but hasn't received)
         setAssets(prev => {
           const nonRgb = prev.filter((a: Asset) => a.id === 'bitcoin' || a.id === 'lightning-btc')
-          return [...nonRgb, ...mapped]
+          const localImported = prev.filter(
+            (a: Asset) => a.id !== 'bitcoin' && a.id !== 'lightning-btc' && !backendIdSet.has(a.id)
+          )
+          return [...nonRgb, ...mapped, ...localImported]
         })
       } catch (e) {
         console.error('[Dashboard] Failed to load assets from backend:', e)
