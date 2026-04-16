@@ -19,7 +19,7 @@ import {
   type WalletAsset,
 } from '../utils/dapp-bridge'
 import { getNetworkAssetsKey, getStorageData, setStorageData } from '../utils/storage'
-import { fetchRegtestRgbRegistry } from '../utils/rgb-wallet'
+import { getAssetRegistry } from '../utils/photon-api'
 
 bitcoin.initEccLib(ecc)
 
@@ -326,9 +326,6 @@ export const importAssetForOrigin = async (
   }
 
   const context = await loadWalletContext()
-  if (context.network !== 'regtest') {
-    throw new Error('importAsset is currently supported only on regtest.')
-  }
 
   const rawIdentifier =
     (typeof params.contractId === 'string' && params.contractId.trim()) ||
@@ -341,14 +338,14 @@ export const importAssetForOrigin = async (
     throw new Error('contractId, assetId, ticker, or name is required.')
   }
 
-  const registryAssets = await fetchRegtestRgbRegistry()
+  const registry = await getAssetRegistry()
 
   const normalizedIdentifier = rawIdentifier.toLowerCase()
-  const registryMatch = registryAssets.find((entry: any) => (
-    String(entry.contract_id || '').toLowerCase() === normalizedIdentifier ||
+  const registryMatch = registry.assets.find((entry) =>
+    String(entry.asset_id || '').toLowerCase() === normalizedIdentifier ||
     String(entry.ticker || '').toLowerCase() === normalizedIdentifier ||
-    String(entry.token_name || '').toLowerCase() === normalizedIdentifier
-  ))
+    String(entry.name || '').toLowerCase() === normalizedIdentifier
+  )
 
   if (!registryMatch) {
     throw new Error(`Asset ${rawIdentifier} was not found in the Photon RGB registry.`)
@@ -369,12 +366,12 @@ export const importAssetForOrigin = async (
   const assetId = buildAssetIdFromTicker(String(registryMatch.ticker || 'asset'))
   const importedAsset: WalletAsset = {
     id: assetId,
-    name: String(registryMatch.token_name || registryMatch.ticker || assetId),
+    name: String(registryMatch.name || registryMatch.ticker || assetId),
     amount: '0',
     unit: String(registryMatch.ticker || assetId),
     ticker: String(registryMatch.ticker || assetId),
-    contractId: String(registryMatch.contract_id || ''),
-    assetId: String(registryMatch.contract_id || ''),
+    contractId: String(registryMatch.asset_id || ''),
+    assetId: String(registryMatch.asset_id || ''),
     color: pickImportedAssetColor(String(registryMatch.ticker || '')),
   }
 
@@ -384,7 +381,7 @@ export const importAssetForOrigin = async (
     : [...storedAssets, importedAsset]
   const updatedContracts = {
     ...storedContracts,
-    [assetId]: String(registryMatch.contract_id || ''),
+    [assetId]: String(registryMatch.asset_id || ''),
   }
 
   await setStorageData({

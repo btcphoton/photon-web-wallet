@@ -4911,7 +4911,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
             <div className="asset-registry-row">
               <span className="registry-text">Display data for all public RGB assets</span>
               <a
-                href="https://faucet.photonbolt.xyz/asset-registry.html"
+                href="https://airdrop.photonbolt.xyz/ui/Asset-Registry.html"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="registry-link"
@@ -5359,7 +5359,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                 <div className="asset-registry-row">
                   <span className="registry-text">View the issued asset in the public registry</span>
                   <a
-                    href="https://faucet.photonbolt.xyz/asset-registry.html"
+                    href="https://airdrop.photonbolt.xyz/ui/Asset-Registry.html"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="registry-link"
