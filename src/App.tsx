@@ -2715,9 +2715,54 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
       return
     }
 
-    if (isRgbInvoice(trimmedInput) || isBlindSealReference(trimmedInput)) {
+    if (isBlindSealReference(trimmedInput)) {
       setSendRoute('rgb-onchain')
-      setSendRouteHint('RGB on-chain invoice detected.')
+      setSendRouteHint('Paste the full RGB invoice (rgb:...), not just the blinded seal.')
+      setSendError('Paste the full RGB invoice, not only the blinded seal.')
+      return
+    }
+
+    if (isRgbInvoice(trimmedInput)) {
+      setSendRoute('rgb-onchain')
+      setSendRouteHint('Decoding RGB invoice...')
+
+      if (selectedNetwork !== 'regtest') {
+        setSendError('RGB send is currently enabled for regtest only. Switch network to Regtest in Settings.')
+        setSendRouteHint('RGB on-chain invoice detected. Switch to Regtest to send.')
+        return
+      }
+
+      try {
+        const decoded = await decodeRegtestRgbInvoice({ invoice: trimmedInput })
+        const rawAmount = decoded.decoded.assignment?.value
+        const amountValue = rawAmount != null ? Number(rawAmount) : 0
+        const isOpenAmount = !Number.isFinite(amountValue) || amountValue <= 0
+
+        // asset_id can be null when receiver used "Accept any RGB asset"
+        const assetId = decoded.decoded.asset_id || ''
+        const assetMeta = assetId
+          ? await resolveAssetDisplayMeta(assetId, selectedNetwork)
+          : { label: 'RGB Asset', unit: 'USDT' }
+        const assetLabel = assetMeta.unit || assetMeta.label
+
+        setSendMode('rgb')
+        setSendRgbAssetId(assetId)
+        setSendRgbAssetLabel(assetLabel)
+        setSendRgbOpenAmount(isOpenAmount)
+
+        if (!isOpenAmount) {
+          setSendAmount(String(amountValue))
+          setSendRouteHint(`${amountValue} ${assetLabel} invoice detected.`)
+        } else {
+          setSendAmount('')
+          setSendRouteHint(`${assetLabel} invoice detected (open amount — you choose).`)
+        }
+      } catch (error: any) {
+        console.error('Error decoding RGB invoice on paste:', error)
+        // Show the error inline but still allow Next to retry
+        setSendRouteHint('RGB on-chain invoice detected.')
+        setSendError(error.message || 'Failed to decode RGB invoice')
+      }
       return
     }
 
@@ -2907,29 +2952,44 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
 
       if (trimmedInput.toLowerCase().startsWith('rgb:')) {
         if (selectedNetwork !== 'regtest') {
-          setSendError('RGB send is currently enabled for regtest only')
+          setSendError('RGB send is currently enabled for regtest only. Switch network to Regtest in Settings.')
           return
         }
 
+        // Invoice was already decoded in handleInvoicePaste. If sendRgbAssetId is set,
+        // we have a valid decode. If not, decode now (e.g. user typed manually).
         try {
-          const decoded = await decodeRegtestRgbInvoice({ invoice: trimmedInput })
-          const rawAmount = decoded.decoded.assignment?.value
-          const amountValue = rawAmount != null ? Number(rawAmount) : 0
-          const isOpenAmount = !Number.isFinite(amountValue) || amountValue <= 0
+          let assetId = sendRgbAssetId
+          let assetLabel = sendRgbAssetLabel
+          let isOpenAmount = sendRgbOpenAmount
+          let amountValue = sendAmount ? parseFloat(sendAmount) : 0
 
-          const assetMeta = await resolveAssetDisplayMeta(decoded.decoded.asset_id, selectedNetwork)
-          const assetLabel = assetMeta.unit || assetMeta.label
+          if (!assetId) {
+            // Decode now (manual entry without paste handler firing)
+            const decoded = await decodeRegtestRgbInvoice({ invoice: trimmedInput })
+            const rawAmount = decoded.decoded.assignment?.value
+            amountValue = rawAmount != null ? Number(rawAmount) : 0
+            isOpenAmount = !Number.isFinite(amountValue) || amountValue <= 0
 
-          setSendMode('rgb')
-          setSendRoute('rgb-onchain')
-          setSendRgbAssetId(decoded.decoded.asset_id)
-          setSendRgbAssetLabel(assetLabel)
-          setSendRgbOpenAmount(isOpenAmount)
+            const resolvedAssetId = decoded.decoded.asset_id || ''
+            const assetMeta = resolvedAssetId
+              ? await resolveAssetDisplayMeta(resolvedAssetId, selectedNetwork)
+              : { label: 'RGB Asset', unit: 'USDT' }
+            assetId = resolvedAssetId
+            assetLabel = assetMeta.unit || assetMeta.label
 
-          if (!isOpenAmount) {
-            // Fixed-amount invoice — validate capacity now
+            setSendMode('rgb')
+            setSendRoute('rgb-onchain')
+            setSendRgbAssetId(assetId)
+            setSendRgbAssetLabel(assetLabel)
+            setSendRgbOpenAmount(isOpenAmount)
+            setSendAmount(isOpenAmount ? '' : String(amountValue))
+          }
+
+          if (!isOpenAmount && amountValue > 0) {
+            // Fixed-amount — validate capacity
             const validation = await validateRegtestSendCapacity({
-              assetId: decoded.decoded.asset_id,
+              assetId,
               amount: amountValue,
               assetLabel,
               mode: 'rgb',
@@ -2938,21 +2998,17 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               setSendError(validation.message)
               return
             }
-            setSendAmount(String(amountValue))
             setSendOffchainOutbound(String(validation.capacity.offchainOutbound))
             setSendOffchainInbound(String(validation.capacity.offchainInbound))
             setSendTotalSpendingPower(String(validation.capacity.totalSpendingPower))
             setSendUserBalance(String(validation.capacity.totalSpendingPower))
             setMaxSendableAmount(String(validation.capacity.maxSendable))
-          } else {
-            // Open-amount invoice — user enters amount on next screen
-            setSendAmount('')
           }
 
           setSendNetworkFee('TBD')
           setView('send-amount')
         } catch (error: any) {
-          console.error('Error decoding RGB invoice:', error)
+          console.error('Error processing RGB invoice:', error)
           setSendError(error.message || 'Failed to decode RGB invoice')
         }
         return
@@ -6057,6 +6113,11 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
 	              </div>
 	            </div>
 
+            {sendError && (
+              <div style={{padding: '0 16px 8px'}}>
+                <ErrorBanner message={sendError} />
+              </div>
+            )}
             <div className="flow-footer-bar">
               <button
                 className="send-next-btn"
@@ -6216,6 +6277,11 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               )}
             </div>
 
+            {sendError && (
+              <div style={{padding: '0 16px 8px'}}>
+                <ErrorBanner message={sendError} />
+              </div>
+            )}
             <div className="flow-footer-bar">
               <button
                 className="send-next-btn"

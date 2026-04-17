@@ -54,7 +54,7 @@ export const RGBITS_PRISM_API_BASE = envString(
     import.meta.env.VITE_RGBITS_PRISM_API_BASE,
     'https://prism.photonbolt.xyz'
 );
-export const DEFAULT_REGTEST_RGB_BACKEND_MODE: RegtestRgbBackendMode = 'prism';
+export const DEFAULT_REGTEST_RGB_BACKEND_MODE: RegtestRgbBackendMode = 'faucet';
 
 export const PHOTON_BACKEND_URL =
   (import.meta.env.VITE_PHOTON_BACKEND_URL as string | undefined)?.trim() ||
