@@ -15,11 +15,24 @@ export async function signPhotonPsbt(
   const root = bip32.fromSeed(Buffer.from(seed), network)
   const psbt = bitcoin.Psbt.fromBase64(unsignedPsbtBase64)
   psbt.data.inputs.forEach((input, i) => {
+    // Legacy + SegWit (P2PKH, P2WPKH, P2SH-P2WPKH)
     const derivations = input.bip32Derivation || []
     for (const d of derivations) {
       try {
         const keyNode = root.derivePath(d.path)
         psbt.signInput(i, keyNode)
+      } catch (_) { /* wrong key for this input, continue */ }
+    }
+
+    // Taproot key-path (P2TR) — uses tapBip32Derivation
+    const tapDerivations = input.tapBip32Derivation || []
+    for (const d of tapDerivations) {
+      try {
+        const keyNode = root.derivePath(d.path)
+        const xOnlyPubkey = keyNode.publicKey.subarray(1) // 32-byte x-only
+        const tweakHash = bitcoin.crypto.taggedHash('TapTweak', xOnlyPubkey)
+        const tweakedNode = keyNode.tweak(tweakHash)
+        psbt.signInput(i, tweakedNode)
       } catch (_) { /* wrong key for this input, continue */ }
     }
   })
