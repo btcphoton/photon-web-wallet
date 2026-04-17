@@ -505,28 +505,13 @@ export async function fetchRegtestRgbTransfers(params: {
 export async function decodeRegtestRgbInvoice(params: {
     invoice: string
 }): Promise<RgbWalletDecodeInvoiceResponse> {
-    const { apiBase, headers } = await getRegtestRgbBackend('invoice decode')
-    const response = await fetch(`${apiBase}/rgb/decode-invoice`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            ...headers,
-        },
-        body: JSON.stringify({
-            invoice: params.invoice,
-        }),
-    })
-
-    if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(errorText || `RGB invoice decode failed with status ${response.status}`)
-    }
-
-    const data = await response.json()
+    // Use the thin backend's /decode-invoice endpoint (rgb_lib direct parse,
+    // no external RGB node hop, not subject to the faucet rate-limit zone).
+    const { decodeRgbInvoiceDirect } = await import('./photon-api')
+    const data = await decodeRgbInvoiceDirect(params.invoice)
     if (!data.ok) {
-        throw new Error(data.error || 'RGB invoice decode failed')
+        throw new Error('RGB invoice decode failed')
     }
-
     return data as RgbWalletDecodeInvoiceResponse
 }
 

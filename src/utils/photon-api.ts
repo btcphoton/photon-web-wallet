@@ -157,6 +157,32 @@ export async function createUtxosBegin(
   return res.json()
 }
 
+// Decode an RGB invoice without auth — calls the thin backend directly so it
+// doesn't share the rate-limit bucket with faucet.photonbolt.xyz calls.
+export async function decodeRgbInvoiceDirect(invoice: string): Promise<{
+  ok: boolean
+  decoded: {
+    asset_id: string | null
+    recipient_id: string
+    assignment: { type: string; value: number } | null
+    expiration_timestamp: number | null
+    transport_endpoints: string[]
+  }
+}> {
+  const res = await fetch(`${BASE_URL}/decode-invoice`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ invoice }),
+  })
+  if (!res.ok) {
+    const raw = await res.text()
+    let msg = raw
+    try { msg = JSON.parse(raw)?.detail ?? raw } catch { /* keep raw */ }
+    throw new Error(msg)
+  }
+  return res.json()
+}
+
 // Step 3: End UTXO creation
 export async function createUtxosEnd(
   keys: PhotonKeys,
