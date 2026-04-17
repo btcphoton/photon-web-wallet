@@ -340,6 +340,7 @@ function App() {
   const [sendMode, setSendMode] = useState<'btc' | 'rgb' | 'lightning'>('btc')
   const [sendRgbAssetId, setSendRgbAssetId] = useState<string>('')
   const [sendRgbAssetLabel, setSendRgbAssetLabel] = useState<string>('RGB Asset')
+  const [sendRgbOpenAmount, setSendRgbOpenAmount] = useState<boolean>(false) // true when invoice has no fixed amount
   const [sendRoute, setSendRoute] = useState<'bitcoin' | 'rgb-onchain' | 'lightning' | null>(null)
   const [sendRouteHint, setSendRouteHint] = useState<string>('')
   const [sendOffchainOutbound, setSendOffchainOutbound] = useState<string>('0')
@@ -2912,34 +2913,42 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
 
         try {
           const decoded = await decodeRegtestRgbInvoice({ invoice: trimmedInput })
-          const amountValue = Number(decoded.decoded.assignment?.value || 0)
-          if (!Number.isFinite(amountValue) || amountValue <= 0) {
-            throw new Error('RGB invoice amount is missing or invalid. Use a fixed-amount invoice (not open amount).')
-          }
+          const rawAmount = decoded.decoded.assignment?.value
+          const amountValue = rawAmount != null ? Number(rawAmount) : 0
+          const isOpenAmount = !Number.isFinite(amountValue) || amountValue <= 0
 
           const assetMeta = await resolveAssetDisplayMeta(decoded.decoded.asset_id, selectedNetwork)
-          const validation = await validateRegtestSendCapacity({
-            assetId: decoded.decoded.asset_id,
-            amount: amountValue,
-            assetLabel: assetMeta.unit || assetMeta.label,
-            mode: 'rgb',
-          })
-
-          if (!validation.ok) {
-            setSendError(validation.message)
-            return
-          }
+          const assetLabel = assetMeta.unit || assetMeta.label
 
           setSendMode('rgb')
           setSendRoute('rgb-onchain')
           setSendRgbAssetId(decoded.decoded.asset_id)
-          setSendRgbAssetLabel(assetMeta.unit || assetMeta.label)
-          setSendAmount(String(amountValue))
-          setSendOffchainOutbound(String(validation.capacity.offchainOutbound))
-          setSendOffchainInbound(String(validation.capacity.offchainInbound))
-          setSendTotalSpendingPower(String(validation.capacity.totalSpendingPower))
-          setSendUserBalance(String(validation.capacity.totalSpendingPower))
-          setMaxSendableAmount(String(validation.capacity.maxSendable))
+          setSendRgbAssetLabel(assetLabel)
+          setSendRgbOpenAmount(isOpenAmount)
+
+          if (!isOpenAmount) {
+            // Fixed-amount invoice — validate capacity now
+            const validation = await validateRegtestSendCapacity({
+              assetId: decoded.decoded.asset_id,
+              amount: amountValue,
+              assetLabel,
+              mode: 'rgb',
+            })
+            if (!validation.ok) {
+              setSendError(validation.message)
+              return
+            }
+            setSendAmount(String(amountValue))
+            setSendOffchainOutbound(String(validation.capacity.offchainOutbound))
+            setSendOffchainInbound(String(validation.capacity.offchainInbound))
+            setSendTotalSpendingPower(String(validation.capacity.totalSpendingPower))
+            setSendUserBalance(String(validation.capacity.totalSpendingPower))
+            setMaxSendableAmount(String(validation.capacity.maxSendable))
+          } else {
+            // Open-amount invoice — user enters amount on next screen
+            setSendAmount('')
+          }
+
           setSendNetworkFee('TBD')
           setView('send-amount')
         } catch (error: any) {
@@ -2954,6 +2963,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
       setSendRgbAssetId('')
       setSendRgbAssetLabel('RGB Asset')
       setSendAmount('')
+      setSendRgbOpenAmount(false)
       setSendUseMax(false)
       setSendLightningMsats(0)
       setSendNetworkFee('0')
@@ -6112,15 +6122,23 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                           : `Balance: ${sendUserBalance} BTC`}
                     </span>
                   </div>
+                  {sendMode === 'rgb' && (
+                    <div className="send-invoice-badge">
+                      {sendRgbOpenAmount
+                        ? <span>📋 {sendRgbAssetLabel} invoice — enter amount below</span>
+                        : <span>📋 {sendAmount} {sendRgbAssetLabel} invoice</span>
+                      }
+                    </div>
+                  )}
                   <div className="send-amount-input-container">
                     <input
                       type="text"
                       className="send-amount-input"
                       placeholder={sendMode === 'rgb' || sendMode === 'lightning' ? '0' : '0.000000'}
                       value={sendAmount}
-                      readOnly={sendMode === 'rgb' || sendMode === 'lightning'}
+                      readOnly={(sendMode === 'rgb' && !sendRgbOpenAmount) || sendMode === 'lightning'}
                       onChange={(e) => {
-                        if (sendMode === 'rgb' || sendMode === 'lightning') {
+                        if ((sendMode === 'rgb' && !sendRgbOpenAmount) || sendMode === 'lightning') {
                           return
                         }
                         const val = e.target.value;
@@ -6128,7 +6146,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                           setSendUseMax(false)
                           const numVal = parseFloat(val);
                           const maxNum = parseFloat(maxSendableAmount);
-                          if (!isNaN(numVal) && numVal > maxNum) {
+                          if (!isNaN(numVal) && !isNaN(maxNum) && maxNum > 0 && numVal > maxNum) {
                             setSendAmount(maxSendableAmount);
                           } else {
                             setSendAmount(val);
@@ -6143,7 +6161,9 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                   </div>
                   <div className="send-helper-copy">
                     {sendMode === 'rgb'
-                      ? `Invoice amount: ${sendAmount} ${sendRgbAssetLabel} • Max sendable now: ${maxSendableAmount} ${sendRgbAssetLabel}`
+                      ? sendRgbOpenAmount
+                        ? `Open-amount invoice — enter how much to send • Max: ${maxSendableAmount} ${sendRgbAssetLabel}`
+                        : `Invoice amount: ${sendAmount} ${sendRgbAssetLabel} • Max sendable: ${maxSendableAmount} ${sendRgbAssetLabel}`
                       : sendMode === 'lightning'
                         ? `Instant route detected. Max sendable now: ${maxSendableAmount || '0'} ${sendRgbAssetLabel} • Receivable now: ${sendOffchainInbound || '0'} ${sendRgbAssetLabel}`
                         : `Maximum sendable: ${maxSendableAmount} BTC`}

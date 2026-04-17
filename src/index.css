@@ -1182,20 +1182,20 @@ body {
   margin-top: 3px;
 }
 .asset-state-badge.incoming {
-  background: rgba(80, 220, 140, 0.15);
-  color: #50dc8c;
+  background: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
 }
 .asset-state-badge.confirming {
-  background: rgba(255, 190, 80, 0.15);
-  color: #ffbe50;
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
 }
 .asset-state-badge.outbound {
-  background: rgba(100, 160, 255, 0.15);
-  color: #64a0ff;
+  background: rgba(0, 212, 170, 0.15);
+  color: #00d4aa;
 }
 .asset-state-badge.locked {
-  background: rgba(255, 100, 100, 0.15);
-  color: #ff7070;
+  background: rgba(255, 71, 87, 0.15);
+  color: #ff4757;
 }
 
 .asset-arrow {
@@ -1300,7 +1300,7 @@ body {
 }
 
 .activity-icon-circle.send {
-  background: #6366f1; /* Indigo/Blue */
+  background: #f7931a; /* PhotonBolt gold */
 }
 
 .activity-icon-circle.lightning {
@@ -1556,7 +1556,7 @@ body {
 .utxo-tag.locked {
   background: rgba(239, 68, 68, 0.12);
   border: 1px solid rgba(239, 68, 68, 0.18);
-  color: #fda4af;
+  color: #ff4757;
 }
 
 .utxo-assets-list {
@@ -2084,28 +2084,28 @@ textarea:focus {
   bottom: 0;
   margin: 0 auto;
   width: min(360px, calc(100vw - 1.5rem));
-  background: #ffffff;
+  background: #1a1a1a;
   border-radius: 22px 22px 0 0;
-  box-shadow: 0 -14px 36px rgba(0, 0, 0, 0.28);
+  box-shadow: 0 -14px 36px rgba(0, 0, 0, 0.5); border-top: 1px solid #2a2a2a;
   overflow: hidden;
 }
 
 .notice-modal-content {
   padding: 1.5rem 1.25rem 1.25rem;
-  color: #111827;
+  color: #ffffff;
   text-align: center;
 }
 
 .notice-title {
   margin: 0 0 0.75rem;
-  color: #111827;
+  color: #ffffff;
   font-size: 1.1rem;
   font-weight: 700;
 }
 
 .notice-text {
   margin: 0 0 1rem;
-  color: #4b5563;
+  color: #d1d5db;
   font-size: 0.92rem;
   line-height: 1.55;
 }
@@ -2114,7 +2114,8 @@ textarea:focus {
   margin-bottom: 1rem;
   padding: 0.9rem 1rem;
   border-radius: 14px;
-  background: #f3f4f6;
+  background: #111111;
+  border: 1px solid #2a2a2a;
   text-align: left;
 }
 
@@ -2125,7 +2126,7 @@ textarea:focus {
 }
 
 .unlock-summary-outpoint {
-  color: #111827;
+  color: #edf3f9;
   font-family: monospace;
   font-size: 0.88rem;
   word-break: break-all;
@@ -2133,7 +2134,7 @@ textarea:focus {
 
 .unlock-summary-amount {
   margin-top: 0.7rem;
-  color: #111827;
+  color: #ffffff;
   font-size: 0.9rem;
   font-weight: 600;
 }
@@ -2142,15 +2143,15 @@ textarea:focus {
   margin-bottom: 1rem;
   padding: 0.75rem 1rem;
   border-radius: 10px;
-  background: #fef2f2;
-  border: 1px solid #fecaca;
-  color: #b91c1c;
+  background: #2d1010;
+  border: 1px solid rgba(255, 71, 87, 0.25);
+  color: #ff4757;
   font-size: 0.85rem;
   text-align: left;
 }
 
 .unlock-confirm-btn {
-  background: #111827;
+  background: #f7931a;
   border: none;
   border-radius: 14px;
   box-shadow: none;
@@ -2158,7 +2159,7 @@ textarea:focus {
 }
 
 .unlock-confirm-btn:hover {
-  background: #1f2937;
+  background: #e67e00;
   transform: none;
   box-shadow: none;
 }
@@ -3312,14 +3313,14 @@ textarea:focus {
   width: 64px;
   height: 64px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #e91e63 0%, #d81b60 100%);
+  background: linear-gradient(135deg, #f7931a 0%, #e67e00 100%);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 1.75rem;
   font-weight: 700;
   color: #fff;
-  box-shadow: 0 4px 20px rgba(233, 30, 99, 0.3);
+  box-shadow: 0 4px 20px rgba(247, 147, 26, 0.3);
 }
 
 .rgb-invoice-asset-name {
@@ -3580,15 +3581,15 @@ textarea:focus {
 .token-input {
   width: 100%;
   padding: 1rem;
-  background: linear-gradient(180deg, #ffffff 0%, #fff7ed 100%);
-  border: 1px solid #d1d5db;
+  background: #1f1f1f;
+  border: 1px solid #2a2a2a;
   border-radius: 12px;
   font-size: 0.9rem;
   line-height: 1.45;
-  color: #111827;
-  caret-color: #111827;
+  color: #ffffff;
+  caret-color: #ffffff;
   margin-bottom: 1rem;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  box-shadow: none;
 }
 
 .token-input::placeholder {
@@ -3599,20 +3600,20 @@ textarea:focus {
 .token-input:focus {
   outline: none;
   border-color: #f7931a;
-  background: #ffffff;
+  background: #1f1f1f;
   box-shadow: 0 0 0 3px rgba(247, 147, 26, 0.18);
 }
 
 .token-input:hover {
-  border-color: #cbd5e1;
+  border-color: #333333;
 }
 
 .token-input:-webkit-autofill,
 .token-input:-webkit-autofill:hover,
 .token-input:-webkit-autofill:focus,
 .token-input:-webkit-autofill:active {
-  -webkit-text-fill-color: #111827;
-  box-shadow: inset 0 0 0 1000px #fff7ed;
+  -webkit-text-fill-color: #ffffff;
+  box-shadow: inset 0 0 0 1000px #1f1f1f;
   transition: background-color 9999s ease-in-out 0s;
 }
 
@@ -3630,14 +3631,14 @@ textarea:focus {
 }
 
 .token-input::-webkit-scrollbar-track {
-  background: #fff7ed;
+  background: #2a2a2a;
   border-radius: 999px;
 }
 
 .token-input::-webkit-scrollbar-thumb {
   background: linear-gradient(180deg, #f59e0b 0%, #ea580c 100%);
   border-radius: 999px;
-  border: 2px solid #fff7ed;
+  border: 2px solid #2a2a2a;
 }
 
 .token-input::-webkit-scrollbar-thumb:hover {
@@ -3645,8 +3646,8 @@ textarea:focus {
 }
 
 .token-input.issue-asset-textarea {
-  color: #111827;
-  background: linear-gradient(180deg, #ffffff 0%, #fffaf2 100%);
+  color: #ffffff;
+  background: #1f1f1f;
 }
 
 .asset-registry-row {
@@ -3710,7 +3711,7 @@ textarea:focus {
 .issue-asset-label {
   font-size: 0.85rem;
   font-weight: 600;
-  color: #374151;
+  color: #d1d5db;
 }
 
 .issue-asset-textarea {
@@ -3742,8 +3743,9 @@ textarea:focus {
   padding: 0.8rem 0.9rem;
   border-radius: 12px;
   border: 1px solid rgba(15, 23, 42, 0.08);
-  background: rgba(255, 255, 255, 0.8);
-  color: #111827;
+  background: #1f1f1f;
+  border-color: #2a2a2a;
+  color: #ffffff;
   font-size: 0.84rem;
   font-weight: 600;
 }
@@ -3783,8 +3785,8 @@ textarea:focus {
   gap: 0.2rem;
   border-radius: 12px;
   padding: 0.85rem 0.9rem;
-  background: rgba(255, 255, 255, 0.8);
-  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
 }
 
 .issue-readiness-pill span {
@@ -3794,7 +3796,7 @@ textarea:focus {
 
 .issue-readiness-pill strong {
   font-size: 0.92rem;
-  color: #111827;
+  color: #ffffff;
   word-break: break-word;
 }
 
@@ -3807,7 +3809,7 @@ textarea:focus {
   margin: 0;
   font-size: 0.84rem;
   line-height: 1.55;
-  color: #374151;
+  color: #d1d5db;
 }
 
 .issue-asset-callout {
@@ -3816,8 +3818,8 @@ textarea:focus {
   gap: 0.45rem;
   padding: 0.85rem 0.95rem;
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.84);
-  border: 1px solid rgba(234, 88, 12, 0.16);
+  background: #1a1000;
+  border: 1px solid rgba(247, 147, 26, 0.2);
 }
 
 .issue-asset-callout-secondary {
@@ -3828,7 +3830,7 @@ textarea:focus {
   margin: 0;
   font-size: 0.88rem;
   font-weight: 700;
-  color: #111827;
+  color: #ffffff;
 }
 
 .issue-asset-address {
@@ -3836,8 +3838,8 @@ textarea:focus {
   margin-top: 0.1rem;
   padding: 0.75rem 0.8rem;
   border-radius: 12px;
-  background: #111827;
-  color: #fff7ed;
+  background: #0a0a0a;
+  color: #edf3f9;
   font-family: 'DM Mono', monospace;
   font-size: 0.77rem;
   line-height: 1.5;
@@ -3849,7 +3851,7 @@ textarea:focus {
   align-items: flex-start;
   gap: 0.55rem;
   font-size: 0.85rem;
-  color: #111827;
+  color: #ffffff;
   font-weight: 600;
 }
 
@@ -3871,27 +3873,28 @@ textarea:focus {
   padding: 0.95rem 1rem;
   border-radius: 16px;
   border: 1px solid rgba(15, 23, 42, 0.08);
-  background: rgba(255, 255, 255, 0.84);
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
 }
 
 .issue-asset-status-ready {
-  border-color: rgba(22, 163, 74, 0.22);
-  background: rgba(240, 253, 244, 0.95);
+  border-color: rgba(34, 197, 94, 0.25);
+  background: #0d2a1a;
 }
 
 .issue-asset-status-progress {
-  border-color: rgba(245, 158, 11, 0.22);
-  background: rgba(255, 251, 235, 0.98);
+  border-color: rgba(245, 158, 11, 0.25);
+  background: #2d1b00;
 }
 
 .issue-asset-status-pending {
-  border-color: rgba(249, 115, 22, 0.18);
-  background: rgba(255, 247, 237, 0.98);
+  border-color: rgba(247, 147, 26, 0.2);
+  background: #1a1000;
 }
 
 .issue-asset-status-error {
-  border-color: rgba(239, 68, 68, 0.18);
-  background: rgba(254, 242, 242, 0.98);
+  border-color: rgba(255, 71, 87, 0.2);
+  background: #2d1010;
 }
 
 .issue-asset-status-neutral {
@@ -3914,8 +3917,8 @@ textarea:focus {
   font-size: 0.78rem;
   font-weight: 700;
   letter-spacing: 0.01em;
-  background: rgba(17, 24, 39, 0.08);
-  color: #111827;
+  background: rgba(255, 255, 255, 0.1);
+  color: #d1d5db;
 }
 
 .issue-asset-status-meta {
@@ -4907,6 +4910,21 @@ textarea:focus {
   margin-top: 0.5rem;
   font-size: 0.75rem;
   color: rgba(255, 255, 255, 0.5);
+}
+
+.send-invoice-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+  padding: 0.45rem 0.75rem;
+  border-radius: 999px;
+  background: rgba(247, 147, 26, 0.12);
+  border: 1px solid rgba(247, 147, 26, 0.2);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #ffb257;
+  width: 100%;
 }
 
 .send-inline-link {
