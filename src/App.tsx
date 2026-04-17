@@ -3243,10 +3243,29 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
         const feeRateMap = { slow: 0, avg: 1, fast: 2, custom: 2 }
         const feeIndex = feeRateMap[sendFeeOption as 'slow' | 'avg' | 'fast' | 'custom'] || 2
         const selectedFeeRate = Number(sendEstimatedFees[feeIndex] || 5n)
+
+        // Resolve the actual RGB contract ID. sendRgbAssetId is set when the
+        // invoice encodes a specific asset; for open-amount invoices it is empty
+        // so we fall back to the sender's stored contract map by label.
+        let resolvedAssetId = sendRgbAssetId
+        if (!resolvedAssetId) {
+          const contractsKey = getNetworkContractsKey(selectedNetwork)
+          const contractSettings = await getStorageData([contractsKey])
+          const storedContractMap = typeof contractSettings[contractsKey] === 'string'
+            ? JSON.parse(contractSettings[contractsKey] as string) as Record<string, string>
+            : {}
+          // Try label match (e.g. 'USDT' → 'rgb:...')
+          resolvedAssetId = storedContractMap[sendRgbAssetLabel] || ''
+          if (!resolvedAssetId) {
+            setSendError(`Cannot find contract ID for ${sendRgbAssetLabel}. Please refresh your wallet balance first.`)
+            return
+          }
+        }
+
         // 3-step RGB send: transfer → sign → broadcast
         const keys = await ensurePhotonKeys()
         const psbtResult = await buildTransferPsbt(keys, {
-          asset_id: sendRgbAssetId || sendRgbAssetLabel,
+          asset_id: resolvedAssetId,
           invoice: sendReceiverAddress.trim(),
           amount: Math.floor(parseFloat(sendAmount) || 0),
           fee_rate: selectedFeeRate || 3,

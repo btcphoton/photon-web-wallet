@@ -83,7 +83,12 @@ export async function buildTransferPsbt(
 ): Promise<{ psbt: string; batch_transfer_idx: number; recipient_id: string; amount: number }> {
   const body = { ...opts, min_confirmations: opts.min_confirmations ?? 1 }
   const res = await photonFetch(BASE_URL, 'POST', '/transfer', body, keys)
-  if (!res.ok) throw new Error(`Transfer failed: ${await res.text()}`)
+  if (!res.ok) {
+    const raw = await res.text()
+    let msg = raw
+    try { msg = JSON.parse(raw)?.detail ?? raw } catch { /* keep raw */ }
+    throw new Error(msg)
+  }
   return res.json()
 }
 
