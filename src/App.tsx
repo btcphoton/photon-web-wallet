@@ -3335,15 +3335,33 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
         const signedPsbt = await signPhotonPsbt(psbtResult.psbt, mnemonic)
         const broadcastResult = await broadcastTransfer(keys, signedPsbt)
         setSendTxId(broadcastResult.txid)
+
+        // Optimistic balance update — deduct sent amount immediately so the UI
+        // never shows the INITIATED-state dip. The delayed refresh below will
+        // replace this with the real settled value, which should match.
+        const sentAmount = transferOpts.amount
+        const assetsKey = getNetworkAssetsKey(selectedNetwork)
+        const updatedAssets = assets.map((a: any) => {
+          if (a.id !== sendRgbAssetLabel) return a
+          const current = Math.max(0, parseFloat(a.amount) || 0)
+          return { ...a, amount: String(Math.max(0, current - sentAmount)) }
+        })
+        setAssets(updatedAssets)
+        await setStorageData({ [assetsKey]: JSON.stringify(updatedAssets) })
+
         setView('send-success')
 
+        // Delay refresh long enough for the transfer to settle:
+        // regtest: ~8 s (1 block + rgb_lib refresh cycles)
+        // other networks: 30 s (real block time)
+        const refreshDelay = selectedNetwork === 'regtest' ? 8000 : 30000
         setTimeout(async () => {
           try {
             await handleRefreshBalance()
           } catch (refreshError) {
             console.error('Error refreshing wallet after RGB send:', refreshError)
           }
-        }, 1500)
+        }, refreshDelay)
       } catch (error: any) {
         console.error('Send RGB error:', error)
         setSendError(error.message || 'Failed to send RGB asset')
