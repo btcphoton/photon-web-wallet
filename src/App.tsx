@@ -812,6 +812,20 @@ function App() {
       })
     )
 
+    // Fetch fresh balances from the Python thin backend (same backend used for sends/receives).
+    // This is the authoritative source — the old faucet /rgb/balance endpoint tracks a
+    // different wallet state and consistently shows stale numbers after a send.
+    let photonBalanceMap: Record<string, number> = {}
+    try {
+      const keys = await ensurePhotonKeys()
+      const { assets: photonAssets } = await listAssets(keys)
+      for (const pa of photonAssets) {
+        photonBalanceMap[pa.asset_id] = pa.spendable
+      }
+    } catch (err) {
+      console.warn('[RGB Balance] Python backend unavailable, falling back to faucet balances:', err)
+    }
+
     const walletKey = await getRegtestWalletKey()
 
     const updatedAssets = await Promise.all(
@@ -821,6 +835,22 @@ function App() {
           return asset
         }
 
+        // Use Python backend balance if available
+        if (contractId in photonBalanceMap) {
+          const spendable = photonBalanceMap[contractId]
+          return {
+            ...asset,
+            amount: String(spendable),
+            rgbLockReason: undefined,
+            rgbSpendabilityStatus: undefined,
+            rgbOffchainOutbound: '0',
+            rgbOffchainInbound: '0',
+            rgbLockedUnconfirmed: '0',
+            rgbSpendingPower: String(spendable),
+          }
+        }
+
+        // Fallback: faucet /rgb/balance (non-Photon assets)
         try {
           const rgbBalance = await fetchRegtestRgbBalance({
             assetId: contractId,
@@ -3310,7 +3340,6 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
         setTimeout(async () => {
           try {
             await handleRefreshBalance()
-            await handleViewUtxos()
           } catch (refreshError) {
             console.error('Error refreshing wallet after RGB send:', refreshError)
           }
