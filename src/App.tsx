@@ -3281,12 +3281,27 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
 
         // 3-step RGB send: transfer → sign → broadcast
         const keys = await ensurePhotonKeys()
-        const psbtResult = await buildTransferPsbt(keys, {
+        const transferOpts = {
           asset_id: resolvedAssetId,
           invoice: sendReceiverAddress.trim(),
           amount: Math.floor(parseFloat(sendAmount) || 0),
           fee_rate: selectedFeeRate || 3,
-        })
+        }
+        let psbtResult = await buildTransferPsbt(keys, transferOpts)
+
+        // Backend needs an empty allocation UTXO — sign + broadcast UTXO PSBT then retry
+        if (psbtResult.status === 'need_utxo_slots' && psbtResult.utxo_psbt) {
+          const signedUtxoPsbt = await signPhotonPsbt(psbtResult.utxo_psbt, mnemonic)
+          await createUtxosEnd(keys, signedUtxoPsbt)
+          if (selectedNetwork === 'regtest') {
+            await mineRegtestBlocks(1)
+          }
+          psbtResult = await buildTransferPsbt(keys, transferOpts)
+          if (psbtResult.status === 'need_utxo_slots') {
+            throw new Error('Still no allocation slots after creating UTXOs. Please try again in a moment.')
+          }
+        }
+
         const signedPsbt = await signPhotonPsbt(psbtResult.psbt, mnemonic)
         const broadcastResult = await broadcastTransfer(keys, signedPsbt)
         setSendTxId(broadcastResult.txid)

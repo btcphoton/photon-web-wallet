@@ -76,11 +76,13 @@ export async function generateRgbInvoice(
   return res.json()
 }
 
-// Step 1: Build PSBT for RGB send
+// Step 1: Build PSBT for RGB send.
+// When status='need_utxo_slots', psbt is empty and utxo_psbt holds a PSBT
+// the caller must sign and submit via createUtxosEnd, then retry.
 export async function buildTransferPsbt(
   keys: PhotonKeys,
   opts: { asset_id: string; invoice: string; amount: number; fee_rate: number; min_confirmations?: number }
-): Promise<{ psbt: string; batch_transfer_idx: number; recipient_id: string; amount: number }> {
+): Promise<{ psbt: string; batch_transfer_idx: number; recipient_id: string; amount: number; status?: string; utxo_psbt?: string }> {
   const body = { ...opts, min_confirmations: opts.min_confirmations ?? 1 }
   const res = await photonFetch(BASE_URL, 'POST', '/transfer', body, keys)
   if (!res.ok) {
