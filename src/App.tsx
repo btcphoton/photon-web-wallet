@@ -19,7 +19,7 @@ import { LightningAnimation } from './components/LightningAnimation'
 import { StepIndicator } from './components/StepIndicator'
 import { ErrorBanner } from './components/ErrorBanner'
 import { fetchBtcActivities, type BitcoinActivity } from './utils/bitcoin-activities'
-import { generateRgbInvoice, buildTransferPsbt, broadcastTransfer, listAssets, getAssetRegistry, issueAsset, createUtxosBegin, createUtxosEnd, listPending as _listPending, registerWallet, type PhotonAsset, type PhotonRegistryAsset, type PhotonTransfer as _PhotonTransfer } from './utils/photon-api'
+import { generateRgbInvoice, buildTransferPsbt, broadcastTransfer, listAssets, getAssetBalance, getAssetRegistry, issueAsset, createUtxosBegin, createUtxosEnd, listPending as _listPending, registerWallet, type PhotonAsset, type PhotonRegistryAsset, type PhotonTransfer as _PhotonTransfer } from './utils/photon-api'
 import { derivePhotonKeys, type PhotonKeys } from './utils/photon-keys'
 import { signPhotonPsbt } from './utils/photon-psbt'
 import { PHOTON_BACKEND_URL as _PHOTON_BACKEND_URL } from './utils/backend-config'
@@ -694,15 +694,32 @@ function App() {
   }
 
   const getRegtestSendCapacity = async (assetId: string, mode: 'rgb' | 'lightning') => {
-    const walletKey = await getRegtestWalletKey()
-    const rgbBalance = await fetchRegtestRgbBalance({
-      assetId,
-      walletKey,
-    })
+    let spendable = 0
+    let offchainOutbound = 0
+    let offchainInbound = 0
 
-    const spendable = Math.max(0, Number(rgbBalance.balance.spendable || 0))
-    const offchainOutbound = Math.max(0, Number(rgbBalance.balance.offchain_outbound || 0))
-    const offchainInbound = Math.max(0, Number(rgbBalance.balance.offchain_inbound || 0))
+    if (mode === 'rgb') {
+      // For on-chain RGB sends the source of truth is the Python thin backend stash,
+      // not the faucet. Fall back to faucet if the thin-backend call fails.
+      try {
+        const keys = await ensurePhotonKeys()
+        const bal = await getAssetBalance(keys, assetId)
+        spendable = Math.max(0, Number(bal.spendable || 0))
+      } catch {
+        const walletKey = await getRegtestWalletKey()
+        const rgbBalance = await fetchRegtestRgbBalance({ assetId, walletKey })
+        spendable = Math.max(0, Number(rgbBalance.balance.spendable || 0))
+        offchainOutbound = Math.max(0, Number(rgbBalance.balance.offchain_outbound || 0))
+        offchainInbound = Math.max(0, Number(rgbBalance.balance.offchain_inbound || 0))
+      }
+    } else {
+      const walletKey = await getRegtestWalletKey()
+      const rgbBalance = await fetchRegtestRgbBalance({ assetId, walletKey })
+      spendable = Math.max(0, Number(rgbBalance.balance.spendable || 0))
+      offchainOutbound = Math.max(0, Number(rgbBalance.balance.offchain_outbound || 0))
+      offchainInbound = Math.max(0, Number(rgbBalance.balance.offchain_inbound || 0))
+    }
+
     const totalSpendingPower = spendable + offchainOutbound
 
     let channelLiquidityLimit: number | null = null
