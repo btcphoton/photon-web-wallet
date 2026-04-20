@@ -137,6 +137,29 @@ export async function listPending(
   return res.json()
 }
 
+export interface PhotonTransferRecord {
+  idx: number
+  kind: string
+  status: string
+  txid: string | null
+  recipient_id: string | null
+  asset_id: string | null
+  amount: number | null
+  requested_amount: number | null
+  created_at: number
+  updated_at: number
+}
+
+// Full transfer history (settled + pending) for one asset
+export async function listTransfers(
+  keys: PhotonKeys,
+  asset_id: string
+): Promise<{ transfers: PhotonTransferRecord[] }> {
+  const res = await photonFetch(BASE_URL, 'GET', `/transfers?asset_id=${encodeURIComponent(asset_id)}`, null, keys)
+  if (!res.ok) throw new Error(`Transfers failed: ${await res.text()}`)
+  return res.json()
+}
+
 // Issue RGB asset
 export async function issueAsset(
   keys: PhotonKeys,

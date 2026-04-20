@@ -19,7 +19,7 @@ import { LightningAnimation } from './components/LightningAnimation'
 import { StepIndicator } from './components/StepIndicator'
 import { ErrorBanner } from './components/ErrorBanner'
 import { fetchBtcActivities, type BitcoinActivity } from './utils/bitcoin-activities'
-import { generateRgbInvoice, buildTransferPsbt, broadcastTransfer, listAssets, getAssetBalance, getAssetRegistry, issueAsset, createUtxosBegin, createUtxosEnd, listPending as _listPending, registerWallet, type PhotonAsset, type PhotonRegistryAsset, type PhotonTransfer as _PhotonTransfer } from './utils/photon-api'
+import { generateRgbInvoice, buildTransferPsbt, broadcastTransfer, listAssets, getAssetBalance, getAssetRegistry, issueAsset, createUtxosBegin, createUtxosEnd, listPending as _listPending, listTransfers, registerWallet, type PhotonAsset, type PhotonRegistryAsset, type PhotonTransfer as _PhotonTransfer } from './utils/photon-api'
 import { derivePhotonKeys, type PhotonKeys } from './utils/photon-keys'
 import { signPhotonPsbt } from './utils/photon-psbt'
 import { PHOTON_BACKEND_URL as _PHOTON_BACKEND_URL } from './utils/backend-config'
@@ -1901,73 +1901,44 @@ function App() {
               ? JSON.parse(storedContractsRaw) as Record<string, string>
               : {}
 
-          const walletKey = await getRegtestWalletKey()
+          const keys = await ensurePhotonKeys()
           const rgbActivities = await Promise.all(
             Object.entries(storedContracts).map(async ([assetKey, contractId]) => {
+              if (!contractId) return []
               const assetMeta = assets.find((asset) => asset.id === assetKey)
-              if (!contractId || !assetMeta) {
-                return []
-              }
+              // Use asset unit if loaded; fall back to assetKey (ticker) so timing gaps don't drop history
+              const unit = assetMeta?.unit ?? assetKey
 
-              const response = await fetchRegtestRgbTransfers({ assetId: contractId, walletKey })
-              return response.transfers
+              const { transfers } = await listTransfers(keys, contractId)
+              return transfers
                 .filter((transfer) => {
-                  if (transfer.kind === 'Issuance') return false
-                  // WaitingCounterparty = open invoice nobody has sent to yet — not a real activity
-                  if (transfer.status === 'WaitingCounterparty') return false
-                  if (transfer.kind === 'Send' || transfer.kind?.startsWith('Receive')) return true
-                  return transfer.kind?.startsWith('Lightning') || transfer.route === 'lightning' || transfer.txid === null
+                  if (transfer.kind === 'ISSUANCE') return false
+                  // WAITING_COUNTERPARTY = open invoice nobody has sent to yet
+                  if (transfer.status === 'WAITING_COUNTERPARTY') return false
+                  return true
                 })
                 .map((transfer) => {
-                  const assignmentValue = Number(
-                    transfer.assignments?.[0]?.value ??
-                    transfer.requested_assignment?.value ??
-                    0
-                  )
+                  const assignmentValue = Number(transfer.amount ?? transfer.requested_amount ?? 0)
                   const timestamp =
-                    parseTimestampToEpochSeconds(transfer.settled_at) ??
                     parseTimestampToEpochSeconds(transfer.updated_at) ??
                     parseTimestampToEpochSeconds(transfer.created_at) ??
                     0
-                  const isReceive =
-                    transfer.direction === 'incoming' ||
-                    transfer.kind?.startsWith('Receive') ||
-                    transfer.kind === 'LightningReceive'
-                  const isInternalSameNode = transfer.route === 'internal_same_node'
-                  const isLightning =
-                    !isInternalSameNode && (
-                    transfer.kind?.startsWith('Lightning') ||
-                    transfer.route === 'lightning' ||
-                    transfer.txid === null
-                    )
-                  const paymentHash = transfer.payment_hash ?? null
+                  const isReceive = transfer.kind === 'RECEIVE_BLIND' || transfer.kind === 'RECEIVE_WITNESS'
 
                   return {
                     type: isReceive ? 'Receive' : 'Send',
                     txid: transfer.txid || null,
                     amount: assignmentValue,
-                    status: transfer.status === 'Settled' ? 'Confirmed' : transfer.status === 'WaitingConfirmations' ? 'Confirming' : 'Pending',
+                    status: transfer.status === 'SETTLED' ? 'Confirmed' : transfer.status === 'WAITING_CONFIRMATIONS' ? 'Confirming' : 'Pending',
                     transferStatus: transfer.status,
                     date: timestamp
                       ? new Date(timestamp * 1000).toLocaleDateString()
                       : 'Pending',
                     timestamp,
-                    unit: assetMeta.unit,
-                    route: isInternalSameNode ? 'internal' : isLightning ? 'lightning' : 'onchain',
-                    settlementLabel: isInternalSameNode
-                      ? 'Same-Node Transfer'
-                      : isLightning
-                        ? 'Instant Settlement'
-                        : 'On-Chain Settlement',
-                    note: isInternalSameNode
-                      ? `${isReceive ? 'Received' : 'Sent'} on same node${paymentHash
-                        ? ` • ${paymentHash.slice(0, 8)}...`
-                        : ''}`
-                      : isLightning
-                      ? `${isReceive ? 'Received' : 'Sent'} via Lightning${paymentHash
-                        ? ` • ${paymentHash.slice(0, 8)}...`
-                        : ''}`
-                      : `${isReceive ? 'Received' : 'Sent'} on-chain`,
+                    unit,
+                    route: 'onchain' as const,
+                    settlementLabel: 'On-Chain Settlement',
+                    note: `${isReceive ? 'Received' : 'Sent'} on-chain`,
                   } satisfies BitcoinActivity
                 })
             })

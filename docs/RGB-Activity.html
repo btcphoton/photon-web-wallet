@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RGB Activity — Bug Analysis & Fix Plan</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --green: #3fb950;
+      --red: #f85149;
+      --orange: #f0883e;
+      --blue: #58a6ff;
+      --yellow: #d29922;
+      --purple: #bc8cff;
+      --tag-bg: #21262d;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', monospace, sans-serif; line-height: 1.6; padding: 24px; }
+    h1 { font-size: 1.8rem; border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 24px; }
+    h2 { font-size: 1.25rem; color: var(--blue); margin: 32px 0 12px; }
+    h3 { font-size: 1rem; color: var(--orange); margin: 20px 0 8px; }
+    h4 { font-size: 0.9rem; color: var(--purple); margin: 14px 0 6px; }
+    p { margin-bottom: 10px; color: var(--text); }
+    code { background: var(--tag-bg); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; font-family: 'SFMono-Regular', Consolas, monospace; font-size: 0.85em; color: var(--orange); }
+    pre { background: var(--tag-bg); border: 1px solid var(--border); border-radius: 6px; padding: 14px 16px; overflow-x: auto; font-size: 0.82rem; margin: 10px 0 16px; line-height: 1.5; }
+    pre .comment { color: var(--muted); }
+    pre .keyword { color: var(--purple); }
+    pre .string { color: var(--green); }
+    pre .fn { color: var(--blue); }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 18px 20px; margin-bottom: 20px; }
+    .badge { display: inline-block; border-radius: 12px; padding: 2px 10px; font-size: 0.75rem; font-weight: 600; margin-right: 6px; }
+    .badge-red { background: rgba(248,81,73,0.15); color: var(--red); border: 1px solid rgba(248,81,73,0.3); }
+    .badge-green { background: rgba(63,185,80,0.15); color: var(--green); border: 1px solid rgba(63,185,80,0.3); }
+    .badge-orange { background: rgba(240,136,62,0.15); color: var(--orange); border: 1px solid rgba(240,136,62,0.3); }
+    .badge-blue { background: rgba(88,166,255,0.15); color: var(--blue); border: 1px solid rgba(88,166,255,0.3); }
+    .badge-purple { background: rgba(188,140,255,0.15); color: var(--purple); border: 1px solid rgba(188,140,255,0.3); }
+    table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 0.88rem; }
+    th { background: var(--tag-bg); border: 1px solid var(--border); padding: 8px 12px; text-align: left; color: var(--muted); font-weight: 600; }
+    td { border: 1px solid var(--border); padding: 8px 12px; vertical-align: top; }
+    td code { border: none; background: none; }
+    .flow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 10px 0; }
+    .flow-box { background: var(--tag-bg); border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px; font-size: 0.82rem; font-family: monospace; }
+    .flow-arrow { color: var(--muted); font-size: 1.1rem; }
+    .flow-box.broken { border-color: var(--red); color: var(--red); }
+    .flow-box.ok { border-color: var(--green); color: var(--green); }
+    .flow-box.warn { border-color: var(--orange); color: var(--orange); }
+    .step { counter-increment: step; display: flex; gap: 14px; margin-bottom: 14px; }
+    .step-num { flex-shrink: 0; width: 26px; height: 26px; border-radius: 50%; background: var(--blue); color: #000; font-weight: 700; font-size: 0.78rem; display: flex; align-items: center; justify-content: center; margin-top: 2px; }
+    .step-num.fix { background: var(--green); }
+    ul { padding-left: 20px; margin-bottom: 10px; }
+    li { margin-bottom: 4px; }
+    .filepath { font-family: monospace; font-size: 0.8rem; color: var(--blue); }
+    .lineref { color: var(--muted); font-size: 0.78rem; }
+    .warning-box { background: rgba(210,153,34,0.08); border: 1px solid rgba(210,153,34,0.35); border-radius: 6px; padding: 12px 16px; margin: 12px 0; }
+    .error-box { background: rgba(248,81,73,0.08); border: 1px solid rgba(248,81,73,0.3); border-radius: 6px; padding: 12px 16px; margin: 12px 0; }
+    .success-box { background: rgba(63,185,80,0.08); border: 1px solid rgba(63,185,80,0.3); border-radius: 6px; padding: 12px 16px; margin: 12px 0; }
+    hr { border: none; border-top: 1px solid var(--border); margin: 28px 0; }
+    .toc a { color: var(--blue); text-decoration: none; }
+    .toc a:hover { text-decoration: underline; }
+    .toc li { margin-bottom: 6px; }
+    .problem-header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+    .problem-number { font-size: 2rem; font-weight: 700; color: var(--red); line-height: 1; }
+  </style>
+</head>
+<body>
+
+<h1>RGB Activity — Bug Analysis &amp; Fix Plan</h1>
+<p style="color:var(--muted)">Date: 2026-04-20 &nbsp;|&nbsp; Branch: Python-Backend-Airdrop-RGB &nbsp;|&nbsp; Analyst: Claude</p>
+
+<div class="card">
+  <h3 style="margin-top:0; color:var(--text)">Table of Contents</h3>
+  <ul class="toc">
+    <li><a href="#overview">Overview — Two Separate Problems</a></li>
+    <li><a href="#problem1">Problem 1 — RGB Asset Activity Empty ("No transactions yet")</a>
+      <ul>
+        <li><a href="#p1-root">Root Causes (4 layered bugs)</a></li>
+        <li><a href="#p1-flow">Data Flow Diagram</a></li>
+        <li><a href="#p1-solution">Solution</a></li>
+      </ul>
+    </li>
+    <li><a href="#problem2">Problem 2 — Main Wallet Activities Empty ("No activities yet")</a>
+      <ul>
+        <li><a href="#p2-root">Root Causes</a></li>
+        <li><a href="#p2-solution">Solution</a></li>
+      </ul>
+    </li>
+    <li><a href="#fix-order">Recommended Fix Order</a></li>
+    <li><a href="#files">Key Files Reference</a></li>
+  </ul>
+</div>
+
+<hr id="overview"/>
+
+<h2>Overview — Two Separate Problems</h2>
+
+<p>There are <strong>two independent Activity screens</strong> that are both empty, but for <em>different reasons</em>:</p>
+
+<table>
+  <tr>
+    <th>Screen</th>
+    <th>Location in UI</th>
+    <th>Status</th>
+    <th>Root Cause Category</th>
+  </tr>
+  <tr>
+    <td><strong>RGB Asset Detail</strong><br><code>ACTIVITY</code> section under USDT</td>
+    <td>App.tsx:7441–7464</td>
+    <td><span class="badge badge-red">Broken</span></td>
+    <td>Wrong backend endpoint called; dead code path</td>
+  </tr>
+  <tr>
+    <td><strong>Main Wallet Activities Tab</strong><br>"No activities yet"</td>
+    <td>App.tsx:4646–4663</td>
+    <td><span class="badge badge-orange">Partially Broken</span></td>
+    <td>BTC query only checks one address; Esplora indexing gap</td>
+  </tr>
+</table>
+
+<hr id="problem1"/>
+
+<h2>Problem 1 — RGB Asset Activity Empty</h2>
+
+<div class="card">
+  <div class="problem-header">
+    <div class="problem-number">P1</div>
+    <div>
+      <strong>Asset detail view shows "No transactions yet" for USDT even after successful sends/receives</strong>
+      <br><span class="lineref">App.tsx:7443 — <code>activities.filter(a =&gt; a.unit === detailAsset.unit).length === 0</code></span>
+    </div>
+  </div>
+</div>
+
+<h3 id="p1-root">Root Causes (4 layered bugs)</h3>
+
+<div class="card">
+  <div class="step">
+    <div class="step-num">1</div>
+    <div>
+      <strong>CRITICAL: Wrong backend called for RGB transfers</strong>
+      <p><span class="filepath">src/utils/rgb-wallet.ts:481–503</span></p>
+      <p><code>fetchRegtestRgbTransfers()</code> calls <code>${apiBase}/rgb/transfers</code>. The <code>apiBase</code> resolves to the <strong>faucet Node.js backend</strong> (<code>https://faucet.photonbolt.xyz/api</code>), not the Python thin backend (<code>https://airdrop.photonbolt.xyz</code>).</p>
+      <div class="error-box">
+        The faucet's <code>/api/rgb/transfers</code> endpoint (faucet/server.js:4987) is the OLD custodial model. CLAUDE.md explicitly says: <em>"Do not use faucet/server.js for RGB wallet operations."</em> All RGB operations now go through the Python thin backend. The faucet has no visibility into the Python backend's wallet state.
+      </div>
+      <pre><span class="comment">// rgb-wallet.ts:485-490 — calls FAUCET, not Python thin backend</span>
+<span class="keyword">const</span> { apiBase } = <span class="keyword">await</span> <span class="fn">getRegtestRgbBackend</span>(<span class="string">'transfer lookup'</span>)
+<span class="comment">// apiBase = 'https://faucet.photonbolt.xyz/api'  ← WRONG</span>
+<span class="keyword">const</span> response = <span class="keyword">await</span> <span class="fn">fetchWithAuth</span>(`${apiBase}/rgb/transfers`, ...)</pre>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">2</div>
+    <div>
+      <strong>CRITICAL: <code>listPending()</code> in photon-api.ts is dead code — never called</strong>
+      <p><span class="filepath">src/utils/photon-api.ts:132–138</span></p>
+      <p>There IS a function that correctly calls the Python thin backend's <code>GET /pending</code> endpoint. But it is imported with an underscore alias and never used:</p>
+      <pre><span class="comment">// photon-api.ts:132</span>
+<span class="keyword">export async function</span> <span class="fn">listPending</span>(keys: PhotonKeys): Promise&lt;...&gt; {
+  <span class="keyword">const</span> res = <span class="keyword">await</span> <span class="fn">photonFetch</span>(BASE_URL, <span class="string">'GET'</span>, <span class="string">'/pending'</span>, <span class="keyword">null</span>, keys)
+  <span class="comment">// ↑ This is correct — calls airdrop.photonbolt.xyz</span>
+}
+
+<span class="comment">// App.tsx — it's imported but NEVER invoked:</span>
+<span class="keyword">import</span> { ..., listPending <span class="keyword">as</span> _listPending, ... }
+<span class="comment">// _listPending is referenced nowhere in App.tsx</span></pre>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">3</div>
+    <div>
+      <strong>SIGNIFICANT: Python backend <code>/pending</code> filters out SETTLED transfers</strong>
+      <p><span class="filepath">backend/app/routes/balance.py:118–142</span></p>
+      <p>Even if <code>listPending()</code> were called, it would only return transfers that are NOT yet settled. Completed transactions (the ones users want to see in history) are excluded:</p>
+      <pre><span class="comment"># balance.py:138</span>
+<span class="keyword">for</span> t <span class="keyword">in</span> xfers:
+    <span class="keyword">if</span> hasattr(t.status, <span class="string">"name"</span>) <span class="keyword">and</span> t.status.name == <span class="string">"SETTLED"</span>:
+        <span class="keyword">continue</span>  <span class="comment"># ← SETTLED (confirmed) transfers are SKIPPED</span>
+    transfers.append(_pending_transfer(t, asset_id=<span class="keyword">None</span>))</pre>
+      <div class="warning-box">
+        The Python backend has NO endpoint that returns the full transfer history (settled + pending) for a specific asset. This endpoint needs to be created.
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">4</div>
+    <div>
+      <strong>SECONDARY: Asset metadata timing guard can silently drop transfers</strong>
+      <p><span class="filepath">App.tsx:1907–1910</span></p>
+      <p>Even if RGB transfers are fetched correctly, they are silently dropped if the asset hasn't loaded into the <code>assets</code> state yet:</p>
+      <pre><span class="comment">// App.tsx:1906-1910</span>
+<span class="keyword">const</span> assetMeta = assets.<span class="fn">find</span>((asset) =&gt; asset.id === assetKey)
+<span class="keyword">if</span> (!contractId || !assetMeta) {
+  <span class="keyword">return</span> []  <span class="comment">// ← silent empty result if asset not loaded yet</span>
+}</pre>
+      <p>This is a timing race: if <code>loadActivities()</code> fires before <code>loadAssetsForNetwork()</code> completes, the asset won't be found and transfers will be silently dropped.</p>
+    </div>
+  </div>
+</div>
+
+<h3 id="p1-flow">Data Flow Diagram</h3>
+
+<div class="card">
+  <h4>Current (Broken) Flow</h4>
+  <div class="flow">
+    <div class="flow-box">loadActivities()</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box">fetchRegtestRgbTransfers()</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box broken">faucet.photonbolt.xyz<br>/api/rgb/transfers</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box broken">OLD custodial data<br>(empty / wrong wallet)</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box broken">activities = []</div>
+  </div>
+
+  <h4 style="margin-top:18px">Target (Fixed) Flow</h4>
+  <div class="flow">
+    <div class="flow-box">loadActivities()</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box ok">listTransfers() in photon-api.ts</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box ok">airdrop.photonbolt.xyz<br>GET /transfers?asset_id=...</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box ok">Python backend<br>wallet.list_transfers(asset_id)</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box ok">All transfers<br>(settled + pending)</div>
+  </div>
+</div>
+
+<h3 id="p1-solution">Solution — 3 Steps (fix one by one)</h3>
+
+<div class="card">
+  <div class="step">
+    <div class="step-num fix">A</div>
+    <div>
+      <strong>Step A: Add <code>GET /transfers</code> endpoint to Python backend</strong>
+      <p><span class="filepath">backend/app/routes/balance.py</span> — add new endpoint</p>
+      <p>Create a new endpoint that returns ALL transfers for a wallet (settled + pending), optionally filtered by <code>asset_id</code>:</p>
+      <pre><span class="comment"># Add to backend/app/routes/balance.py</span>
+
+<span class="keyword">class</span> TransferRecord(BaseModel):
+    idx: int
+    kind: str
+    status: str
+    txid: Optional[str] = <span class="keyword">None</span>
+    asset_id: Optional[str] = <span class="keyword">None</span>
+    amount: Optional[int] = <span class="keyword">None</span>
+    created_at: int
+    updated_at: int
+    settled_at: Optional[int] = <span class="keyword">None</span>
+
+<span class="keyword">class</span> TransfersResponse(BaseModel):
+    transfers: List[TransferRecord]
+
+@router.get(<span class="string">"/transfers"</span>, response_model=TransfersResponse)
+<span class="keyword">async def</span> <span class="fn">list_transfers</span>(
+    asset_id: Optional[str] = Query(<span class="keyword">None</span>),
+    auth: AuthContext = Depends(require_signed_request),
+) -&gt; TransfersResponse:
+    wallet, online = manager.get(auth.fingerprint)
+    <span class="keyword">try</span>:
+        wallet.refresh(online, asset_id, [], <span class="keyword">False</span>)
+    <span class="keyword">except</span> rgb_lib.RgbLibError:
+        <span class="keyword">pass</span>
+    <span class="keyword">try</span>:
+        xfers = wallet.list_transfers(asset_id)
+    <span class="keyword">except</span> rgb_lib.RgbLibError <span class="keyword">as</span> err:
+        raise HTTPException(status_code=<span class="string">500</span>, detail=str(err))
+    records = []
+    <span class="keyword">for</span> t <span class="keyword">in</span> xfers:
+        records.append(TransferRecord(
+            idx=t.idx,
+            kind=t.kind.name <span class="keyword">if</span> hasattr(t.kind, <span class="string">"name"</span>) <span class="keyword">else</span> str(t.kind),
+            status=t.status.name <span class="keyword">if</span> hasattr(t.status, <span class="string">"name"</span>) <span class="keyword">else</span> str(t.status),
+            txid=getattr(t, <span class="string">'txid'</span>, <span class="keyword">None</span>),
+            asset_id=asset_id,
+            amount=getattr(t, <span class="string">'amount'</span>, <span class="keyword">None</span>),
+            created_at=t.created_at,
+            updated_at=t.updated_at,
+            settled_at=getattr(t, <span class="string">'settled_at'</span>, <span class="keyword">None</span>),
+        ))
+    <span class="keyword">return</span> TransfersResponse(transfers=records)</pre>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num fix">B</div>
+    <div>
+      <strong>Step B: Add <code>listTransfers()</code> to <code>photon-api.ts</code></strong>
+      <p><span class="filepath">src/utils/photon-api.ts</span> — add new function</p>
+      <pre><span class="keyword">export interface</span> PhotonTransferRecord {
+  idx: number
+  kind: string
+  status: string
+  txid: string | <span class="keyword">null</span>
+  asset_id: string | <span class="keyword">null</span>
+  amount: number | <span class="keyword">null</span>
+  created_at: number
+  updated_at: number
+  settled_at: number | <span class="keyword">null</span>
+}
+
+<span class="keyword">export async function</span> <span class="fn">listTransfers</span>(
+  keys: PhotonKeys,
+  asset_id?: string
+): Promise&lt;{ transfers: PhotonTransferRecord[] }&gt; {
+  <span class="keyword">const</span> qs = asset_id ? `?asset_id=${encodeURIComponent(asset_id)}` : <span class="string">''</span>
+  <span class="keyword">const</span> res = <span class="keyword">await</span> <span class="fn">photonFetch</span>(BASE_URL, <span class="string">'GET'</span>, `/transfers${qs}`, <span class="keyword">null</span>, keys)
+  <span class="keyword">if</span> (!res.ok) <span class="keyword">throw new</span> Error(<span class="string">`Transfers failed: ${await res.text()}`</span>)
+  <span class="keyword">return</span> res.json()
+}</pre>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num fix">C</div>
+    <div>
+      <strong>Step C: Update <code>loadActivities()</code> in App.tsx to use Python backend</strong>
+      <p><span class="filepath">src/App.tsx:1894–1983</span></p>
+      <p>Replace the <code>fetchRegtestRgbTransfers()</code> call block with a call to the new <code>listTransfers()</code> per stored contract:</p>
+      <pre><span class="comment">// Replace the inner loop body (App.tsx ~1905-1972)</span>
+<span class="keyword">import</span> { listTransfers } <span class="keyword">from</span> <span class="string">'./utils/photon-api'</span>
+
+<span class="comment">// In loadActivities(), replace per-asset fetchRegtestRgbTransfers call:</span>
+<span class="keyword">const</span> keys = <span class="keyword">await</span> <span class="fn">getPhotonKeys</span>()  <span class="comment">// already done elsewhere</span>
+<span class="keyword">const</span> { transfers } = <span class="keyword">await</span> <span class="fn">listTransfers</span>(keys, contractId)
+<span class="comment">// Map transfer records to BitcoinActivity using assetMeta.unit</span>
+<span class="comment">// Same mapping logic as current code (lines 1921-1971)</span></pre>
+      <p>Also fix the timing guard: pass <code>assetMeta</code> fallback using <code>storedContracts</code> ticker if <code>assets</code> isn't loaded yet.</p>
+    </div>
+  </div>
+</div>
+
+<hr id="problem2"/>
+
+<h2>Problem 2 — Main Wallet Activities Empty</h2>
+
+<div class="card">
+  <div class="problem-header">
+    <div class="problem-number" style="color:var(--orange)">P2</div>
+    <div>
+      <strong>Main dashboard Activities tab shows "No activities yet" even though wallet has 9.52 BTC balance</strong>
+      <br><span class="lineref">App.tsx:4655 — <code>activities.length === 0</code></span>
+    </div>
+  </div>
+</div>
+
+<h3 id="p2-root">Root Causes</h3>
+
+<div class="card">
+  <div class="step">
+    <div class="step-num">1</div>
+    <div>
+      <strong>Only one address is queried for BTC transactions</strong>
+      <p><span class="filepath">src/App.tsx:1891</span> &amp; <span class="filepath">src/utils/bitcoin-activities.ts:28</span></p>
+      <p><code>fetchBtcActivities(walletAddress, ...)</code> only queries the single <code>walletAddress</code> against the Esplora API. However, the PhotonBolt wallet spreads BTC across <em>multiple addresses</em>:</p>
+      <ul>
+        <li><code>mainBalanceAddress</code> — primary receiving address</li>
+        <li><code>coloredAddress</code> — RGB-colored UTXO holder</li>
+        <li><code>utxoHolderAddress</code> — UTXO slot address</li>
+        <li><code>dustHolderAddress</code> — dust collector</li>
+      </ul>
+      <p>If BTC was received at <code>coloredAddress</code> (e.g., for RGB UTXO allocation fees), it won't appear when only <code>walletAddress</code> is queried.</p>
+      <pre><span class="comment">// bitcoin-activities.ts:28 — only one address queried</span>
+<span class="keyword">const</span> response = <span class="keyword">await</span> fetch(`${baseUrl}/address/${address}/txs`)
+<span class="comment">// ↑ Only 'walletAddress' — other wallet addresses are NOT checked</span></pre>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">2</div>
+    <div>
+      <strong>Esplora API may not index regtest addresses that receive via RPC</strong>
+      <p><span class="filepath">src/utils/backend-config.ts:152</span></p>
+      <p>For regtest, the BTC API base is <code>https://faucet.photonbolt.xyz/api</code>. This Esplora instance indexes the regtest chain. However:</p>
+      <ul>
+        <li>If the faucet sent BTC using <code>sendtoaddress</code> RPC, the tx should be indexed</li>
+        <li>If there's any Esplora sync lag, recent transactions won't appear</li>
+        <li>On regtest, unconfirmed mempool transactions may not be returned by the API</li>
+      </ul>
+      <div class="warning-box">
+        The wallet shows <strong>9.52 BTC balance</strong> — this balance comes from a different source (Electrum/backend balance check), not from Esplora. The balance being non-zero proves the wallet has funds, but Esplora may lag behind or query the wrong address set.
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">3</div>
+    <div>
+      <strong>Timing: <code>loadActivities</code> useEffect may fire before addresses are populated</strong>
+      <p><span class="filepath">App.tsx:1995–2003</span></p>
+      <pre><span class="comment">// App.tsx:1996-2003</span>
+useEffect(() =&gt; {
+  <span class="keyword">if</span> (view === <span class="string">'dashboard'</span> &amp;&amp; walletAddress) {
+    <span class="fn">loadActivities</span>()
+  }
+}, [view, walletAddress, selectedNetwork])
+<span class="comment">// 'walletAddress' is the simple wallet address — but mainBalanceAddress,
+// coloredAddress etc. are set asynchronously and may not be ready yet.</span></pre>
+      <p>The effect fires when <code>walletAddress</code> changes, but <code>mainBalanceAddress</code>, <code>coloredAddress</code>, etc. may still be empty. The <code>walletAddresses</code> set used for activity deduplication will be incomplete.</p>
+    </div>
+  </div>
+</div>
+
+<h3 id="p2-solution">Solution</h3>
+
+<div class="card">
+  <div class="step">
+    <div class="step-num fix">A</div>
+    <div>
+      <strong>Fetch activities for ALL wallet addresses and merge by txid</strong>
+      <p><span class="filepath">src/utils/bitcoin-activities.ts</span></p>
+      <p>Modify <code>fetchBtcActivities</code> to accept an array of addresses, fetch each, deduplicate by <code>txid</code>:</p>
+      <pre><span class="keyword">export const</span> <span class="fn">fetchBtcActivities</span> = <span class="keyword">async</span> (
+    addresses: string[],     <span class="comment">// ← was single string, now array</span>
+    network: WalletNetwork,
+    allWalletAddresses: string[] = []
+): Promise&lt;BitcoinActivity[]&gt; =&gt; {
+    <span class="keyword">const</span> seen = <span class="keyword">new</span> Set&lt;string&gt;()
+    <span class="keyword">const</span> all: BitcoinActivity[] = []
+    <span class="keyword">for</span> (<span class="keyword">const</span> addr <span class="keyword">of</span> addresses.filter(Boolean)) {
+        <span class="keyword">const</span> acts = <span class="keyword">await</span> <span class="fn">fetchForAddress</span>(addr, network, allWalletAddresses)
+        <span class="keyword">for</span> (<span class="keyword">const</span> a <span class="keyword">of</span> acts) {
+            <span class="keyword">if</span> (!seen.has(a.txid ?? <span class="string">''</span>)) {
+                seen.add(a.txid ?? <span class="string">''</span>)
+                all.push(a)
+            }
+        }
+    }
+    <span class="keyword">return</span> all.sort((a, b) =&gt; (b.timestamp ?? 0) - (a.timestamp ?? 0))
+}</pre>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num fix">B</div>
+    <div>
+      <strong>Pass all addresses to <code>fetchBtcActivities</code> in App.tsx</strong>
+      <p><span class="filepath">src/App.tsx:1891</span></p>
+      <pre><span class="comment">// App.tsx:1891 — current code:</span>
+<span class="keyword">const</span> btcActivities = <span class="keyword">await</span> <span class="fn">fetchBtcActivities</span>(walletAddress, selectedNetwork, walletAddresses)
+
+<span class="comment">// Replace with:</span>
+<span class="keyword">const</span> addressesToQuery = [
+    walletAddress, mainBalanceAddress, coloredAddress,
+    utxoHolderAddress, dustHolderAddress
+].filter(Boolean)
+<span class="keyword">const</span> btcActivities = <span class="keyword">await</span> <span class="fn">fetchBtcActivities</span>(addressesToQuery, selectedNetwork, walletAddresses)</pre>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num fix">C</div>
+    <div>
+      <strong>Add address dependencies to the <code>loadActivities</code> useEffect</strong>
+      <p><span class="filepath">src/App.tsx:2003</span></p>
+      <pre><span class="comment">// Current:</span>
+}, [view, walletAddress, selectedNetwork])
+
+<span class="comment">// Add stable address deps so activities reload when addresses are ready:</span>
+}, [view, walletAddress, mainBalanceAddress, coloredAddress, selectedNetwork])</pre>
+    </div>
+  </div>
+</div>
+
+<hr id="fix-order"/>
+
+<h2>Recommended Fix Order</h2>
+
+<table>
+  <tr>
+    <th>#</th>
+    <th>Fix</th>
+    <th>File(s)</th>
+    <th>Effort</th>
+    <th>Impact</th>
+  </tr>
+  <tr>
+    <td>1</td>
+    <td>Add <code>GET /transfers</code> to Python backend</td>
+    <td><code>backend/app/routes/balance.py</code></td>
+    <td><span class="badge badge-orange">Medium</span></td>
+    <td><span class="badge badge-red">High — unblocks RGB history</span></td>
+  </tr>
+  <tr>
+    <td>2</td>
+    <td>Add <code>listTransfers()</code> to photon-api.ts</td>
+    <td><code>src/utils/photon-api.ts</code></td>
+    <td><span class="badge badge-green">Small</span></td>
+    <td><span class="badge badge-red">High — required by step 3</span></td>
+  </tr>
+  <tr>
+    <td>3</td>
+    <td>Update <code>loadActivities()</code> to use Python backend</td>
+    <td><code>src/App.tsx:1894–1983</code></td>
+    <td><span class="badge badge-orange">Medium</span></td>
+    <td><span class="badge badge-red">High — RGB activity will show</span></td>
+  </tr>
+  <tr>
+    <td>4</td>
+    <td>Multi-address BTC activity fetch</td>
+    <td><code>src/utils/bitcoin-activities.ts</code>, <code>src/App.tsx:1891</code></td>
+    <td><span class="badge badge-green">Small</span></td>
+    <td><span class="badge badge-orange">Medium — BTC activity will show</span></td>
+  </tr>
+  <tr>
+    <td>5</td>
+    <td>Fix useEffect address deps</td>
+    <td><code>src/App.tsx:2003</code></td>
+    <td><span class="badge badge-green">Tiny</span></td>
+    <td><span class="badge badge-blue">Low — timing edge case</span></td>
+  </tr>
+  <tr>
+    <td>6</td>
+    <td>Fix timing guard for asset metadata</td>
+    <td><code>src/App.tsx:1907–1910</code></td>
+    <td><span class="badge badge-green">Small</span></td>
+    <td><span class="badge badge-blue">Low — secondary guard</span></td>
+  </tr>
+</table>
+
+<hr id="files"/>
+
+<h2>Key Files Reference</h2>
+
+<table>
+  <tr>
+    <th>File</th>
+    <th>Relevant Lines</th>
+    <th>Role</th>
+  </tr>
+  <tr>
+    <td><code>src/App.tsx</code></td>
+    <td>1872–1993</td>
+    <td><code>loadActivities()</code> function — orchestrates all activity loading</td>
+  </tr>
+  <tr>
+    <td><code>src/App.tsx</code></td>
+    <td>4646–4663</td>
+    <td>Main Activities tab render — shows "No activities yet"</td>
+  </tr>
+  <tr>
+    <td><code>src/App.tsx</code></td>
+    <td>7441–7464</td>
+    <td>Asset detail Activity section — shows "No transactions yet"</td>
+  </tr>
+  <tr>
+    <td><code>src/utils/photon-api.ts</code></td>
+    <td>132–138</td>
+    <td><code>listPending()</code> — dead code, calls correct backend but wrong endpoint + never called</td>
+  </tr>
+  <tr>
+    <td><code>src/utils/rgb-wallet.ts</code></td>
+    <td>481–503</td>
+    <td><code>fetchRegtestRgbTransfers()</code> — calls wrong backend (faucet not Python)</td>
+  </tr>
+  <tr>
+    <td><code>src/utils/bitcoin-activities.ts</code></td>
+    <td>20–85</td>
+    <td><code>fetchBtcActivities()</code> — queries only one address</td>
+  </tr>
+  <tr>
+    <td><code>src/utils/backend-config.ts</code></td>
+    <td>49–57, 118</td>
+    <td><code>PHOTON_REGTEST_API_BASE</code> = faucet URL; default mode = 'faucet'</td>
+  </tr>
+  <tr>
+    <td><code>backend/app/routes/balance.py</code></td>
+    <td>118–142</td>
+    <td>Python <code>GET /pending</code> — exists but filters out settled; no <code>GET /transfers</code> yet</td>
+  </tr>
+  <tr>
+    <td><code>backend/app/models.py</code></td>
+    <td>95–111</td>
+    <td><code>PendingTransfer</code> model — reusable base for new TransferRecord model</td>
+  </tr>
+  <tr>
+    <td><code>faucet/server.js</code></td>
+    <td>4987</td>
+    <td>Old <code>POST /api/rgb/transfers</code> — NOT to be used for RGB wallet operations</td>
+  </tr>
+</table>
+
+<div class="success-box" style="margin-top:24px">
+  <strong>Summary:</strong> Problem 1 (RGB activity) requires backend + frontend changes — add a <code>GET /transfers</code> endpoint to the Python backend and wire it up in App.tsx, replacing the call to the faucet backend. Problem 2 (BTC activity) only requires frontend changes — query all wallet addresses and deduplicate by txid.
+</div>
+
+</body>
+</html>
