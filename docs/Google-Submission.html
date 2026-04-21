@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Photon Bolt Wallet — Chrome Web Store Submission Checklist</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: #0d0d0d;
+      color: #e8e8e8;
+      line-height: 1.6;
+      padding: 2rem 1rem 4rem;
+    }
+
+    .page {
+      max-width: 860px;
+      margin: 0 auto;
+    }
+
+    /* Header */
+    .header {
+      border-bottom: 1px solid #222;
+      padding-bottom: 1.5rem;
+      margin-bottom: 2.5rem;
+    }
+    .header h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: #f7931a;
+      margin-bottom: 0.4rem;
+    }
+    .header .meta {
+      font-size: 0.85rem;
+      color: #666;
+    }
+    .header .subtitle {
+      font-size: 1rem;
+      color: #aaa;
+      margin-top: 0.5rem;
+    }
+
+    /* Score banner */
+    .score-banner {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin-bottom: 2.5rem;
+    }
+    .score-card {
+      flex: 1;
+      min-width: 160px;
+      border-radius: 10px;
+      padding: 1.1rem 1.25rem;
+      border: 1px solid;
+    }
+    .score-card .label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 600;
+      margin-bottom: 0.3rem;
+    }
+    .score-card .value {
+      font-size: 1.8rem;
+      font-weight: 700;
+    }
+    .score-card.pass  { background: rgba(34,197,94,0.08);  border-color: rgba(34,197,94,0.25);  color: #22c55e; }
+    .score-card.warn  { background: rgba(245,158,11,0.08); border-color: rgba(245,158,11,0.25); color: #f59e0b; }
+    .score-card.info  { background: rgba(96,165,250,0.08); border-color: rgba(96,165,250,0.25); color: #60a5fa; }
+
+    /* Section */
+    .section {
+      margin-bottom: 2.5rem;
+    }
+    .section-title {
+      font-size: 1rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      margin-bottom: 1rem;
+      padding-bottom: 0.4rem;
+      border-bottom: 1px solid #222;
+    }
+    .section-title.green  { color: #22c55e; border-color: rgba(34,197,94,0.2); }
+    .section-title.yellow { color: #f59e0b; border-color: rgba(245,158,11,0.2); }
+    .section-title.blue   { color: #60a5fa; border-color: rgba(96,165,250,0.2); }
+
+    /* Item cards */
+    .item {
+      border-radius: 8px;
+      border: 1px solid #222;
+      background: #111;
+      padding: 1rem 1.25rem;
+      margin-bottom: 0.75rem;
+    }
+    .item-header {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+      margin-bottom: 0.5rem;
+    }
+    .badge {
+      flex-shrink: 0;
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 0.2rem 0.55rem;
+      border-radius: 4px;
+      margin-top: 2px;
+    }
+    .badge.pass    { background: rgba(34,197,94,0.15);  color: #22c55e; }
+    .badge.warn    { background: rgba(245,158,11,0.15); color: #f59e0b; }
+    .badge.info    { background: rgba(96,165,250,0.15); color: #60a5fa; }
+    .badge.action  { background: rgba(247,147,26,0.15); color: #f7931a; }
+
+    .item-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #fff;
+    }
+    .item-body {
+      font-size: 0.875rem;
+      color: #aaa;
+      padding-left: 0;
+    }
+    .item-body p { margin-top: 0.35rem; }
+
+    code {
+      font-family: 'Cascadia Code', 'Fira Code', monospace;
+      font-size: 0.8rem;
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 4px;
+      padding: 0.1rem 0.4rem;
+      color: #f7931a;
+    }
+
+    pre {
+      background: #161616;
+      border: 1px solid #2a2a2a;
+      border-radius: 6px;
+      padding: 0.85rem 1rem;
+      overflow-x: auto;
+      margin-top: 0.6rem;
+      font-size: 0.8rem;
+      color: #ccc;
+      font-family: 'Cascadia Code', 'Fira Code', monospace;
+      line-height: 1.5;
+    }
+
+    .file-ref {
+      font-size: 0.78rem;
+      color: #555;
+      margin-top: 0.4rem;
+      font-family: monospace;
+    }
+
+    /* Summary table */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+      margin-top: 0.5rem;
+    }
+    th {
+      text-align: left;
+      padding: 0.55rem 0.75rem;
+      background: #161616;
+      color: #888;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-bottom: 1px solid #222;
+    }
+    td {
+      padding: 0.6rem 0.75rem;
+      border-bottom: 1px solid #1a1a1a;
+      vertical-align: top;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #131313; }
+
+    .status-pass    { color: #22c55e; font-weight: 600; }
+    .status-warn    { color: #f59e0b; font-weight: 600; }
+    .status-info    { color: #60a5fa; font-weight: 600; }
+    .status-action  { color: #f7931a; font-weight: 600; }
+
+    /* Submission tips */
+    .tip-box {
+      background: #111;
+      border: 1px solid #1f1f1f;
+      border-left: 3px solid #f7931a;
+      border-radius: 6px;
+      padding: 1rem 1.25rem;
+      margin-bottom: 0.75rem;
+      font-size: 0.875rem;
+      color: #bbb;
+    }
+    .tip-box strong { color: #f7931a; }
+
+    footer {
+      margin-top: 3rem;
+      padding-top: 1rem;
+      border-top: 1px solid #1a1a1a;
+      font-size: 0.78rem;
+      color: #444;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <!-- Header -->
+  <div class="header">
+    <h1>Photon Bolt Wallet</h1>
+    <div class="subtitle">Chrome Web Store Submission Checklist</div>
+    <div class="meta">Audited: 2026-04-21 &nbsp;·&nbsp; Branch: Python-Backend-Airdrop-RGB &nbsp;·&nbsp; Manifest v3</div>
+  </div>
+
+  <!-- Score banner -->
+  <div class="score-banner">
+    <div class="score-card pass">
+      <div class="label">Passing</div>
+      <div class="value">9</div>
+    </div>
+    <div class="score-card warn">
+      <div class="label">Should Fix</div>
+      <div class="value">3</div>
+    </div>
+    <div class="score-card info">
+      <div class="label">Blocking</div>
+      <div class="value">0</div>
+    </div>
+  </div>
+
+  <!-- SHOULD FIX -->
+  <div class="section">
+    <div class="section-title yellow">Should Fix Before Submission</div>
+
+    <div class="item">
+      <div class="item-header">
+        <span class="badge action">Action</span>
+        <span class="item-title">All three icon slots point to the same 128×128 PNG</span>
+      </div>
+      <div class="item-body">
+        <p>Manifest declares sizes 16, 48, and 128 but all reference <code>logo.png</code> (128×128). Chrome scales it down, causing blurry toolbar and extension-page icons.</p>
+        <p class="file-ref">manifest.json : lines 41–44</p>
+        <pre>"icons": {
+  "16": "logo-16.png",
+  "48": "logo-48.png",
+  "128": "logo.png"
+}</pre>
+        <p>Create <code>logo-16.png</code> (16×16) and <code>logo-48.png</code> (48×48) in <code>public/</code> from the master logo asset, then update manifest.</p>
+      </div>
+    </div>
+
+    <div class="item">
+      <div class="item-header">
+        <span class="badge action">Action</span>
+        <span class="item-title">137+ console.log statements in production bundle</span>
+      </div>
+      <div class="item-body">
+        <p>Reviewers inspect the packaged source. A large number of debug logs signals unfinished work and can reveal internal logic / key-handling flows to attackers who inspect the extension.</p>
+        <p class="file-ref">src/App.tsx (137), src/utils/bitcoin-transactions.ts (17), src/utils/rgb.ts (11), and others</p>
+        <p>Strip all logs at build time by adding one option to <code>vite.config.ts</code>:</p>
+        <pre>build: {
+  minify: 'terser',
+  terserOptions: {
+    compress: {
+      drop_console: true,
+      drop_debugger: true,
+    }
+  }
+}</pre>
+      </div>
+    </div>
+
+    <div class="item">
+      <div class="item-header">
+        <span class="badge warn">Required at Submission</span>
+        <span class="item-title">Privacy policy must be hosted before submitting</span>
+      </div>
+      <div class="item-body">
+        <p>The extension stores sensitive data via <code>chrome.storage</code> (mnemonic, wallet addresses, keys). Chrome Web Store requires a publicly accessible privacy policy URL for any extension that handles personal or financial data.</p>
+        <p>Privacy policy is not declared in <code>manifest.json</code> — it is entered in the Developer Dashboard during submission. You must host it at an HTTPS URL before submitting.</p>
+        <p>Suggested URL: <code>https://photonbolt.xyz/privacy</code></p>
+        <p>Minimum required content: what data is stored, how it is used, whether it leaves the device, how users can delete it.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- PASSES -->
+  <div class="section">
+    <div class="section-title green">Passing Checks</div>
+
+    <div class="item">
+      <div class="item-header">
+        <span class="badge pass">Pass</span>
+        <span class="item-title">Manifest Version 3</span>
+      </div>
+      <div class="item-body">
+        <p><code>"manifest_version": 3</code> — required for all new Chrome Store submissions. MV2 is no longer accepted.</p>
+      </div>
+    </div>
+
+    <div class="item">
+      <div class="item-header">
+        <span class="badge pass">Pass</span>
+        <span class="item-title">Background service worker (not background page)</span>
+      </div>
+      <div class="item-body">
+        <p>Background is declared as a <code>service_worker</code> with <code>"type": "module"</code> — correct for MV3. The deprecated <code>background.scripts</code> / persistent background page is not used.</p>
+        <p class="file-ref">manifest.json : lines 16–19 · src/extension/background.ts</p>
+      </div>
+    </div>
+
+    <div class="item">
+      <div class="item-header">
+        <span class="badge pass">Pass</span>
+        <span class="item-title">Content Security Policy — no unsafe-eval</span>
+      </div>
+      <div class="item-body">
+        <p>CSP is <code>script-src 'self' 'wasm-unsafe-eval'; object-src 'self'</code>. <code>wasm-unsafe-eval</code> is explicitly permitted by Chrome's MV3 policy for extensions that require WebAssembly (rgb-lib WASM). <code>unsafe-eval</code> and <code>unsafe-inline</code> are absent — this is correct.</p>
+        <p class="file-ref">manifest.json : line 47</p>
+      </div>
+    </div>
+
+    <div class="item">
+      <div class="item-header">
+        <span class="badge pass">Pass</span>
+        <span class="item-title">&lt;all_urls&gt; host permission — justified for Web3 wallets</span>
+      </div>
+      <div class="item-body">
+        <p><code>&lt;all_urls&gt;</code> in <code>host_permissions</code>, <code>content_scripts.matches</code>, and <code>web_accessible_resources.matches</code> is standard practice for all Web3 wallet extensions (MetaMask, Phantom, Uniswap Wallet) because <code>provider.js</code> must be injectable into any dApp the user visits. Chrome Store approves this with the justification below.</p>
+        <p><strong>Required submission justification:</strong> <em>"The extension injects a Bitcoin/RGB provider script into web pages so that decentralised applications can request wallet signatures and transaction data. This requires matching all URLs because dApps can be hosted on any domain."</em></p>
+        <p class="file-ref">manifest.json : lines 9–38</p>
+      </div>
+    </div>
+
+    <div class="item">
+      <div class="item-header">
+        <span class="badge pass">Pass</span>
+        <span class="item-title">Minimal declared permissions</span>
+      </div>
+      <div class="item-body">
+        <p>Only <code>"storage"</code> is declared under <code>permissions</code>. No <code>tabs</code>, <code>history</code>, <code>bookmarks</code>, <code>cookies</code>, or other sensitive APIs.</p>
+        <p class="file-ref">manifest.json : lines 6–8</p>
+      </div>
+    </div>
+
+    <div class="item">
+      <div class="item-header">
+        <span class="badge pass">Pass</span>
+        <span class="item-title">No eval / new Function / remote code execution</span>
+      </div>
+      <div class="item-body">
+        <p>No <code>eval()</code>, <code>new Function()</code>, or dynamic <code>&lt;script src="..."&gt;</code> loading from external URLs found anywhere in the extension source. <code>approval.html</code> uses a proper <code>escapeHtml()</code> sanitiser before writing to DOM.</p>
+      </div>
+    </div>
+
+    <div class="item">
+      <div class="item-header">
+        <span class="badge pass">Pass</span>
+        <span class="item-title">approval.html exists and is correctly referenced</span>
+      </div>
+      <div class="item-body">
+        <p><code>public/approval.html</code> is present and referenced via <code>chrome.runtime.getURL('approval.html?id=...')</code> in the background service worker. The popup opens at 360×640px.</p>
+        <p class="file-ref">src/extension/background.ts : lines 585–592</p>
+      </div>
+    </div>
+
+    <div class="item">
+      <div class="item-header">
+        <span class="badge pass">Pass</span>
+        <span class="item-title">Vite build outputs correct dist/ structure</span>
+      </div>
+      <div class="item-body">
+        <p>Build produces <code>dist/index.html</code> (popup), <code>dist/background.js</code> (service worker), <code>dist/content.js</code>, and <code>dist/provider.js</code> alongside copied manifest and assets — all at the paths manifest.json expects.</p>
+        <p class="file-ref">vite.config.ts</p>
+      </div>
+    </div>
+
+    <div class="item">
+      <div class="item-header">
+        <span class="badge pass">Pass</span>
+        <span class="item-title">No hardcoded localhost / 127.0.0.1 in production paths</span>
+      </div>
+      <div class="item-body">
+        <p>All RGB backend calls resolve through <code>https://airdrop.photonbolt.xyz</code>. No development URLs are embedded in the production bundle paths.</p>
+        <p class="file-ref">src/utils/photon-api.ts</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Summary table -->
+  <div class="section">
+    <div class="section-title blue">Summary Table</div>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Check</th>
+          <th>Status</th>
+          <th>File</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1</td>
+          <td>Icon sizes (16px, 48px, 128px separate files)</td>
+          <td class="status-action">Fix</td>
+          <td><code>public/manifest.json:41-44</code></td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td>Strip console.log at build (terser drop_console)</td>
+          <td class="status-action">Fix</td>
+          <td><code>vite.config.ts</code></td>
+        </tr>
+        <tr>
+          <td>3</td>
+          <td>Privacy policy URL (hosted before submission)</td>
+          <td class="status-warn">Required at submit</td>
+          <td>Developer Dashboard</td>
+        </tr>
+        <tr>
+          <td>4</td>
+          <td>Manifest version 3</td>
+          <td class="status-pass">Pass</td>
+          <td><code>manifest.json:2</code></td>
+        </tr>
+        <tr>
+          <td>5</td>
+          <td>Background service worker</td>
+          <td class="status-pass">Pass</td>
+          <td><code>manifest.json:16-19</code></td>
+        </tr>
+        <tr>
+          <td>6</td>
+          <td>CSP — no unsafe-eval / unsafe-inline</td>
+          <td class="status-pass">Pass</td>
+          <td><code>manifest.json:47</code></td>
+        </tr>
+        <tr>
+          <td>7</td>
+          <td>&lt;all_urls&gt; host permission (justified)</td>
+          <td class="status-pass">Pass</td>
+          <td><code>manifest.json:9-38</code></td>
+        </tr>
+        <tr>
+          <td>8</td>
+          <td>Minimal permissions (storage only)</td>
+          <td class="status-pass">Pass</td>
+          <td><code>manifest.json:6-8</code></td>
+        </tr>
+        <tr>
+          <td>9</td>
+          <td>No eval / new Function / remote scripts</td>
+          <td class="status-pass">Pass</td>
+          <td>All source files</td>
+        </tr>
+        <tr>
+          <td>10</td>
+          <td>approval.html exists and referenced correctly</td>
+          <td class="status-pass">Pass</td>
+          <td><code>public/approval.html</code></td>
+        </tr>
+        <tr>
+          <td>11</td>
+          <td>Build dist/ structure matches manifest paths</td>
+          <td class="status-pass">Pass</td>
+          <td><code>vite.config.ts</code></td>
+        </tr>
+        <tr>
+          <td>12</td>
+          <td>No hardcoded localhost in production</td>
+          <td class="status-pass">Pass</td>
+          <td><code>photon-api.ts</code></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Submission tips -->
+  <div class="section">
+    <div class="section-title blue">Submission Tips</div>
+
+    <div class="tip-box">
+      <strong>Justification for &lt;all_urls&gt;</strong><br>
+      In the "Permissions justification" field of the Developer Dashboard, paste:<br><br>
+      <em>"This Bitcoin/RGB wallet extension injects a provider script (provider.js) into web pages so that decentralised applications hosted on any domain can request wallet addresses, sign transactions, and query balances. This requires content script injection on all URLs, as is standard for Web3 wallet extensions."</em>
+    </div>
+
+    <div class="tip-box">
+      <strong>Store listing description tip</strong><br>
+      Mention WASM explicitly: <em>"Uses WebAssembly (rgb-lib) for client-side RGB asset management — no private keys are ever sent to a server."</em> This pre-empts reviewer questions about <code>wasm-unsafe-eval</code>.
+    </div>
+
+    <div class="tip-box">
+      <strong>Version bump before submission</strong><br>
+      Update <code>"version"</code> in <code>manifest.json</code> from <code>"1.0.0"</code> to the release version. Chrome Store rejects a new upload with the same version number as a previously submitted package.
+    </div>
+
+    <div class="tip-box">
+      <strong>Package correctly</strong><br>
+      Zip the contents of <code>dist/</code> — not the <code>dist/</code> folder itself. The <code>manifest.json</code> must be at the root of the zip file, not inside a subdirectory.
+      <pre>cd dist && zip -r ../photon-bolt-wallet.zip .</pre>
+    </div>
+  </div>
+
+  <footer>
+    Photon Bolt Wallet · Chrome Web Store Audit · 2026-04-21
+  </footer>
+
+</div>
+</body>
+</html>
