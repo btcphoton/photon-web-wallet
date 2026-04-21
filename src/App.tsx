@@ -1936,6 +1936,7 @@ function App() {
                       : 'Pending',
                     timestamp,
                     unit,
+                    assetId: contractId,
                     route: 'onchain' as const,
                     settlementLabel: 'On-Chain Settlement',
                     note: `${isReceive ? 'Received' : 'Sent'} on-chain`,
@@ -7411,10 +7412,10 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
 
           <div className="asset-detail-activity">
             <div className="asset-detail-activity-title">Activity</div>
-            {activities.filter(a => a.unit === detailAsset.unit).length === 0 ? (
+            {activities.filter(a => a.assetId === detailAsset.id || a.unit === detailAsset.unit).length === 0 ? (
               <div className="asset-detail-empty">No transactions yet</div>
             ) : (
-              activities.filter(a => a.unit === detailAsset.unit).map((activity, i) => (
+              activities.filter(a => a.assetId === detailAsset.id || a.unit === detailAsset.unit).map((activity, i) => (
                 <div key={i} className="asset-detail-tx">
                   <div className={`asset-detail-tx-icon ${activity.type === 'Send' ? 'send' : 'receive'}`}>
                     {activity.type === 'Send' ? '↑' : '↓'}
