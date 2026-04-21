@@ -586,7 +586,7 @@ function requestApproval(requestData: ApprovalRequest): Promise<ApprovalResult> 
       {
         url: chrome.runtime.getURL(`approval.html?id=${approvalId}`),
         type: 'popup',
-        width: 420,
+        width: 360,
         height: 640,
         focused: true,
       },
