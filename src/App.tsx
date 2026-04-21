@@ -1893,27 +1893,52 @@ function App() {
 
       if (selectedNetwork === 'regtest') {
         try {
+          const keys = await ensurePhotonKeys()
+
+          // Pull authoritative asset list directly from the rgb-lib stash so that
+          // airdrop wallets (which never went through the local issue/receive UI
+          // flow) still see their full transfer history.
+          const { assets: backendAssets } = await listAssets(keys)
+
+          // Build a contractId → ticker map from the backend response.
+          const backendContractMap: Record<string, string> = {}
+          for (const a of backendAssets) {
+            backendContractMap[a.asset_id] = a.ticker
+          }
+
+          // Also read whatever the browser storage contract map has, in case it
+          // holds a ticker override or an asset not yet returned by listAssets.
           const contractsKey = getNetworkContractsKey(selectedNetwork)
           const contractsResult = await getStorageData([contractsKey])
           const storedContractsRaw = contractsResult[contractsKey]
-          const storedContracts =
+          const storedContracts: Record<string, string> =
             typeof storedContractsRaw === 'string'
               ? JSON.parse(storedContractsRaw) as Record<string, string>
               : {}
 
-          const keys = await ensurePhotonKeys()
+          // Merge: backend is authoritative for contract IDs; stored map fills
+          // in any ticker labels not yet present from the backend.
+          // storedContracts maps assetKey(ticker) → contractId; invert it.
+          const storedContractIdToTicker: Record<string, string> = {}
+          for (const [ticker, contractId] of Object.entries(storedContracts)) {
+            if (contractId) storedContractIdToTicker[contractId] = ticker
+          }
+
+          // Final map: contractId → display ticker
+          const contractIdToTicker: Record<string, string> = {
+            ...storedContractIdToTicker,
+            ...backendContractMap, // backend wins
+          }
+
           const rgbActivities = await Promise.all(
-            Object.entries(storedContracts).map(async ([assetKey, contractId]) => {
-              if (!contractId) return []
-              const assetMeta = assets.find((asset) => asset.id === assetKey)
-              // Use asset unit if loaded; fall back to assetKey (ticker) so timing gaps don't drop history
-              const unit = assetMeta?.unit ?? assetKey
+            Object.entries(contractIdToTicker).map(async ([contractId, ticker]) => {
+              const assetMeta = assets.find((a) => a.id === contractId || a.unit === ticker)
+              const unit = assetMeta?.unit ?? ticker
 
               const { transfers } = await listTransfers(keys, contractId)
               return transfers
                 .filter((transfer) => {
                   if (transfer.kind === 'ISSUANCE') return false
-                  // WAITING_COUNTERPARTY = open invoice nobody has sent to yet
                   if (transfer.status === 'WAITING_COUNTERPARTY') return false
                   return true
                 })
