@@ -23,12 +23,11 @@ import { generateRgbInvoice, buildTransferPsbt, broadcastTransfer, listAssets, g
 import { derivePhotonKeys, type PhotonKeys } from './utils/photon-keys'
 import { signPhotonPsbt } from './utils/photon-psbt'
 import { PHOTON_BACKEND_URL as _PHOTON_BACKEND_URL } from './utils/backend-config'
-import { PhotonBolt20 } from './PhotonBolt20'
 
 // Suppress unused import warnings for photon types used in type positions only
 void (null as unknown as PhotonRegistryAsset)
 
-type View = 'welcome' | 'unlock' | 'lock' | 'forgot' | 'create' | 'verify' | 'password' | 'restore' | 'dashboard' | 'receive' | 'receive-btc' | 'receive-rgb' | 'add-assets' | 'issue-asset' | 'settings' | 'user-settings' | 'auto-lock-settings' | 'network-settings' | 'send' | 'send-amount' | 'send-confirm' | 'send-success' | 'utxos' | 'create-rgb-utxo' | 'create-utxo-confirm' | 'unlock-rgb-utxo' | 'unlock-utxo-confirm' | 'utxo-action-success' | 'faucet' | 'error-logs' | 'funding-address' | 'asset-detail' | 'photonbolt20' | 'backup-mnemonic'
+type View = 'welcome' | 'unlock' | 'lock' | 'forgot' | 'create' | 'verify' | 'password' | 'restore' | 'dashboard' | 'receive' | 'receive-btc' | 'receive-rgb' | 'add-assets' | 'issue-asset' | 'settings' | 'user-settings' | 'auto-lock-settings' | 'network-settings' | 'send' | 'send-amount' | 'send-confirm' | 'send-success' | 'utxos' | 'create-rgb-utxo' | 'create-utxo-confirm' | 'unlock-rgb-utxo' | 'unlock-utxo-confirm' | 'utxo-action-success' | 'faucet' | 'error-logs' | 'funding-address' | 'asset-detail' | 'backup-mnemonic'
 type Tab = 'assets' | 'activities'
 type Network = 'mainnet' | 'testnet3' | 'testnet4' | 'regtest'
 
@@ -4485,11 +4484,6 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                   <span className="menu-arrow">›</span>
                 </button>
               )}
-              <button className="menu-item" type="button" onClick={() => navigateFromMenu('photonbolt20')}>
-                <span className="menu-icon">⚡</span>
-                <span>PhotonBolt 2.0</span>
-                <span className="menu-arrow">›</span>
-              </button>
               <div className="menu-divider"></div>
               <div className="menu-item" onClick={handleLock}>
                 <span className="menu-icon">🔒</span>
@@ -7553,10 +7547,6 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
             )}
           </div>
         </div>
-      )}
-
-      {view === 'photonbolt20' && (
-        <PhotonBolt20 onBack={() => setView('dashboard')} />
       )}
 
       {view === 'backup-mnemonic' && (
