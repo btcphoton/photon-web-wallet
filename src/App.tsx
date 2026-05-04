@@ -23,11 +23,12 @@ import { generateRgbInvoice, buildTransferPsbt, broadcastTransfer, listAssets, g
 import { derivePhotonKeys, type PhotonKeys } from './utils/photon-keys'
 import { signPhotonPsbt } from './utils/photon-psbt'
 import { PHOTON_BACKEND_URL as _PHOTON_BACKEND_URL } from './utils/backend-config'
+import { PhotonBolt20 } from './PhotonBolt20'
 
 // Suppress unused import warnings for photon types used in type positions only
 void (null as unknown as PhotonRegistryAsset)
 
-type View = 'welcome' | 'unlock' | 'lock' | 'forgot' | 'create' | 'verify' | 'password' | 'restore' | 'dashboard' | 'receive' | 'receive-btc' | 'receive-rgb' | 'add-assets' | 'issue-asset' | 'settings' | 'user-settings' | 'auto-lock-settings' | 'network-settings' | 'send' | 'send-amount' | 'send-confirm' | 'send-success' | 'utxos' | 'create-rgb-utxo' | 'create-utxo-confirm' | 'unlock-rgb-utxo' | 'unlock-utxo-confirm' | 'utxo-action-success' | 'faucet' | 'error-logs' | 'funding-address' | 'asset-detail'
+type View = 'welcome' | 'unlock' | 'lock' | 'forgot' | 'create' | 'verify' | 'password' | 'restore' | 'dashboard' | 'receive' | 'receive-btc' | 'receive-rgb' | 'add-assets' | 'issue-asset' | 'settings' | 'user-settings' | 'auto-lock-settings' | 'network-settings' | 'send' | 'send-amount' | 'send-confirm' | 'send-success' | 'utxos' | 'create-rgb-utxo' | 'create-utxo-confirm' | 'unlock-rgb-utxo' | 'unlock-utxo-confirm' | 'utxo-action-success' | 'faucet' | 'error-logs' | 'funding-address' | 'asset-detail' | 'photonbolt20' | 'backup-mnemonic'
 type Tab = 'assets' | 'activities'
 type Network = 'mainnet' | 'testnet3' | 'testnet4' | 'regtest'
 
@@ -354,6 +355,7 @@ function App() {
   const [sendUserBalance, setSendUserBalance] = useState<string>('0.00000000')
   const [sendEstimatedFees, setSendEstimatedFees] = useState<bigint[]>([2n, 3n, 5n]) // Default: [slow, avg, fast]
   const [sendLoadingFees, setSendLoadingFees] = useState<boolean>(false)
+  const [sendFeeLoadFailed, setSendFeeLoadFailed] = useState<boolean>(false)
   const [sendNetworkFee, setSendNetworkFee] = useState<string>('0')
   const [sendTxId, setSendTxId] = useState<string>('')
   const [utxoActionTxId, setUtxoActionTxId] = useState<string>('')
@@ -2827,23 +2829,30 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
 
         // Fetch estimated fees from mempool.space
         setSendLoadingFees(true)
+        setSendFeeLoadFailed(false)
         try {
           const fees = await fetchLiveFees(selectedNetwork)
           // Map to the array format [slow, average, fast]
           const feeArray = [BigInt(fees.slow), BigInt(fees.average), BigInt(fees.fast)]
           setSendEstimatedFees(feeArray)
-          console.log('Live fees from mempool:', fees)
+          setSendFeeLoadFailed(false)
         } catch (error) {
           console.error('Error fetching live fees:', error)
           // Fallback to canister if mempool fails
+          let canisterSucceeded = false
           if (mnemonic) {
             try {
               const canisterNetwork = mapNetworkToCanister(selectedNetwork)
               const fees = await getEstimatedBitcoinFees(mnemonic, canisterNetwork)
               setSendEstimatedFees(fees)
+              canisterSucceeded = true
+              setSendFeeLoadFailed(false)
             } catch (e) {
               console.error('Canister fee fetch also failed:', e)
             }
+          }
+          if (!canisterSucceeded) {
+            setSendFeeLoadFailed(true)
           }
         } finally {
           setSendLoadingFees(false)
@@ -3500,18 +3509,28 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
 
   // Refresh fee estimates
   const handleRefreshFees = async () => {
-    if (!mnemonic) return
-
     setSendLoadingFees(true)
+    setSendFeeLoadFailed(false)
+    let succeeded = false
     try {
-      const canisterNetwork = mapNetworkToCanister(selectedNetwork)
-      const fees = await getEstimatedBitcoinFees(mnemonic, canisterNetwork)
-      setSendEstimatedFees(fees)
-      console.log('Refreshed estimated fees:', fees)
+      const fees = await fetchLiveFees(selectedNetwork)
+      setSendEstimatedFees([BigInt(fees.slow), BigInt(fees.average), BigInt(fees.fast)])
+      succeeded = true
     } catch (error) {
-      console.error('Error refreshing fees:', error)
+      console.error('Error fetching live fees on refresh:', error)
+      if (mnemonic) {
+        try {
+          const canisterNetwork = mapNetworkToCanister(selectedNetwork)
+          const fees = await getEstimatedBitcoinFees(mnemonic, canisterNetwork)
+          setSendEstimatedFees(fees)
+          succeeded = true
+        } catch (e) {
+          console.error('Canister fee refresh also failed:', e)
+        }
+      }
     } finally {
       setSendLoadingFees(false)
+      if (!succeeded) setSendFeeLoadFailed(true)
     }
   }
 
@@ -4387,17 +4406,17 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
           {/* Dropdown Menu */}
           {showMenu && (
             <div className="dropdown-menu">
-              <div className="menu-item">
+              <button className="menu-item" type="button" onClick={() => { setShowMenu(false); window.open('https://photonbolt.xyz/support', '_blank') }}>
                 <span className="menu-icon">💬</span>
                 <span>Get Support</span>
                 <span className="menu-arrow">↗</span>
-              </div>
-              <div className="menu-item">
+              </button>
+              <button className="menu-item" type="button" onClick={() => navigateFromMenu('backup-mnemonic')}>
                 <span className="menu-icon">📋</span>
                 <span>Backup Mnemonic Phrase</span>
                 <span className="menu-badge">!</span>
                 <span className="menu-arrow">›</span>
-              </div>
+              </button>
               <button className="menu-item" type="button" onClick={() => navigateFromMenu('user-settings')}>
                 <span className="menu-icon">⚙</span>
                 <span>Settings</span>
@@ -4421,11 +4440,11 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                   <span className="menu-arrow">›</span>
                 </button>
               )}
-              <div className="menu-item">
-                <span className="menu-icon">ⓘ</span>
-                <span>About</span>
+              <button className="menu-item" type="button" onClick={() => navigateFromMenu('photonbolt20')}>
+                <span className="menu-icon">⚡</span>
+                <span>PhotonBolt 2.0</span>
                 <span className="menu-arrow">›</span>
-              </div>
+              </button>
               <div className="menu-divider"></div>
               <div className="menu-item" onClick={handleLock}>
                 <span className="menu-icon">🔒</span>
@@ -6372,6 +6391,11 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               )}
             </div>
 
+            {sendFeeLoadFailed && sendMode === 'btc' && (
+              <div style={{padding: '0 16px 8px'}}>
+                <ErrorBanner message="Fee estimation failed — tap ⟳ to retry." />
+              </div>
+            )}
             {sendError && (
               <div style={{padding: '0 16px 8px'}}>
                 <ErrorBanner message={sendError} />
@@ -6380,10 +6404,13 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
             <div className="flow-footer-bar">
               <button
                 className="send-next-btn"
-                disabled={!sendAmount || parseFloat(sendAmount) === 0 || sendAmountExceedsLimit}
+                disabled={
+                  !sendAmount || parseFloat(sendAmount) === 0 || sendAmountExceedsLimit ||
+                  (sendMode === 'btc' && (sendLoadingFees || sendFeeLoadFailed))
+                }
                 onClick={handleSendNext}
               >
-                Next
+                {sendMode === 'btc' && sendLoadingFees ? 'Loading fees...' : 'Next'}
               </button>
             </div>
           </div>
@@ -7459,6 +7486,35 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
               ))
             )}
           </div>
+        </div>
+      )}
+
+      {view === 'photonbolt20' && (
+        <PhotonBolt20 onBack={() => setView('dashboard')} />
+      )}
+
+      {view === 'backup-mnemonic' && (
+        <div className="card-container">
+          <div className="password-header">
+            <button className="back-arrow" aria-label="Go back" onClick={() => setView('dashboard')}>←</button>
+            <h2 className="card-title">Backup Recovery Phrase</h2>
+          </div>
+          <p className="card-subtitle password-info">
+            Keep these 12 words in a safe place. Anyone with access to them can control your funds.
+          </p>
+          <div className="mnemonic-box">
+            {mnemonic.split(' ').map((word, index) => (
+              <div key={index} className="mnemonic-word">
+                {index + 1}. {word}
+              </div>
+            ))}
+          </div>
+          <button className="copy-mnemonic-btn" onClick={copyMnemonic}>
+            {mnemonicCopied ? '✓ Copied!' : '⧉ Copy to Clipboard'}
+          </button>
+          <button className="btn-primary" style={{marginTop: '12px'}} onClick={() => setView('dashboard')}>
+            Done
+          </button>
         </div>
       )}
     </>
