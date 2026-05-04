@@ -8,7 +8,7 @@ import type { UtxoWithRgbStatus } from './utils/rgb'
 import { fetchRgbOccupiedUtxos } from './utils/rgb-fetcher'
 import { getCkBTCBalance } from './utils/icrc1'
 import { convertLBTCtoBTC as _convertLBTCtoBTC } from './utils/ckbtc-withdrawal'
-import { getErrorLogs, clearErrorLogs, type ErrorLog } from './utils/error-logger'
+import { getErrorLogs, clearErrorLogs, logError, type ErrorLog } from './utils/error-logger'
 import { getStorageData, setStorageData, removeStorageData, getNetworkAddressKey, getNetworkAssetsKey, getNetworkContractsKey, testnet3DefaultAssets, mainnetDefaultAssets, type StorageData } from './utils/storage'
 import type { Asset } from './utils/storage'
 import { BACKEND_PROFILES, DEFAULT_BACKEND_PROFILE_ID, DEFAULT_REGTEST_RGB_BACKEND_MODE, PUBLIC_RGB_PROXY_DEFAULT, RGBITS_PRISM_API_BASE, getBackendProfileById, getDefaultElectrumServer, getDefaultRgbProxy, type BackendProfileId, type RegtestRgbBackendMode } from './utils/backend-config'
@@ -1142,6 +1142,7 @@ function App() {
       await loadIssueAssetReadiness()
     } catch (error: any) {
       console.error('RGB asset issuance failed:', error)
+      logError(error?.message || 'RGB asset issuance failed', 'Issue Asset', error, selectedNetwork).catch(console.error)
       setIssueAssetError(error.message || 'Failed to issue RGB asset.')
     } finally {
       setIssueAssetSubmitting(false)
@@ -1619,6 +1620,7 @@ function App() {
       }
     } catch (e) {
       console.error('Unlock error:', e)
+      logError((e as any)?.message || 'Wallet unlock failed', 'Unlock', e).catch(console.error)
       setError('Error accessing storage')
     }
   }
@@ -1866,6 +1868,7 @@ function App() {
         })
       } catch (e) {
         console.error('[Dashboard] Failed to load assets from backend:', e)
+      logError((e as any)?.message || 'Failed to load assets', 'Dashboard Asset Load', e, network).catch(console.error)
       }
     }
   }
@@ -1985,6 +1988,7 @@ function App() {
       console.log(`Loaded ${nextActivities.length} activities`)
     } catch (error) {
       console.error('Error loading activities:', error)
+      logError((error as any)?.message || 'Failed to load activities', 'Activity Load', error, selectedNetwork).catch(console.error)
       setActivities([])
     } finally {
       setLoadingActivities(false)
@@ -2270,6 +2274,7 @@ function App() {
       }
     } catch (e) {
       console.error('Failed to fetch balance:', e)
+      logError((e as any)?.message || 'Failed to fetch balance', 'Balance Fetch', e, networkId).catch(console.error)
     } finally {
       setLoadingBalance(false)
       balanceScanInProgressRef.current = false
@@ -2907,6 +2912,11 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
 
   const sendAmountNumber = Number(sendAmount || 0)
   const maxSendableNumber = Number(maxSendableAmount || 0)
+  const sendRgbAssetPrecision = assets.find((a) => a.id === sendRgbAssetId)?.precision ?? null
+  const sendRgbPrecisionError =
+    sendMode === 'rgb' &&
+    sendRgbAssetPrecision === 0 &&
+    sendAmount.includes('.')
   const sendAmountExceedsLimit =
     (sendMode === 'rgb' || sendMode === 'lightning') &&
     Number.isFinite(sendAmountNumber) &&
@@ -3147,6 +3157,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
       setView('send-confirm')
     } catch (error) {
       console.error('Error calculating fee:', error)
+      logError('Failed to calculate network fee', 'Fee Calculation', error, selectedNetwork).catch(console.error)
       setSendError('Failed to calculate network fee')
     }
   }
@@ -3239,6 +3250,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
         }, 1200)
       } catch (error: any) {
         console.error('Lightning payment error:', error)
+        logError(error?.message || 'Lightning payment failed', 'Lightning Pay', error, selectedNetwork).catch(console.error)
         const rawMessage = String(error?.message || '')
         const normalized = rawMessage.toLowerCase()
         if (
@@ -3370,6 +3382,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
         }, refreshDelay)
       } catch (error: any) {
         console.error('Send RGB error:', error)
+        logError(error?.message || 'Send RGB failed', 'Send RGB', error, selectedNetwork).catch(console.error)
         setSendError(error.message || 'Failed to send RGB asset')
       } finally {
         setSendProcessing(false)
@@ -3501,7 +3514,15 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
       }, 3000)
     } catch (error: any) {
       console.error('Send Bitcoin error:', error)
-      setSendError(error.message || 'Failed to send Bitcoin')
+      logError(error?.message || 'Failed to send Bitcoin', 'Send BTC', error, selectedNetwork).catch(console.error)
+      setSendError((error.message || 'Failed to send Bitcoin') + ' — balance restored.')
+      // Restore correct balance from the blockchain in case the optimistic
+      // deduction already ran or the local UTXO state is now stale.
+      if (mnemonic) {
+        fetchBalance(mnemonic, selectedNetwork).catch((e) =>
+          console.error('Balance restore after failed send error:', e)
+        )
+      }
     } finally {
       setSendProcessing(false)
     }
@@ -6317,7 +6338,9 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                           return
                         }
                         const val = e.target.value;
-                        if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                        const integerOnly = sendMode === 'rgb' && sendRgbAssetPrecision === 0
+                        const pattern = integerOnly ? /^\d*$/ : /^\d*\.?\d*$/
+                        if (val === '' || pattern.test(val)) {
                           setSendUseMax(false)
                           const numVal = parseFloat(val);
                           const maxNum = parseFloat(maxSendableAmount);
@@ -6335,13 +6358,15 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                     </div>
                   </div>
                   <div className="send-helper-copy">
-                    {sendMode === 'rgb'
-                      ? sendRgbOpenAmount
-                        ? `Open-amount invoice — enter how much to send • Max: ${maxSendableAmount} ${sendRgbAssetLabel}`
-                        : `Invoice amount: ${sendAmount} ${sendRgbAssetLabel} • Max sendable: ${maxSendableAmount} ${sendRgbAssetLabel}`
-                      : sendMode === 'lightning'
-                        ? `Instant route detected. Max sendable now: ${maxSendableAmount || '0'} ${sendRgbAssetLabel} • Receivable now: ${sendOffchainInbound || '0'} ${sendRgbAssetLabel}`
-                        : `Maximum sendable: ${maxSendableAmount} BTC`}
+                    {sendRgbPrecisionError
+                      ? 'This asset only accepts whole numbers.'
+                      : sendMode === 'rgb'
+                        ? sendRgbOpenAmount
+                          ? `Open-amount invoice — enter how much to send • Max: ${maxSendableAmount} ${sendRgbAssetLabel}`
+                          : `Invoice amount: ${sendAmount} ${sendRgbAssetLabel} • Max sendable: ${maxSendableAmount} ${sendRgbAssetLabel}`
+                        : sendMode === 'lightning'
+                          ? `Instant route detected. Max sendable now: ${maxSendableAmount || '0'} ${sendRgbAssetLabel} • Receivable now: ${sendOffchainInbound || '0'} ${sendRgbAssetLabel}`
+                          : `Maximum sendable: ${maxSendableAmount} BTC`}
                   </div>
                 </div>
               </div>
@@ -6406,6 +6431,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                 className="send-next-btn"
                 disabled={
                   !sendAmount || parseFloat(sendAmount) === 0 || sendAmountExceedsLimit ||
+                  sendRgbPrecisionError ||
                   (sendMode === 'btc' && (sendLoadingFees || sendFeeLoadFailed))
                 }
                 onClick={handleSendNext}
