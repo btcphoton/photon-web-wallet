@@ -394,7 +394,8 @@ export const broadcastTransaction = async (
 export const performDiscoveryScan = async (
     mnemonic: string,
     network: WalletNetwork = 'mainnet',
-    storedIndex: number = 0
+    storedIndex: number = 0,
+    gapLimit: number = 20
 ): Promise<{
     totalBalance: number,
     utxos: UTXO[],
@@ -404,9 +405,9 @@ export const performDiscoveryScan = async (
     hadUtxoFetchError: boolean,
     hadHistoryCheckError: boolean,
 }> => {
-    console.log(`[DiscoveryScan] Starting iterative scan for ${network} with Gap Limit 20...`);
+    console.log(`[DiscoveryScan] Starting iterative scan for ${network} with gap limit ${gapLimit}...`);
 
-    const GAP_LIMIT = 20;
+    const GAP_LIMIT = gapLimit;
     const allUtxos: UTXO[] = [];
     const fundedAddresses: { address: string, balance: number, account: 'vanilla' | 'colored', index: number, chain: 0 | 1 }[] = [];
     const allDiscoveredAddresses = new Set<string>();

@@ -313,6 +313,7 @@ function App() {
   const [dustHolderAddress, setDustHolderAddress] = useState<string>('')
   const [addressIndex, setAddressIndex] = useState<number>(0) // The 'i' value
   const [changeIndex, setChangeIndex] = useState<number>(0)
+  const [scanGapLimit, setScanGapLimit] = useState<number>(20)
   const [fundedAddresses, setFundedAddresses] = useState<{ address: string, balance: number, account: 'vanilla' | 'colored', index: number, chain: 0 | 1 }[]>([])
   const [allDiscoveredAddresses, setAllDiscoveredAddresses] = useState<string[]>([])
 
@@ -409,8 +410,10 @@ function App() {
   const [lastActivityTimestamp, setLastActivityTimestamp] = useState<number>(Date.now())
   const autoLockIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Default canisters - these can be overridden by user settings
-  const DEFAULT_MAINNET_CANISTER = import.meta.env.VITE_CANISTER_ID || 'bkyz2-fmaaa-aaaaa-qaaaq-cai'
+  // Default canisters - these can be overridden by user settings.
+  // Mainnet has no hardcoded default: it must be set via VITE_CANISTER_ID or Admin Settings
+  // before mainnet can be used to prevent silently routing mainnet traffic to a testnet canister.
+  const DEFAULT_MAINNET_CANISTER = import.meta.env.VITE_CANISTER_ID || ''
   const DEFAULT_TESTNET_CANISTER = import.meta.env.VITE_TESTNET_CANISTER_ID || 'bkyz2-fmaaa-aaaaa-qaaaq-cai'
 
   // Truncate address for display
@@ -1298,7 +1301,7 @@ function App() {
         [`walletAddress_${selectedNetwork}`]: address
       })
 
-      console.log('Expanded wallet address:', address)
+      console.log('Wallet address expanded')
     } catch (e) {
       console.error('Failed to expand wallet address:', e)
     } finally {
@@ -1333,7 +1336,7 @@ function App() {
 
         // For Bitcoin method, use the same address for lightning
         lightningAddr = vanillaAddr
-        console.log(`Generated BIP86 addresses locally for ${network} at index ${addressIndex}:`)
+        console.log(`Generated BIP86 addresses locally for ${network}`)
         console.log(`  Vanilla (Main): ${vanillaAddr}`)
         console.log(`  Colored (RGB):  ${coloredAddr}`)
       } else {
@@ -1349,7 +1352,7 @@ function App() {
         mainBalanceAddr = vanillaAddr
         utxoHolderAddr = vanillaAddr
         dustHolderAddr = vanillaAddr
-        console.log(`Fetched addresses from canister for ${network}:`, vanillaAddr)
+        console.log(`Fetched addresses from canister for ${network}`)
       }
 
       // Update addresses in state
@@ -1361,7 +1364,7 @@ function App() {
       setUtxoHolderAddress(utxoHolderAddr)
       setDustHolderAddress(dustHolderAddr)
 
-      console.log('Active Colored Address:', coloredAddr)
+      console.log('Active colored address set')
 
       // Save all addresses to network-specific storage
       const addressKey = getNetworkAddressKey(network)
@@ -1381,8 +1384,7 @@ function App() {
         [`DustHolder_${network}`]: dustHolderAddr
       })
 
-      console.log(`Vanilla address for ${network}:`, vanillaAddr)
-      console.log(`Colored address for ${network}:`, coloredAddr)
+      console.log(`Addresses ready for ${network}`)
 
       return vanillaAddr
     } catch (e) {
@@ -1443,6 +1445,9 @@ function App() {
           }
           if (result.addressIndex !== undefined) {
             setAddressIndex(Number(result.addressIndex))
+          }
+          if ((result as any).scanGapLimit !== undefined) {
+            setScanGapLimit(Number((result as any).scanGapLimit))
           }
 
           // Load address generation method (default to 'icp' for backward compatibility)
@@ -2038,6 +2043,12 @@ function App() {
       return
     }
 
+    if (network === 'mainnet' && !mainnetCanisterId) {
+      setError('Mainnet canister ID is not configured. Set it in Admin → Settings before switching to mainnet.')
+      setShowNetworkModal(false)
+      return
+    }
+
     setSelectedNetwork(network)
     setShowNetworkModal(false)
 
@@ -2094,7 +2105,7 @@ function App() {
           btcAddress: currentAddress,
           walletAddress: currentAddress
         })
-        console.log('Using cached wallet address for', network, ':', currentAddress)
+        console.log('Using cached wallet address for', network)
       }
     } else if (mnemonic) {
       // Fetch new address from canister
@@ -2106,7 +2117,7 @@ function App() {
     // Update Lightning address
     if (cachedLightningAddress) {
       setLightningAddress(cachedLightningAddress as string)
-      console.log('Using cached Lightning address for', network, ':', cachedLightningAddress)
+      console.log('Using cached Lightning address for', network)
     } else if (mnemonic) {
       // Lightning address is fetched as part of fetchAndSaveBtcAddress
       console.log('Lightning address will be fetched with wallet address')
@@ -2205,11 +2216,11 @@ function App() {
       const resolvedAddressIndex = overrideAddressIndex !== undefined ? overrideAddressIndex : addressIndex;
       const effectiveIndex = Math.max(resolvedAddressIndex, changeIndex, canisterIndex || 0);
 
-      // Perform Discovery Scan with Gap Limit 20
       const { totalBalance: vanillaBalance, maxIndex, fundedAddresses: discoveredAddresses, allDiscoveredAddresses: discoveredHistoryAddresses, hadUtxoFetchError, hadHistoryCheckError } = await performDiscoveryScan(
         currentMnemonic,
         networkId,
-        effectiveIndex
+        effectiveIndex,
+        scanGapLimit
       );
 
       setFundedAddresses(discoveredAddresses);
@@ -2243,7 +2254,7 @@ function App() {
       }
 
       const formattedBalance = (vanillaBalance / 100000000).toFixed(8)
-      console.log(`[Balance] Updated Vanilla Balance: ${formattedBalance} BTC (Max Index: ${maxIndex}, fetchError: ${hadUtxoFetchError})`)
+      console.log(`[Balance] Balance updated (maxIndex: ${maxIndex}, fetchError: ${hadUtxoFetchError})`)
 
       if ((hadUtxoFetchError || hadHistoryCheckError) && vanillaBalance === 0) {
         // API errors during scan — don't trust a 0 result, preserve last-known-good balance
@@ -2268,7 +2279,7 @@ function App() {
         const canisterNetwork = mapNetworkToCanister(networkId)
         const ckBTCBalance = await getCkBTCBalance(currentMnemonic, canisterNetwork)
         await setStorageData({ user_lbtc_balance: ckBTCBalance })
-        console.log('LBTC balance fetched:', ckBTCBalance)
+        console.log('LBTC balance fetched')
       } catch (lbtcError) {
         console.error('Error fetching LBTC balance:', lbtcError)
       }
@@ -3151,7 +3162,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
       const networkFeeBtc = (networkFeeSats / 100000000).toFixed(8)
       setSendNetworkFee(networkFeeBtc)
 
-      console.log(`Fee calculation: ${numUTXOs} UTXOs, ${outputsCount} outputs, ${feeRate} sat/vB = ${networkFeeSats} sats`)
+      console.log('Fee calculation complete')
 
       setSendError('')
       setView('send-confirm')
@@ -3486,9 +3497,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
         const networkFee = parseFloat(sendNetworkFee)
         const newBalance = (currentBalance - sentAmount - networkFee).toFixed(8)
 
-        console.log('=== INSTANT BALANCE DEDUCTION ===')
-        console.log('Current:', currentBalance, '| Sent:', sentAmount, '| Fee:', networkFee, '| New:', newBalance)
-        console.log('=================================')
+        console.log('Optimistic balance deduction applied')
 
         // Update UI immediately
         setBtcBalance(newBalance)
@@ -3498,7 +3507,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
           walletBalance: newBalance,
           user_bitcoin_balance: newBalance
         })
-        console.log(`Balance updated: ${currentBalance} - ${sentAmount} - ${networkFee} = ${newBalance}`)
+        console.log('Balance cache updated after send')
       } catch (balanceError) {
         console.error('Error updating balance after send:', balanceError)
       }
@@ -5741,10 +5750,26 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                   )}
 
                   <div style={{ marginTop: '1rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(255, 255, 255, 0.06)' }}>
-                    <div style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.5)', marginBottom: '0.25rem' }}>Current Change Index</div>
+                    <div style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.5)', marginBottom: '0.25rem' }}>Current Address Index</div>
                     <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#f7931a' }}>{addressIndex}</div>
                     <div style={{ fontSize: '0.8rem', color: '#9ca3af', marginTop: '4px' }}>
-                      Iterative scan with Gap Limit (20)
+                      Iterative scan with Gap Limit ({scanGapLimit})
+                    </div>
+                    <div style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <label style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)' }}>Gap Limit:</label>
+                      <input
+                        type="number"
+                        min={20}
+                        max={100}
+                        value={scanGapLimit}
+                        onChange={(e) => {
+                          const v = Math.min(100, Math.max(20, Number(e.target.value) || 20))
+                          setScanGapLimit(v)
+                          setStorageData({ scanGapLimit: v } as any).catch(console.error)
+                        }}
+                        style={{ width: '64px', padding: '3px 6px', background: '#0f1d31', border: '1px solid #243754', borderRadius: '4px', color: '#e2e8f0', fontSize: '0.8rem' }}
+                      />
+                      <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>(20–100)</span>
                     </div>
                   </div>
 
