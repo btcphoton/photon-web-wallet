@@ -5183,7 +5183,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
             </button>
           </div>
 
-          <div className="add-assets-content issue-asset-content">
+          <div className="add-assets-content issue-asset-content scroll-fade-wrap">
             <div className="issue-asset-schema-toggle">
               <button
                 type="button"
@@ -6780,7 +6780,7 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
                             <p className="utxo-empty-copy">Click "Create UTXO" to allocate your first RGB-ready slot. You will send 0.00033 BTC to the node funding address.</p>
                           </div>
                         ) : (
-                          <div className="utxo-list">
+                          <div className="utxo-list scroll-fade-wrap">
                             {rgbSlots.filter(s => s.satsValue != null).map((slot) => {
                               const stateColor: Record<string, string> = {
                                 FREE: '#4ade80',
