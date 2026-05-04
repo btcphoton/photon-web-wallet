@@ -7,6 +7,7 @@ export interface Asset {
     amount: string
     unit: string
     color: string
+    precision?: number
     rgbLockReason?: string
     rgbSpendabilityStatus?: string
     rgbOffchainOutbound?: string

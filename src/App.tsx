@@ -1449,6 +1449,10 @@ function App() {
           if ((result as any).scanGapLimit !== undefined) {
             setScanGapLimit(Number((result as any).scanGapLimit))
           }
+          // Load canister IDs so the mainnet guard in handleNetworkSwitch works
+          // immediately without requiring the user to open Settings first.
+          setMainnetCanisterId((result.mainnetCanisterId as string | undefined) || DEFAULT_MAINNET_CANISTER)
+          setTestnetCanisterId((result.testnetCanisterId as string | undefined) || DEFAULT_TESTNET_CANISTER)
 
           // Load address generation method (default to 'icp' for backward compatibility)
           if (result.addressGenerationMethod) {
@@ -1860,6 +1864,7 @@ function App() {
           amount: String(a.spendable),
           unit: a.ticker,
           color: '#f59e0b',
+          precision: a.precision,
           rgbSpendingPower: String(a.spendable),
         }))
         // Merge: keep non-RGB assets + backend RGB assets + any locally-imported
@@ -1873,7 +1878,7 @@ function App() {
         })
       } catch (e) {
         console.error('[Dashboard] Failed to load assets from backend:', e)
-      logError((e as any)?.message || 'Failed to load assets', 'Dashboard Asset Load', e, network).catch(console.error)
+        logError((e as any)?.message || 'Failed to load assets', 'Dashboard Asset Load', e, network).catch(console.error)
       }
     }
   }
@@ -2226,7 +2231,7 @@ function App() {
       const resolvedAddressIndex = overrideAddressIndex !== undefined ? overrideAddressIndex : addressIndex;
       const effectiveIndex = Math.max(resolvedAddressIndex, changeIndex, canisterIndex || 0);
 
-      const { totalBalance: vanillaBalance, maxIndex, fundedAddresses: discoveredAddresses, allDiscoveredAddresses: discoveredHistoryAddresses, hadUtxoFetchError, hadHistoryCheckError } = await performDiscoveryScan(
+      const { totalBalance: vanillaBalance, maxIndex, maxChangeIndex, fundedAddresses: discoveredAddresses, allDiscoveredAddresses: discoveredHistoryAddresses, hadUtxoFetchError, hadHistoryCheckError } = await performDiscoveryScan(
         currentMnemonic,
         networkId,
         effectiveIndex,
@@ -2249,12 +2254,12 @@ function App() {
         });
       }
 
-      // B-05: recover changeIndex from scan on reinstall — the discovery scan covers
-      // internal (change) addresses in the same pass, so maxIndex is a safe floor.
-      if (maxIndex > changeIndex) {
-        setChangeIndex(maxIndex)
+      // B-05: recover changeIndex from scan — use maxChangeIndex (highest index
+      // where a chain=1/internal address had history) not the mixed-chain maxIndex.
+      if (maxChangeIndex > changeIndex) {
+        setChangeIndex(maxChangeIndex)
         const changeKey = `changeIndex_${networkId}` as any
-        await setStorageData({ [changeKey]: maxIndex })
+        await setStorageData({ [changeKey]: maxChangeIndex })
       }
 
       // Refresh activities with the latest discovered addresses to ensure correct change detection
@@ -3503,7 +3508,6 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
       }
 
       setSendTxId(txid)
-      console.log('Transaction sent successfully:', txid)
 
       // Immediately deduct amount from cached balance
       try {
@@ -3512,17 +3516,12 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
         const networkFee = parseFloat(sendNetworkFee)
         const newBalance = (currentBalance - sentAmount - networkFee).toFixed(8)
 
-        console.log('Optimistic balance deduction applied')
-
-        // Update UI immediately
         setBtcBalance(newBalance)
 
-        // Update cached balance in storage
         await setStorageData({
           walletBalance: newBalance,
           user_bitcoin_balance: newBalance
         })
-        console.log('Balance cache updated after send')
       } catch (balanceError) {
         console.error('Error updating balance after send:', balanceError)
       }
@@ -3539,10 +3538,11 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
     } catch (error: any) {
       console.error('Send Bitcoin error:', error)
       logError(error?.message || 'Failed to send Bitcoin', 'Send BTC', error, selectedNetwork).catch(console.error)
-      setSendError((error.message || 'Failed to send Bitcoin') + ' — balance restored.')
-      // Restore correct balance from the blockchain in case the optimistic
-      // deduction already ran or the local UTXO state is now stale.
+      setSendError(error.message || 'Failed to send Bitcoin')
+      // Restore correct balance — clear the scan guard first so the restore
+      // isn't silently skipped if a concurrent scan just finished and flipped the flag.
       if (mnemonic) {
+        balanceScanInProgressRef.current = false
         fetchBalance(mnemonic, selectedNetwork).catch((e) =>
           console.error('Balance restore after failed send error:', e)
         )

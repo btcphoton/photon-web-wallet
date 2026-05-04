@@ -400,6 +400,7 @@ export const performDiscoveryScan = async (
     totalBalance: number,
     utxos: UTXO[],
     maxIndex: number,
+    maxChangeIndex: number,
     fundedAddresses: { address: string, balance: number, account: 'vanilla' | 'colored', index: number, chain: 0 | 1 }[],
     allDiscoveredAddresses: string[],
     hadUtxoFetchError: boolean,
@@ -412,6 +413,7 @@ export const performDiscoveryScan = async (
     const fundedAddresses: { address: string, balance: number, account: 'vanilla' | 'colored', index: number, chain: 0 | 1 }[] = [];
     const allDiscoveredAddresses = new Set<string>();
     let maxIndexFound = storedIndex;
+    let maxChangeIndexFound = 0; // highest index where a chain=1 (internal) address had history
 
     // We scan 4 chains: 
     // 1. Vanilla External (Account 0, Chain 0)
@@ -460,6 +462,9 @@ export const performDiscoveryScan = async (
         if (anyHistory) {
             consecutiveEmpty = 0;
             maxIndexFound = currentIndex;
+            if (results.some(r => r.chain === 1 && r.hasHistory === 'has_history')) {
+                maxChangeIndexFound = currentIndex;
+            }
 
             // If any history found, fetch UTXOs for all 4 addresses at this index
             const utxoPromises = results.map(async r => {
@@ -529,6 +534,7 @@ export const performDiscoveryScan = async (
         totalBalance: vanillaBalance,
         utxos: allUtxos,
         maxIndex: maxIndexFound,
+        maxChangeIndex: maxChangeIndexFound,
         fundedAddresses: fundedAddresses,
         allDiscoveredAddresses: Array.from(allDiscoveredAddresses),
         hadUtxoFetchError,
