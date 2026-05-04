@@ -2194,9 +2194,19 @@ function App() {
 
   // Placeholder for future canister-based index retrieval
   const fetchIndexFromCanister = async (network: Network): Promise<number | null> => {
-    // TODO: Implement actual canister call here
-    console.log(`[Canister] Placeholder: Fetching index for ${network}...`);
-    return null;
+    // Interim: read the highest known index from Chrome storage for this network.
+    // This handles same-device reinstall and ensures we never scan below a previously
+    // reached index. Real multi-device canister sync is not yet implemented.
+    try {
+      const indexKey = `addressIndex_${network}` as any
+      const changeKey = `changeIndex_${network}` as any
+      const result = await getStorageData([indexKey, changeKey, 'addressIndex'])
+      const storedAddressIndex = Number(result[indexKey] ?? result.addressIndex ?? 0) || 0
+      const storedChangeIndex = Number(result[changeKey] ?? 0) || 0
+      return Math.max(storedAddressIndex, storedChangeIndex) || null
+    } catch {
+      return null
+    }
   }
 
   const fetchBalance = async (currentMnemonic: string, networkId: Network, overrideAddressIndex?: number) => {
@@ -2231,13 +2241,20 @@ function App() {
       await setStorageData({ [discoveredAddressesKey]: discoveredHistoryAddresses });
 
       if (maxIndex > addressIndex) {
-        console.log(`[DiscoveryScan] Found higher index: ${maxIndex}. Updating state and storage.`);
         setAddressIndex(maxIndex);
         const indexKey = `addressIndex_${networkId}` as any;
         await setStorageData({
           addressIndex: maxIndex,
           [indexKey]: maxIndex
         });
+      }
+
+      // B-05: recover changeIndex from scan on reinstall — the discovery scan covers
+      // internal (change) addresses in the same pass, so maxIndex is a safe floor.
+      if (maxIndex > changeIndex) {
+        setChangeIndex(maxIndex)
+        const changeKey = `changeIndex_${networkId}` as any
+        await setStorageData({ [changeKey]: maxIndex })
       }
 
       // Refresh activities with the latest discovered addresses to ensure correct change detection
@@ -3473,8 +3490,6 @@ const DEFAULT_CREATE_UTXO_TX_VBYTES = 200
         setChangeIndex(nextChangeIndex)
         const changeIndexKey = `changeIndex_${selectedNetwork}` as any
         await setStorageData({ [changeIndexKey]: nextChangeIndex })
-        // TODO: Save the changeIndex into canister after local storage update
-        console.log(`[ChangeIndex] Incremented to ${nextChangeIndex} for ${selectedNetwork}`)
 
         // Broadcast to network
         txid = await broadcastTransaction(txHex, selectedNetwork)
