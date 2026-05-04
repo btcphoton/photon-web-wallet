@@ -2202,11 +2202,12 @@ function App() {
     // This handles same-device reinstall and ensures we never scan below a previously
     // reached index. Real multi-device canister sync is not yet implemented.
     try {
-      const indexKey = `addressIndex_${network}` as any
-      const changeKey = `changeIndex_${network}` as any
-      const result = await getStorageData([indexKey, changeKey, 'addressIndex'])
-      const storedAddressIndex = Number(result[indexKey] ?? result.addressIndex ?? 0) || 0
-      const storedChangeIndex = Number(result[changeKey] ?? 0) || 0
+      const indexKey = `addressIndex_${network}`
+      const changeKey = `changeIndex_${network}`
+      const result = await getStorageData([indexKey as any, changeKey as any, 'addressIndex'])
+      const r = result as Record<string, unknown>
+      const storedAddressIndex = Number(r[indexKey] ?? result.addressIndex ?? 0) || 0
+      const storedChangeIndex = Number(r[changeKey] ?? 0) || 0
       return Math.max(storedAddressIndex, storedChangeIndex) || null
     } catch {
       return null
