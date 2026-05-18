@@ -107,7 +107,7 @@ describe('checkAddressHistory', () => {
 })
 
 describe('fetchUTXOsFromBlockchain', () => {
-    it('returns UTXO array on success', async () => {
+    it('returns UTXO array on success with address populated', async () => {
         vi.mocked(fetch).mockResolvedValueOnce({
             ok: true,
             json: async () => [{ txid: 'abc123', vout: 0, value: 10000 }],
@@ -116,6 +116,7 @@ describe('fetchUTXOsFromBlockchain', () => {
         expect(utxos).toHaveLength(1)
         expect(utxos[0].txid).toBe('abc123')
         expect(utxos[0].value).toBe(10000)
+        expect(utxos[0].address).toBe('bc1qabc')
     })
 
     it('throws on HTTP error', async () => {

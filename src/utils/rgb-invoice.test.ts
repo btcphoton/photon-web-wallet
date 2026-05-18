@@ -45,12 +45,12 @@ describe('isValidRgbProxyUrl', () => {
         expect(isValidRgbProxyUrl('https://dev-proxy.photonbolt.xyz/json-rpc')).toBe(true)
     })
 
-    it('rejects rpc:// scheme', () => {
-        expect(isValidRgbProxyUrl('rpc://127.0.0.1:3000/json-rpc')).toBe(false)
+    it('accepts rpc:// scheme (rgb-lib native transport)', () => {
+        expect(isValidRgbProxyUrl('rpc://127.0.0.1:3000/json-rpc')).toBe(true)
     })
 
-    it('rejects rpcs:// scheme', () => {
-        expect(isValidRgbProxyUrl('rpcs://dev-proxy.photonbolt.xyz/json-rpc')).toBe(false)
+    it('accepts rpcs:// scheme (rgb-lib HTTPS transport)', () => {
+        expect(isValidRgbProxyUrl('rpcs://dev-proxy.photonbolt.xyz/json-rpc')).toBe(true)
     })
 
     it('rejects empty string', () => {

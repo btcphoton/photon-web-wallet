@@ -128,12 +128,15 @@ export const fetchUTXOsFromBlockchain = async (
 
         const utxos = await response.json();
 
-        // Transform to our UTXO interface
+        // Transform to our UTXO interface.
+        // derivationPath/account/chain/index are unknown here — callers (e.g. performDiscoveryScan)
+        // must fill those fields after the fact.
         return utxos.map((utxo: any) => ({
             txid: utxo.txid,
             vout: utxo.vout,
-            value: utxo.value
-        }));
+            value: utxo.value,
+            address,
+        })) as UTXO[];
     } catch (error) {
         await logError(`Network error fetching UTXOs`, 'Blockchain API', error, network);
         console.error(`[fetchUTXOsFromBlockchain] FAILED for ${address}:`, error);

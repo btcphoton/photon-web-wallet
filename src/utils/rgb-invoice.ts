@@ -1,7 +1,8 @@
 import { getStorageData, setStorageData } from './storage'
 import { findOrPrepareRgbTaprootUtxo } from './utxoManager'
 
-const RGB_TRANSPORT_ENDPOINT = 'https://dev-proxy.photonbolt.xyz'
+// rgb-lib requires the rpcs:// scheme for HTTPS proxy endpoints; https:// is not recognised.
+const RGB_TRANSPORT_ENDPOINT = 'rpcs://dev-proxy.photonbolt.xyz/json-rpc'
 
 export interface StoredRgbSealSecret {
   id: string
@@ -117,7 +118,8 @@ export async function createRgbInvoice(assetId: string, amount: number): Promise
 export function isValidRgbProxyUrl(url: string): boolean {
   try {
     const parsed = new URL(url)
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+    // Accept all four schemes that rgb-lib understands: rpcs/rpc (native) and https/http (web).
+    return ['rpcs:', 'rpc:', 'https:', 'http:'].includes(parsed.protocol)
   } catch {
     return false
   }
