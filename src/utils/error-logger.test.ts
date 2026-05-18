@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { logError, getErrorLogs, clearErrorLogs, type ErrorLog } from './error-logger'
+import { logError, getErrorLogs, clearErrorLogs } from './error-logger'
 
 vi.mock('./storage', () => {
     let _store: Record<string, any> = {}

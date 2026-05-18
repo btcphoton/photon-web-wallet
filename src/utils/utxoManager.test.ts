@@ -2,8 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { findOrPrepareRgbTaprootUtxo } from './utxoManager'
 import type { UTXO } from './bitcoin-transactions'
 
-// Real BIP86 regtest vanilla address for abandon mnemonic at m/86'/1'/0'/0/0
-const REAL_COLORED_ADDR = 'bcrt1p8wpt9v4frpf3tkn0srd97pksgsxc5hs52lafxwru9kgeephvs7rqjeprhg'
 
 vi.mock('./storage', () => ({
     getStorageData: vi.fn(async () => ({
